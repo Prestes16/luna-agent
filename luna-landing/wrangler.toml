@@ -1,0 +1,17 @@
+name = "luna-agent"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+preview_urls = false
+workers_dev = false
+
+# Rotas para o domínio customizado (fora do bloco [[rules]])
+routes = [
+  { pattern = "lunaagent.dev/*", zone_name = "lunaagent.dev" },
+  { pattern = "www.lunaagent.dev/*", zone_name = "lunaagent.dev" },
+]
+
+# Importa arquivos .html como módulos de texto (string)
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = false

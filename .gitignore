@@ -1,0 +1,117 @@
+# --- Secrets (NUNCA commitar) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.keystore
+secrets/
+**/credentials.json
+**/service-account*.json
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# --- Virtualenvs ---
+venv/
+.venv/
+.venv_path
+luna-env/
+.bridge-venv/
+.bridge-win-venv/
+env/
+ENV/
+
+# --- Node / Electron / Frontend ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+dist/
+build/
+out/
+release/
+*.tsbuildinfo
+.vite/
+.next/
+.turbo/
+
+# --- Electron Builder ---
+luna-desktop/dist/
+luna-desktop/release/
+luna-desktop/out/
+luna-desktop/build/
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+*.snap
+*.nupkg
+
+# --- Dados locais / SQLite / user state ---
+data/
+logs/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# --- Workspace do usuario ---
+workspaces/
+user-workspaces/
+uploads/
+
+# --- IDE / OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Temp / cache ---
+*.tmp
+*.temp
+*.bak
+*.orig
+.cache/
+tmp/
+temp/
+
+# --- Artefatos experimentais ---
+phase2_bundle_ref/
+bags-shield-api-fixes/
+local_patch_test*
+credit_manual.py
+Luna_Parceria_*.docx
+PLANO_AMANHA.md
+
+# --- Docker local state ---
+.docker-data/
+
+# --- Playwright / tests ---
+test-results/
+playwright-report/
+playwright/.cache/
+
+# --- Assistants scratch ---
+.verdent/
+.claude/

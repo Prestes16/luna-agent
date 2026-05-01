@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  luna-agent:
+    build: .
+    container_name: luna-agent
+    restart: unless-stopped
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./workspaces:/app/workspaces
+      - ./.env:/app/.env
+    environment:
+      - LUNA_ENVIRONMENT=production
+      - LUNA_EXECUTION_TARGET=vps
+    network_mode: "host"
+
+  redis:
+    image: redis:7-alpine
+    container_name: luna-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:

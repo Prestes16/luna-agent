@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Luna Agent — Sistema Operacional de IA</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@300;400;600;700;800;900&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles-premium.css">
+  <style>
+    /* Estilos adicionais específicos da página premium */
+    body {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    .main-container {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      width: 280px;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border-light);
+      padding: var(--spacing-lg);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-lg);
+    }
+
+    .content-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .chat-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: var(--spacing-lg);
+      gap: var(--spacing-md);
+      overflow: hidden;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-md);
+      padding-right: var(--spacing-md);
+    }
+
+    .message {
+      display: flex;
+      gap: var(--spacing-md);
+      animation: slideIn 0.3s ease-out;
+    }
+
+    .message.user {
+      justify-content: flex-end;
+    }
+
+    .message-bubble {
+      max-width: 60%;
+      padding: var(--spacing-md) var(--spacing-lg);
+      border-radius: var(--radius-lg);
+      word-wrap: break-word;
+    }
+
+    .message.user .message-bubble {
+      background: linear-gradient(135deg, var(--accent-cyan), #0099cc);
+      color: var(--bg-primary);
+    }
+
+    .message.agent .message-bubble {
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-light);
+      color: var(--text-primary);
+    }
+
+    .input-area {
+      display: flex;
+      gap: var(--spacing-md);
+      padding: var(--spacing-md);
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-lg);
+    }
+
+    .input-area textarea {
+      flex: 1;
+      resize: none;
+      max-height: 100px;
+    }
+
+    .section-title {
+      font-family: var(--font-display);
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-primary);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: var(--spacing-md);
+      padding-bottom: var(--spacing-sm);
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .mode-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: var(--spacing-sm);
+    }
+
+    .workspace-list {
+      display: flex;
+      flex-direction: column;
+      gap: var(--spacing-sm);
+    }
+
+    .workspace-item {
+      padding: var(--spacing-sm) var(--spacing-md);
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: var(--transition-fast);
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .workspace-item:hover {
+      border-color: var(--border-medium);
+      background: var(--bg-secondary);
+    }
+
+    .workspace-item.active {
+      background: linear-gradient(135deg, var(--accent-cyan), #0099cc);
+      border-color: var(--accent-cyan);
+      color: var(--bg-primary);
+    }
+
+    .status-section {
+      padding: var(--spacing-md);
+      background: var(--bg-tertiary);
+      border: 1px solid var(--border-light);
+      border-radius: var(--radius-md);
+      font-size: 11px;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      padding: var(--spacing-xs) 0;
+      color: var(--text-muted);
+    }
+
+    .status-row .value {
+      color: var(--accent-cyan);
+      font-weight: 600;
+    }
+
+    .footer-bar {
+      padding: var(--spacing-md) var(--spacing-lg);
+      background: var(--bg-secondary);
+      border-top: 1px solid var(--border-light);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .footer-bar .version {
+      font-family: var(--font-mono);
+      color: var(--accent-cyan);
+    }
+
+    /* Scrollbar customizado */
+    ::-webkit-scrollbar {
+      width: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border-medium);
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border-strong);
+    }
+  </style>
+</head>
+<body>
+  <!-- HEADER PREMIUM -->
+  <div class="header-premium">
+    <div class="header-left">
+      <div class="logo-badge">☾</div>
+      <div class="header-title">
+        <h1>Luna Agent</h1>
+        <span class="subtitle">Sistema Operacional de IA · Hacking Ético & Desenvolvimento</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="status-indicator">
+        <div class="status-dot"></div>
+        <span>ONLINE</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAIN CONTAINER -->
+  <div class="main-container">
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <!-- MODOS -->
+      <div>
+        <div class="section-title">Modo de Operação</div>
+        <div class="mode-grid">
+          <button class="mode-btn active" data-mode="dev">
+            <span>⚙️</span> Dev
+          </button>
+          <button class="mode-btn hunter" data-mode="hunter">
+            <span>🛡️</span> Hunter
+          </button>
+          <button class="mode-btn" data-mode="solana">
+            <span>⛓️</span> Solana
+          </button>
+          <button class="mode-btn" data-mode="recon">
+            <span>🔍</span> Recon
+          </button>
+          <button class="mode-btn" data-mode="code_review">
+            <span>💻</span> Code Review
+          </button>
+        </div>
+      </div>
+
+      <!-- WORKSPACES -->
+      <div>
+        <div class="section-title">Workspaces</div>
+        <div class="workspace-list">
+          <div class="workspace-item active" data-workspace="luna-agent">
+            <span>⬡</span> Luna Agent
+          </div>
+          <div class="workspace-item" data-workspace="bug-bounty">
+            <span>🎯</span> Bug Bounty
+          </div>
+          <div class="workspace-item" data-workspace="solana-dev">
+            <span>⛓️</span> Solana Dev
+          </div>
+        </div>
+      </div>
+
+      <!-- STATUS -->
+      <div>
+        <div class="section-title">Status</div>
+        <div class="status-section">
+          <div class="status-row">
+            <span>Modo:</span>
+            <span class="value">DEV</span>
+          </div>
+          <div class="status-row">
+            <span>Workspace:</span>
+            <span class="value">luna-agent</span>
+          </div>
+          <div class="status-row">
+            <span>Sessão:</span>
+            <span class="value">Ativa</span>
+          </div>
+          <div class="status-row">
+            <span>Memória:</span>
+            <span class="value">OK</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- AÇÕES RÁPIDAS -->
+      <div>
+        <div class="section-title">Ações</div>
+        <button class="btn-premium btn-secondary" style="width: 100%;">
+          📋 Nova Sessão
+        </button>
+        <button class="btn-premium btn-secondary" style="width: 100%; margin-top: var(--spacing-sm);">
+          ⚙️ Configurações
+        </button>
+      </div>
+    </div>
+
+    <!-- CONTENT AREA -->
+    <div class="content-area">
+      <!-- CHAT CONTAINER -->
+      <div class="chat-container">
+        <!-- MESSAGES -->
+        <div class="chat-messages" id="chatMessages">
+          <div class="message agent">
+            <div class="message-bubble">
+              Olá! Eu sou a Luna, sua agente pessoal especializada em hacking ético, bug bounty e desenvolvimento Solana. Como posso ajudá-lo hoje?
+            </div>
+          </div>
+        </div>
+
+        <!-- INPUT AREA -->
+        <div class="input-area">
+          <textarea class="input-premium" id="messageInput" placeholder="Escreva sua mensagem aqui... (Ctrl+Enter para enviar)" rows="1"></textarea>
+          <button class="btn-premium btn-primary" id="sendBtn">
+            ➤ Enviar
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FOOTER BAR -->
+  <div class="footer-bar">
+    <span>Luna Agent v2.0 · Fase 2 Completa</span>
+    <span class="version">FastAPI · Python 3.11 · GPT-4o</span>
+  </div>
+
+  <script>
+    // Referências DOM
+    const chatMessages = document.getElementById('chatMessages');
+    const messageInput = document.getElementById('messageInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    // Estado
+    let currentMode = localStorage.getItem('luna_mode') || 'dev';
+    let currentWorkspace = 'luna-agent';
+
+    // Inicialização
+    async function init() {
+      // Sincronizar modo visualmente
+      document.querySelectorAll('.mode-btn').forEach(btn => {
+        if (btn.dataset.mode === currentMode) btn.classList.add('active');
+        else btn.classList.remove('active');
+      });
+      updateStatusDisplay();
+      await loadWorkspaces();
+    }
+
+    function updateStatusDisplay() {
+      const modeValue = document.querySelector('.status-row:nth-child(1) .value');
+      const wsValue = document.querySelector('.status-row:nth-child(2) .value');
+      if (modeValue) modeValue.textContent = currentMode.toUpperCase();
+      if (wsValue) wsValue.textContent = currentWorkspace;
+    }
+
+    // Event Listeners - Modos
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentMode = btn.dataset.mode;
+        localStorage.setItem('luna_mode', currentMode);
+        updateStatusDisplay();
+        console.log('Modo alterado para:', currentMode);
+      });
+    });
+
+    // Carregar Workspaces do Backend
+    async function loadWorkspaces() {
+      try {
+        const res = await fetch('/workspaces');
+        const data = await res.json();
+        if (data.success) {
+          const list = document.querySelector('.workspace-list');
+          list.innerHTML = '';
+          const activeWs = data.response.active_workspace;
+          currentWorkspace = activeWs;
+          
+          data.response.workspaces.forEach(ws => {
+            const item = document.createElement('div');
+            item.className = `workspace-item ${ws === activeWs ? 'active' : ''}`;
+            item.dataset.workspace = ws;
+            item.innerHTML = `<span>⬡</span> ${ws}`;
+            item.onclick = () => switchWorkspace(ws);
+            list.appendChild(item);
+          });
+          updateStatusDisplay();
+        }
+      } catch (e) { console.error('Erro ao carregar workspaces:', e); }
+    }
+
+    // Trocar Workspace no Backend
+    async function switchWorkspace(name) {
+      try {
+        const res = await fetch('/workspace/switch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ workspace: name })
+        });
+        const data = await res.json();
+        if (data.success) {
+          currentWorkspace = name;
+          document.querySelectorAll('.workspace-item').forEach(i => {
+            if (i.dataset.workspace === name) i.classList.add('active');
+            else i.classList.remove('active');
+          });
+          updateStatusDisplay();
+          addMessage('agent', `Workspace alterado para: **${name}**`);
+        }
+      } catch (e) { console.error('Erro ao trocar workspace:', e); }
+    }
+
+    // Inicializar ao carregar
+    window.onload = init;
+
+    // Event Listeners - Chat
+    sendBtn.addEventListener('click', sendMessage);
+    messageInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && e.ctrlKey) {
+        e.preventDefault();
+        sendMessage();
+      }
+    });
+
+    // Auto-resize textarea
+    messageInput.addEventListener('input', () => {
+      messageInput.style.height = 'auto';
+      messageInput.style.height = Math.min(messageInput.scrollHeight, 100) + 'px';
+    });
+
+    // Função para enviar mensagem
+    async function sendMessage() {
+      const text = messageInput.value.trim();
+      if (!text) return;
+
+      // Adicionar mensagem do usuário
+      addMessage('user', text);
+      messageInput.value = '';
+      messageInput.style.height = 'auto';
+      
+      // Mostrar carregamento
+      const typingId = 'typing-' + Date.now();
+      addMessage('agent', '...', typingId);
+
+      try {
+        // Enviar para o backend
+        const response = await fetch('/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            message: text,
+            mode: currentMode,
+            workspace: currentWorkspace
+          })
+        });
+
+        const data = await response.json();
+        const reply = data.response?.text || 'Desculpe, houve um erro.';
+        
+        // Remover indicador de carregamento e adicionar resposta real
+        document.getElementById(typingId)?.remove();
+        addMessage('agent', reply);
+      } catch (error) {
+        document.getElementById(typingId)?.remove();
+        addMessage('agent', `❌ Erro de conexão: ${error.message}`);
+      }
+    }
+
+    // Função para adicionar mensagem ao chat
+    function addMessage(role, text, id = null) {
+      const messageDiv = document.createElement('div');
+      messageDiv.className = `message ${role}`;
+      if (id) messageDiv.id = id;
+      
+      // Renderizar markdown básico (negrito, itálico, código)
+      let formattedText = escapeHtml(text)
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/`(.*?)`/g, '<code>$1</code>')
+        .replace(/\n/g, '<br>');
+
+      messageDiv.innerHTML = `<div class="message-bubble">${formattedText}</div>`;
+      chatMessages.appendChild(messageDiv);
+      chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
+
+
+
+    // Função para escapar HTML
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

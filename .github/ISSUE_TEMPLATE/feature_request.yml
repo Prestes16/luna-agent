@@ -1,0 +1,39 @@
+name: 💡 Feature Request
+description: Suggest a new feature or improvement
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have an idea that would make Luna better for Web3 security research? Let's hear it!
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / Motivation
+      description: What problem does this feature solve? What's the current pain point?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the feature you'd like to see
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Feature Area
+      options:
+        - Security Audit / Bug Bounty
+        - Solana / Web3 Tooling
+        - Agent Loop / AI
+        - UI / UX
+        - Payment System
+        - Performance
+        - Other
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative solutions or workarounds you've tried?

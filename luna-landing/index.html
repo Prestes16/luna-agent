@@ -1,0 +1,1044 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Luna Agent — Autonomous AI for Developers &amp; Web3</title>
+  <meta name="description" content="Luna Agent is an autonomous AI desktop application for developers, Web3 builders, and security researchers. Code, audit, hunt bounties — powered by Claude AI."/>
+  <meta property="og:title" content="Luna Agent — Autonomous AI for Developers &amp; Web3"/>
+  <meta property="og:description" content="Autonomous AI that codes, audits smart contracts, and hunts bug bounties. Powered by Claude."/>
+  <meta property="og:type" content="website"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#070710;--bg2:#0d0d1a;--card:#12121f;--card2:#1a1a2e;--card3:#0f0f1c;
+      --border:#1f1f35;--border2:#2a2a45;--border3:#32324e;
+      --accent:#7c6af7;--accent2:#5eead4;--accent3:#f97316;--accent4:#f43f5e;
+      --text:#e8e8f8;--muted:#7070a0;--muted2:#9090b8;
+      --glow:rgba(124,106,247,0.22);--glow2:rgba(94,234,212,0.15);
+    }
+    html{scroll-behavior:smooth}
+    body{font-family:'Inter',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;line-height:1.6}
+    ::selection{background:rgba(124,106,247,0.3)}
+    ::-webkit-scrollbar{width:6px}
+    ::-webkit-scrollbar-track{background:var(--bg)}
+    ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+    ::-webkit-scrollbar-thumb:hover{background:var(--border3)}
+
+    /* ── Nav ── */
+    nav{position:fixed;top:0;left:0;right:0;z-index:200;display:flex;align-items:center;justify-content:space-between;padding:0 3rem;height:64px;background:rgba(7,7,16,0.88);backdrop-filter:blur(24px) saturate(180%);border-bottom:1px solid var(--border)}
+    .logo{display:flex;align-items:center;gap:.5rem;font-size:1.2rem;font-weight:800;letter-spacing:-.5px;text-decoration:none;color:var(--text)}
+    .logo-icon{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:.95rem;flex-shrink:0;box-shadow:0 0 16px rgba(124,106,247,0.4)}
+    .logo span{color:var(--accent)}
+    .nav-links{display:flex;gap:0;align-items:center}
+    .nav-links a{color:var(--muted);text-decoration:none;font-size:.875rem;font-weight:500;transition:color .2s;padding:.5rem 1rem;border-radius:8px}
+    .nav-links a:hover,.nav-links a.active{color:var(--text)}
+    .nav-links a.nav-docs{color:var(--accent2)}
+    .nav-links a.nav-docs:hover{color:var(--accent2);opacity:.85}
+    .nav-right{display:flex;align-items:center;gap:.8rem}
+    .nav-gh{display:flex;align-items:center;gap:.4rem;color:var(--muted);text-decoration:none;font-size:.82rem;font-weight:500;border:1px solid var(--border2);padding:.4rem .9rem;border-radius:8px;transition:all .2s}
+    .nav-gh:hover{border-color:var(--border3);color:var(--text)}
+    .nav-btn{background:var(--accent);color:#fff;border:none;padding:.5rem 1.2rem;border-radius:8px;font-size:.875rem;font-weight:600;cursor:pointer;text-decoration:none;transition:all .2s;white-space:nowrap}
+    .nav-btn:hover{transform:translateY(-1px);box-shadow:0 4px 20px var(--glow)}
+
+    /* ── Hero ── */
+    .hero{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:8rem 2rem 5rem;position:relative;overflow:hidden}
+    .hero-bg{position:absolute;inset:0;pointer-events:none;
+      background:
+        radial-gradient(ellipse 90% 55% at 50% -5%,rgba(124,106,247,0.14),transparent),
+        radial-gradient(ellipse 45% 45% at 85% 55%,rgba(94,234,212,0.06),transparent),
+        radial-gradient(ellipse 45% 45% at 15% 65%,rgba(124,106,247,0.06),transparent)}
+    .grid-bg{position:absolute;inset:0;pointer-events:none;opacity:.022;
+      background-image:linear-gradient(var(--accent) 1px,transparent 1px),linear-gradient(90deg,var(--accent) 1px,transparent 1px);
+      background-size:60px 60px}
+    .badge{display:inline-flex;align-items:center;gap:.5rem;background:rgba(124,106,247,0.09);border:1px solid rgba(124,106,247,0.28);color:var(--accent);border-radius:999px;padding:.38rem 1rem;font-size:.78rem;font-weight:600;margin-bottom:2rem;letter-spacing:.4px;position:relative;z-index:1}
+    .badge-pulse{width:7px;height:7px;border-radius:50%;background:var(--accent2);animation:pulse 2s infinite;flex-shrink:0}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.8)}}
+    h1{font-size:clamp(2.8rem,7vw,5rem);font-weight:900;line-height:1.05;letter-spacing:-2px;margin-bottom:1.5rem;max-width:940px;position:relative;z-index:1}
+    h1 .g1{background:linear-gradient(135deg,#fff 30%,rgba(200,195,255,.9));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    h1 .g2{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .hero-sub{font-size:1.1rem;color:var(--muted2);max-width:560px;line-height:1.78;margin-bottom:2.5rem;position:relative;z-index:1;font-weight:400}
+    .hero-actions{display:flex;gap:.9rem;flex-wrap:wrap;justify-content:center;position:relative;z-index:1;margin-bottom:3.5rem}
+    .btn-primary{background:linear-gradient(135deg,var(--accent) 0%,#6054e0 100%);color:#fff;border:none;padding:.9rem 2.2rem;border-radius:12px;font-size:.98rem;font-weight:700;cursor:pointer;text-decoration:none;transition:all .22s;box-shadow:0 0 40px rgba(124,106,247,0.38),0 4px 16px rgba(0,0,0,.5)}
+    .btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 40px rgba(124,106,247,0.55),0 4px 20px rgba(0,0,0,.5)}
+    .btn-ghost{background:rgba(255,255,255,.04);color:var(--text);border:1px solid var(--border2);padding:.9rem 2.2rem;border-radius:12px;font-size:.98rem;font-weight:500;cursor:pointer;text-decoration:none;transition:all .22s;backdrop-filter:blur(8px)}
+    .btn-ghost:hover{border-color:var(--accent);color:var(--accent);background:rgba(124,106,247,.07)}
+
+    /* ── Terminal ── */
+    .terminal-wrap{position:relative;z-index:1;background:var(--card);border:1px solid var(--border2);border-radius:16px;max-width:800px;width:100%;text-align:left;overflow:hidden;box-shadow:0 0 80px rgba(124,106,247,0.1),0 40px 80px rgba(0,0,0,.55)}
+    .term-header{display:flex;align-items:center;gap:.5rem;padding:.75rem 1.2rem;background:rgba(255,255,255,.025);border-bottom:1px solid var(--border)}
+    .term-dot{width:12px;height:12px;border-radius:50%}
+    .term-title{font-family:'JetBrains Mono',monospace;font-size:.73rem;color:var(--muted);margin-left:.5rem;flex:1;text-align:center}
+    .term-body{padding:1.5rem;font-family:'JetBrains Mono',monospace;font-size:.82rem;line-height:1.85;min-height:268px}
+    .term-line{display:flex;gap:.6rem;align-items:flex-start;margin-bottom:.05rem}
+    .term-prompt{color:var(--accent);font-weight:600;white-space:nowrap}
+    .term-prompt.luna{color:var(--accent2)}
+    .term-text{color:var(--text);white-space:pre-wrap;word-break:break-word}
+    .cursor{display:inline-block;width:2px;height:1em;background:var(--accent2);margin-left:2px;animation:blink 1s infinite;vertical-align:text-bottom}
+    @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+    /* ── Stats bar ── */
+    .stats-bar{background:var(--bg2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:2rem}
+    .stats-inner{max-width:960px;margin:0 auto;display:flex;gap:0;justify-content:space-around;flex-wrap:wrap}
+    .stat{text-align:center;padding:1rem 2rem}
+    .stat-icon{display:flex;align-items:center;justify-content:center;margin-bottom:.55rem}
+    .stat-num{font-size:2rem;font-weight:800;letter-spacing:-1px;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .stat-label{color:var(--muted);font-size:.8rem;margin-top:.25rem;letter-spacing:.3px}
+
+    /* ── Generic section ── */
+    .section{padding:6rem 2rem;max-width:1100px;margin:0 auto}
+    .section-label{color:var(--accent);font-size:.72rem;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;text-align:center;margin-bottom:.7rem}
+    .section-title{font-size:clamp(1.9rem,4vw,2.9rem);font-weight:800;letter-spacing:-1px;text-align:center;margin-bottom:.8rem;line-height:1.18}
+    .section-sub{color:var(--muted2);font-size:.98rem;max-width:520px;margin:0 auto 3.5rem;text-align:center;line-height:1.72}
+
+    /* ── How it works ── */
+    .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1.5rem}
+    .step{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:2rem;text-align:center;transition:all .3s;position:relative;overflow:hidden}
+    .step::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--accent),var(--accent2));transform:scaleX(0);transition:transform .35s}
+    .step:hover{border-color:rgba(124,106,247,.4);transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.4)}
+    .step:hover::before{transform:scaleX(1)}
+    .step-num{width:48px;height:48px;border-radius:12px;margin:0 auto 1.2rem;background:rgba(124,106,247,.1);border:1px solid rgba(124,106,247,.22);display:flex;align-items:center;justify-content:center;font-size:1.3rem;font-weight:800;color:var(--accent);font-family:'JetBrains Mono',monospace}
+    .step h3{font-size:1.05rem;font-weight:700;margin-bottom:.6rem}
+    .step p{color:var(--muted2);font-size:.875rem;line-height:1.68}
+
+    /* ── Features ── */
+    .features-bg{background:var(--bg2);padding:6rem 2rem;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+    .features-inner{max-width:1100px;margin:0 auto}
+    .feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:1.2rem}
+    .feat-card{background:var(--card2);border:1px solid var(--border);border-radius:14px;padding:1.8rem;transition:all .25s;position:relative;overflow:hidden}
+    .feat-card::after{content:'';position:absolute;inset:0;background:linear-gradient(135deg,rgba(124,106,247,.04),transparent);opacity:0;transition:opacity .25s;pointer-events:none}
+    .feat-card:hover{border-color:var(--border2);transform:translateY(-2px);box-shadow:0 8px 30px rgba(0,0,0,.35)}
+    .feat-card:hover::after{opacity:1}
+    .feat-top{display:flex;align-items:flex-start;gap:1rem;margin-bottom:1rem}
+    .feat-icon{width:42px;height:42px;border-radius:10px;flex-shrink:0;background:rgba(124,106,247,.1);border:1px solid rgba(124,106,247,.2);display:flex;align-items:center;justify-content:center;font-size:1.2rem}
+    .feat-card h3{font-size:.98rem;font-weight:700;margin-bottom:.25rem}
+    .feat-badge{display:inline-block;background:rgba(94,234,212,.1);border:1px solid rgba(94,234,212,.22);color:var(--accent2);border-radius:4px;padding:.1rem .5rem;font-size:.68rem;font-weight:700;letter-spacing:.6px;text-transform:uppercase}
+    .feat-card p{color:var(--muted2);font-size:.875rem;line-height:1.68}
+
+    /* ── Demo ── */
+    .demo-section{padding:6rem 2rem;max-width:1100px;margin:0 auto}
+    .tabs{display:flex;gap:.5rem;margin-bottom:1.5rem;flex-wrap:wrap}
+    .tab{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:.5rem 1.1rem;border-radius:8px;font-size:.83rem;font-weight:500;cursor:pointer;transition:all .2s;user-select:none}
+    .tab:hover{border-color:var(--border2);color:var(--text)}
+    .tab.active{background:rgba(124,106,247,.12);border-color:var(--accent);color:var(--accent)}
+    .demo-window{background:var(--card);border:1px solid var(--border2);border-radius:14px;overflow:hidden;min-height:300px}
+    .demo-win-header{display:flex;align-items:center;gap:.5rem;padding:.75rem 1.2rem;background:rgba(255,255,255,.02);border-bottom:1px solid var(--border)}
+    .demo-win-dot{width:10px;height:10px;border-radius:50%}
+    .demo-content{padding:1.5rem;font-family:'JetBrains Mono',monospace;font-size:.8rem;line-height:1.85}
+    .demo-content.hidden{display:none}
+    .c-comment{color:#4f4f70}.c-keyword{color:var(--accent)}.c-string{color:var(--accent2)}.c-fn{color:#fbbf24}.c-var{color:#f97316}.c-num{color:#f87171}
+
+    /* ── Pricing ── */
+    .pricing-bg{background:var(--bg2);padding:6rem 2rem;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+    .pricing-inner{max-width:1060px;margin:0 auto}
+    .pricing-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:1.3rem;margin-top:3rem}
+    .price-card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:1.8rem;transition:all .3s;position:relative}
+    .price-card:hover{border-color:var(--border2);transform:translateY(-3px);box-shadow:0 12px 40px rgba(0,0,0,.4)}
+    .price-card.featured{border-color:var(--accent);box-shadow:0 0 40px rgba(124,106,247,.18),0 12px 40px rgba(0,0,0,.4);background:linear-gradient(160deg,rgba(124,106,247,.07),var(--card))}
+    .price-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--accent),#6054e0);color:#fff;border-radius:999px;padding:.22rem 1rem;font-size:.72rem;font-weight:700;white-space:nowrap;box-shadow:0 4px 16px rgba(124,106,247,.4)}
+    .price-name{font-size:.78rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:.7rem}
+    .price-amount{font-size:2.5rem;font-weight:900;letter-spacing:-1.5px;margin-bottom:.25rem;line-height:1}
+    .price-amount span{font-size:.95rem;font-weight:500;color:var(--muted);vertical-align:super;letter-spacing:0}
+    .price-grains{font-size:1rem;font-weight:700;color:var(--accent2);margin-bottom:.25rem}
+    .price-unit{color:var(--muted);font-size:.8rem;margin-bottom:1.5rem}
+    .price-features{list-style:none;display:flex;flex-direction:column;gap:.6rem;margin-bottom:1.8rem}
+    .price-features li{display:flex;align-items:center;gap:.6rem;font-size:.85rem;color:var(--muted2)}
+    .price-features li::before{content:'✓';color:var(--accent2);font-weight:700;flex-shrink:0}
+    .price-btn{width:100%;padding:.78rem;border-radius:10px;font-size:.88rem;font-weight:600;cursor:pointer;transition:all .2s;text-align:center;display:block;text-decoration:none}
+    .price-btn.outline{background:transparent;border:1px solid var(--border2);color:var(--text)}
+    .price-btn.outline:hover{border-color:var(--accent);color:var(--accent);background:rgba(124,106,247,.06)}
+    .price-btn.solid{background:linear-gradient(135deg,var(--accent),#6054e0);border:none;color:#fff;box-shadow:0 4px 20px var(--glow)}
+    .price-btn.solid:hover{transform:translateY(-1px);box-shadow:0 8px 32px var(--glow)}
+
+    /* ── Docs section ── */
+    .docs-bg{background:var(--bg);padding:6rem 2rem;border-top:1px solid var(--border)}
+    .docs-inner{max-width:1100px;margin:0 auto}
+    .docs-tabs{display:flex;gap:.5rem;margin-bottom:2rem;flex-wrap:wrap}
+    .docs-tab{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:.5rem 1.1rem;border-radius:8px;font-size:.83rem;font-weight:500;cursor:pointer;transition:all .2s;user-select:none}
+    .docs-tab:hover{border-color:var(--border2);color:var(--text)}
+    .docs-tab.active{background:rgba(124,106,247,.12);border-color:var(--accent);color:var(--accent)}
+    .docs-panel{display:none}
+    .docs-panel.active{display:block}
+    .docs-panel h3{font-size:1.5rem;font-weight:800;letter-spacing:-.5px;margin-bottom:.6rem}
+    .docs-panel>p{color:var(--muted2);font-size:.93rem;line-height:1.74;margin-bottom:2rem}
+    .docs-block{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:1.5rem;margin-bottom:1.2rem}
+    .docs-block-title{font-size:.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:1rem;display:flex;align-items:center;gap:.6rem}
+    .docs-block-title::after{content:'';flex:1;height:1px;background:var(--border)}
+    .arch-diagram{display:grid;grid-template-columns:1fr auto 1fr;gap:0;align-items:center;font-family:'JetBrains Mono',monospace;font-size:.78rem}
+    .arch-col{display:flex;flex-direction:column;gap:.6rem}
+    .arch-box{background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:.6rem 1rem;text-align:center;font-size:.75rem;transition:border-color .2s}
+    .arch-box.highlight{border-color:rgba(124,106,247,.5);background:rgba(124,106,247,.07);color:var(--accent)}
+    .arch-box.highlight2{border-color:rgba(94,234,212,.4);background:rgba(94,234,212,.06);color:var(--accent2)}
+    .arch-arrow{color:var(--muted);font-size:.9rem;text-align:center;padding:0 .5rem;display:flex;flex-direction:column;align-items:center;gap:.3rem;white-space:nowrap}
+    .arch-arrow span{font-size:.62rem;color:var(--muted);letter-spacing:.3px}
+    .code-block{background:var(--card3);border:1px solid var(--border);border-radius:10px;padding:1.2rem 1.4rem;font-family:'JetBrains Mono',monospace;font-size:.78rem;line-height:1.8;overflow-x:auto;margin:.8rem 0}
+    .code-block .ch{color:var(--muted)}.code-block .ck{color:var(--accent)}.code-block .cv{color:var(--accent2)}.code-block .cs{color:#fbbf24}.code-block .cn{color:#f87171}
+    .endpoint-list{display:flex;flex-direction:column;gap:.8rem}
+    .endpoint{background:var(--card2);border:1px solid var(--border);border-radius:10px;padding:1rem 1.2rem;display:flex;align-items:flex-start;gap:1rem;transition:border-color .2s}
+    .endpoint:hover{border-color:var(--border2)}
+    .method{font-family:'JetBrains Mono',monospace;font-size:.72rem;font-weight:700;padding:.2rem .55rem;border-radius:5px;flex-shrink:0;margin-top:.1rem}
+    .method.get{background:rgba(94,234,212,.12);color:var(--accent2);border:1px solid rgba(94,234,212,.25)}
+    .method.post{background:rgba(124,106,247,.12);color:var(--accent);border:1px solid rgba(124,106,247,.25)}
+    .endpoint-path{font-family:'JetBrains Mono',monospace;font-size:.82rem;font-weight:600;margin-bottom:.2rem;color:var(--text)}
+    .endpoint-desc{font-size:.82rem;color:var(--muted2)}
+    .grains-table{width:100%;border-collapse:collapse;font-size:.85rem}
+    .grains-table th{text-align:left;color:var(--muted);font-size:.72rem;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;padding:.5rem 1rem;border-bottom:1px solid var(--border)}
+    .grains-table td{padding:.65rem 1rem;border-bottom:1px solid rgba(31,31,53,.5);color:var(--muted2)}
+    .grains-table td:first-child{font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--text)}
+    .grains-table tr:last-child td{border-bottom:none}
+    .grains-table .highlight-row td{color:var(--accent)}
+    .info-chip{display:inline-flex;align-items:center;gap:.35rem;background:rgba(94,234,212,.08);border:1px solid rgba(94,234,212,.2);border-radius:6px;padding:.3rem .7rem;font-size:.78rem;color:var(--accent2);font-weight:500;margin:.2rem .2rem .2rem 0}
+    .warn-chip{background:rgba(249,115,22,.08);border-color:rgba(249,115,22,.2);color:#fb923c}
+    .qs-step{display:flex;gap:1rem;margin-bottom:1.2rem;align-items:flex-start}
+    .qs-num{width:28px;height:28px;border-radius:8px;background:rgba(124,106,247,.12);border:1px solid rgba(124,106,247,.25);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:.78rem;font-weight:700;color:var(--accent);flex-shrink:0;margin-top:.1rem}
+    .qs-content h4{font-size:.92rem;font-weight:700;margin-bottom:.3rem}
+    .qs-content p{font-size:.85rem;color:var(--muted2);line-height:1.65}
+
+    /* ── Waitlist ── */
+    .waitlist-section{padding:7rem 2rem;text-align:center;background:linear-gradient(180deg,var(--bg) 0%,rgba(124,106,247,.05) 50%,var(--bg) 100%);border-top:1px solid var(--border);position:relative;overflow:hidden}
+    .waitlist-glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:600px;height:300px;background:radial-gradient(ellipse,rgba(124,106,247,.12),transparent 70%);pointer-events:none}
+    .waitlist-section h2{font-size:clamp(2rem,5vw,3.2rem);font-weight:900;letter-spacing:-1.5px;margin-bottom:1rem;position:relative;z-index:1}
+    .waitlist-section p{color:var(--muted2);font-size:1.03rem;max-width:460px;margin:0 auto 2.5rem;line-height:1.72;position:relative;z-index:1}
+    .form-row{display:flex;gap:.8rem;max-width:490px;margin:0 auto;flex-wrap:wrap;justify-content:center;position:relative;z-index:1}
+    .email-input{flex:1;min-width:220px;background:rgba(255,255,255,.04);border:1px solid var(--border2);color:var(--text);padding:.9rem 1.2rem;border-radius:10px;font-size:.95rem;outline:none;font-family:'Inter',sans-serif;transition:border-color .2s;backdrop-filter:blur(8px)}
+    .email-input::placeholder{color:var(--muted)}
+    .email-input:focus{border-color:var(--accent);background:rgba(124,106,247,.05)}
+    .form-success{display:none;color:var(--accent2);font-size:.92rem;margin-top:1rem;font-weight:600;position:relative;z-index:1}
+    .social-proof{display:flex;align-items:center;justify-content:center;gap:.6rem;margin-top:1.8rem;color:var(--muted);font-size:.82rem;position:relative;z-index:1}
+    .avatars{display:flex}
+    .av{width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));border:2px solid var(--bg);margin-left:-8px;display:flex;align-items:center;justify-content:center;font-size:.7rem;font-weight:700;color:#fff}
+    .av:first-child{margin-left:0}
+
+    /* ── Footer ── */
+    footer{border-top:1px solid var(--border);padding:1.8rem 3rem;background:var(--bg2)}
+    .footer-inner{max-width:1100px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;color:var(--muted);font-size:.82rem}
+    .footer-logo{display:flex;align-items:center;gap:.5rem;font-size:1rem;font-weight:800;text-decoration:none;color:var(--text)}
+    .footer-links{display:flex;gap:1.5rem;flex-wrap:wrap}
+    footer a{color:var(--muted);text-decoration:none;transition:color .2s;display:flex;align-items:center;gap:.35rem}
+    footer a:hover{color:var(--accent)}
+
+    @media(max-width:900px){
+      .docs-tabs{gap:.4rem}
+      .docs-tab{font-size:.78rem;padding:.42rem .85rem}
+    }
+    @media(max-width:768px){
+      nav{padding:0 1.5rem}
+      .nav-links{display:none}
+      .nav-gh{display:none}
+      .hero{padding:7rem 1.5rem 3.5rem}
+      h1{letter-spacing:-1px}
+      .stat{padding:.7rem 1rem}
+      .section{padding:4rem 1.5rem}
+      .pricing-grid{grid-template-columns:1fr 1fr}
+      footer .footer-inner{justify-content:center;text-align:center}
+    }
+    @media(max-width:520px){
+      .pricing-grid{grid-template-columns:1fr}
+      .arch-diagram{grid-template-columns:1fr;gap:.5rem}
+      .arch-arrow{transform:rotate(90deg);margin:.3rem auto}
+    }
+  </style>
+</head>
+<body>
+
+<!-- ─── Navigation ───────────────────────────────────────────────────────── -->
+<nav>
+  <a href="#" class="logo">
+    <div class="logo-icon">🌙</div>
+    Luna<span>Agent</span>
+  </a>
+  <div class="nav-links">
+    <a href="#how-it-works">How it works</a>
+    <a href="#features">Features</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#docs" class="nav-docs">Docs</a>
+    <a href="#waitlist">Early Access</a>
+  </div>
+  <div class="nav-right">
+    <a href="https://github.com/prestes16/luna-agent" target="_blank" rel="noopener noreferrer" class="nav-gh">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/></svg>
+      GitHub
+    </a>
+    <a href="#waitlist" class="nav-btn">Request Access →</a>
+  </div>
+</nav>
+
+<!-- ─── Hero ─────────────────────────────────────────────────────────────── -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="grid-bg"></div>
+  <div class="badge"><span class="badge-pulse"></span> Powered by Claude AI · Private Beta</div>
+  <h1>
+    <span class="g1">Your AI Agent that</span><br>
+    <span class="g2">Codes. Audits. Hunts.</span>
+  </h1>
+  <p class="hero-sub">
+    Luna is an autonomous desktop AI that executes complex developer tasks, audits smart contracts, and researches security vulnerabilities — without you lifting a finger.
+  </p>
+  <div class="hero-actions">
+    <a href="#waitlist" class="btn-primary">🚀 Request Early Access</a>
+    <a href="https://github.com/prestes16/luna-agent" target="_blank" rel="noopener noreferrer" class="btn-ghost" style="display:flex;align-items:center;gap:.5rem">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      Star on GitHub
+    </a>
+    <a href="#docs" class="btn-ghost">Read the Docs</a>
+  </div>
+
+  <div class="terminal-wrap">
+    <div class="term-header">
+      <div class="term-dot" style="background:#ff5f57"></div>
+      <div class="term-dot" style="background:#febc2e"></div>
+      <div class="term-dot" style="background:#28c840"></div>
+      <span class="term-title">luna-agent — autonomous session</span>
+    </div>
+    <div class="term-body" id="terminal"></div>
+  </div>
+</section>
+
+<!-- ─── Stats bar ─────────────────────────────────────────────────────────── -->
+<div class="stats-bar">
+  <div class="stats-inner">
+    <div class="stat">
+      <div class="stat-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+          <defs><linearGradient id="gA" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#7c6af7"/><stop offset="100%" stop-color="#a78bfa"/></linearGradient></defs>
+          <path d="M13.827 3.52h-3.654L4.947 20h3.097l1.17-3.39h5.572L15.956 20h3.097L13.827 3.52zm-3.8 10.47 1.973-5.717 1.973 5.717H10.027z" fill="url(#gA)"/>
+        </svg>
+      </div>
+      <div class="stat-num" style="font-size:1.4rem">Claude</div>
+      <div class="stat-label">AI Engine (Anthropic)</div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+          <defs><linearGradient id="gM" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#7c6af7"/><stop offset="100%" stop-color="#5eead4"/></linearGradient></defs>
+          <circle cx="12" cy="12" r="3" fill="url(#gM)"/>
+          <circle cx="4" cy="6" r="2" fill="url(#gM)" opacity=".7"/><circle cx="20" cy="6" r="2" fill="url(#gM)" opacity=".7"/>
+          <circle cx="4" cy="18" r="2" fill="url(#gM)" opacity=".7"/><circle cx="20" cy="18" r="2" fill="url(#gM)" opacity=".7"/>
+          <line x1="6" y1="7" x2="10" y2="10.5" stroke="url(#gM)" stroke-width="1.2" opacity=".5"/>
+          <line x1="18" y1="7" x2="14" y2="10.5" stroke="url(#gM)" stroke-width="1.2" opacity=".5"/>
+          <line x1="6" y1="17" x2="10" y2="13.5" stroke="url(#gM)" stroke-width="1.2" opacity=".5"/>
+          <line x1="18" y1="17" x2="14" y2="13.5" stroke="url(#gM)" stroke-width="1.2" opacity=".5"/>
+        </svg>
+      </div>
+      <div class="stat-num" style="font-size:1.8rem">6+</div>
+      <div class="stat-label">AI Models Supported</div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon">
+        <svg width="36" height="36" viewBox="0 0 24 24" fill="none">
+          <defs><linearGradient id="gL" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse"><stop offset="0%" stop-color="#7c6af7"/><stop offset="100%" stop-color="#5eead4"/></linearGradient></defs>
+          <rect x="5" y="11" width="14" height="10" rx="2" fill="url(#gL)" opacity=".85"/>
+          <path d="M8 11V7a4 4 0 0 1 8 0v4" stroke="url(#gL)" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="12" cy="16" r="1.5" fill="#0d0d1a"/>
+        </svg>
+      </div>
+      <div class="stat-num" style="font-size:1.8rem">100%</div>
+      <div class="stat-label">Local Mode Available</div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon">
+        <svg width="36" height="36" viewBox="0 0 397.7 311.7">
+          <defs>
+            <linearGradient id="gS1" x1="360.8" y1="351.4" x2="141.7" y2="-69.2" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9945ff"/><stop offset=".91" stop-color="#14f195"/></linearGradient>
+          </defs>
+          <path d="M64.6 237.9a10.7 10.7 0 0 1 7.5-3.1H388c4.7 0 7.1 5.7 3.7 9.1l-62.4 62.4a10.7 10.7 0 0 1-7.5 3.1H6.4c-4.7 0-7.1-5.7-3.7-9.1l62-62.4z" fill="url(#gS1)"/>
+          <path d="M64.6 3.1A10.9 10.9 0 0 1 72.1 0H388c4.7 0 7.1 5.7 3.7 9.1l-62.4 62.4a10.7 10.7 0 0 1-7.5 3.1H6.4C1.7 74.6-.7 68.9 2.7 65.5l61.9-62.4z" fill="url(#gS1)"/>
+          <path d="M321.1 120.5a10.7 10.7 0 0 0-7.5-3.1H6.4c-4.7 0-7.1 5.7-3.7 9.1l62.4 62.4a10.7 10.7 0 0 0 7.5 3.1H388c4.7 0 7.1-5.7 3.7-9.1l-70.6-62.4z" fill="url(#gS1)"/>
+        </svg>
+      </div>
+      <div class="stat-num" style="font-size:1.4rem">Solana</div>
+      <div class="stat-label">Native Web3 Support</div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── How it works ─────────────────────────────────────────────────────── -->
+<section class="section" id="how-it-works">
+  <p class="section-label">How it works</p>
+  <h2 class="section-title">One agent. Infinite tasks.</h2>
+  <p class="section-sub">Tell Luna what you need in plain language. She plans, executes, reflects, and delivers — autonomously.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">01</div>
+      <h3>You set the goal</h3>
+      <p>Describe your task in plain language — "audit this Solana program", "find vulnerabilities in this contract", "refactor my codebase". Luna understands full context.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">02</div>
+      <h3>Luna plans &amp; executes</h3>
+      <p>Luna breaks the task into steps, uses the right tools, writes code, runs analysis, searches docs — and uses a self-reflection loop to verify results before moving on.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">03</div>
+      <h3>You get results</h3>
+      <p>Receive a detailed report, working code, or vulnerability findings. Luna presents everything clearly and waits for your next instruction.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Features ─────────────────────────────────────────────────────────── -->
+<div class="features-bg" id="features">
+  <div class="features-inner">
+    <p class="section-label">Features</p>
+    <h2 class="section-title">Built for serious builders</h2>
+    <p class="section-sub">Every feature was designed for developers and security researchers who can't afford to waste time.</p>
+    <div class="feat-grid">
+      <div class="feat-card">
+        <div class="feat-top"><div class="feat-icon">🤖</div><div><h3>Autonomous Agent Loop</h3><span class="feat-badge">Core</span></div></div>
+        <p>Luna uses a self-reflection loop — she plans, acts, evaluates, and corrects herself without interruption. Complex multi-step tasks run end-to-end while you focus on other things.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-top"><div class="feat-icon">🔍</div><div><h3>Smart Contract Auditing</h3><span class="feat-badge">Web3</span></div></div>
+        <p>Native support for Solana (Anchor/Rust) and EVM smart contracts. Luna scans for reentrancy, access control, overflow, and logic bugs with detailed, actionable reports.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-top"><div class="feat-icon">🛡️</div><div><h3>Bug Bounty Research</h3><span class="feat-badge">Security</span></div></div>
+        <p>Designed for Immunefi and HackerOne hunters. Luna assists with recon, exploit research, PoC generation, and formats professional vulnerability reports that get accepted.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-top"><div class="feat-icon">👁️</div><div><h3>Multimodal Vision</h3><span class="feat-badge">AI</span></div></div>
+        <p>Upload screenshots, architecture diagrams, or PDFs. Luna reads images alongside code and docs to give you richer, more accurate analysis than text-only AI tools.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-top"><div class="feat-icon">🔒</div><div><h3>Zero-Cloud Mode</h3><span class="feat-badge">Privacy</span></div></div>
+        <p>Run Luna 100% offline with Ollama. Your code and research never leave your machine — critical for sensitive security work, NDA projects, or regulated environments.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-top"><div class="feat-icon">🗂️</div><div><h3>Visual Workspace</h3><span class="feat-badge">Productivity</span></div></div>
+        <p>VS Code-style file tree with live preview. Luna navigates your project structure, edits files, and runs analysis directly — no copy-pasting required.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-top"><div class="feat-icon">⚡</div><div><h3>Multi-Model Support</h3><span class="feat-badge">Flexible</span></div></div>
+        <p>Switch between Claude (Anthropic), GPT-4o (OpenAI), Grok (xAI), Llama (Groq), and local Ollama models per task. Luna auto-routes to the best model for each job type.</p>
+      </div>
+      <div class="feat-card">
+        <div class="feat-top"><div class="feat-icon">💎</div><div><h3>Grains Credit System</h3><span class="feat-badge">Payments</span></div></div>
+        <p>Pay for AI usage in Grains via USDC on Solana. No subscriptions — top up when you need it, pay only for what you use. Atomic on-chain payments with full transaction history.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Demo ──────────────────────────────────────────────────────────────── -->
+<section class="demo-section">
+  <p class="section-label">In Action</p>
+  <h2 class="section-title">See Luna at work</h2>
+  <p class="section-sub">Real examples of what Luna produces — from audit reports to vulnerability research.</p>
+  <div class="tabs">
+    <div class="tab active" onclick="showTab(0)">Solana Audit</div>
+    <div class="tab" onclick="showTab(1)">Bug Bounty Report</div>
+    <div class="tab" onclick="showTab(2)">Code Review</div>
+  </div>
+  <div class="demo-window">
+    <div class="demo-win-header">
+      <div class="demo-win-dot" style="background:#ff5f57"></div>
+      <div class="demo-win-dot" style="background:#febc2e"></div>
+      <div class="demo-win-dot" style="background:#28c840"></div>
+      <span style="font-family:'JetBrains Mono',monospace;font-size:.73rem;color:var(--muted);margin-left:.5rem" id="tab-title">audit_report.md</span>
+    </div>
+    <div class="demo-content" id="demo-content-0">
+<span class="c-comment"># Smart Contract Audit — Solana AMM Protocol</span>
+<span class="c-comment"># Generated by Luna Agent · 2026-05-01</span>
+
+<span class="c-keyword">## CRITICAL [HIGH] — Unchecked Arithmetic in swap_tokens()</span>
+
+<span class="c-string">Location:</span> programs/amm/src/lib.rs:247
+<span class="c-string">Severity:</span> <span style="color:#f87171">CRITICAL</span>
+<span class="c-string">Impact:</span>  Integer overflow → incorrect token amounts credited to attacker
+
+<span class="c-comment">### Vulnerable Code</span>
+<span class="c-var">let</span> out_amount = in_amount * reserve_out / reserve_in;
+<span class="c-comment">// ↑ No overflow check — wraps silently on u64 overflow</span>
+
+<span class="c-comment">### Recommended Fix</span>
+<span class="c-var">let</span> out_amount = (in_amount <span class="c-keyword">as</span> u128)
+    .checked_mul(reserve_out <span class="c-keyword">as</span> u128)
+    .ok_or(ErrorCode::Overflow)?
+    / reserve_in <span class="c-keyword">as</span> u128;
+
+<span class="c-string">PoC:</span> Attacker swaps 2^63+1 tokens → overflow → receives 10x expected output
+<span class="c-string">Immunefi Severity:</span> <span style="color:#f87171">Critical — up to $50,000 bounty</span></div>
+    <div class="demo-content hidden" id="demo-content-1">
+<span class="c-comment"># Vulnerability Report — DeFi Protocol XYZ</span>
+<span class="c-comment"># Luna Agent Bug Bounty Assistant · Immunefi Format</span>
+
+<span class="c-keyword">**Title:** Reentrancy in withdraw() allows draining of liquidity pool</span>
+
+<span class="c-string">**Severity:**</span> Critical
+<span class="c-string">**Target:**</span>  LiquidityPool.sol (mainnet: 0x1a2b...3c4d)
+<span class="c-string">**Impact:**</span>  Complete drain of protocol funds (~$2.4M TVL at risk)
+
+<span class="c-comment">## Steps to Reproduce</span>
+<span class="c-num">1.</span> Deploy AttackerContract with fallback() that calls withdraw()
+<span class="c-num">2.</span> Call deposit(1 ETH) → receive 1 share token
+<span class="c-num">3.</span> Call withdraw(1 share) → triggers reentrancy loop
+<span class="c-num">4.</span> Loop drains pool until balance is zero
+
+<span class="c-comment">## PoC (Foundry)</span>
+<span class="c-fn">function</span> <span class="c-fn">testExploit</span>() <span class="c-keyword">external</span> {
+    pool.deposit{value: <span class="c-num">1 ether</span>}();
+    attacker.attack(); <span class="c-comment">// drains 24 ETH in one tx</span>
+    assertGt(attacker.balance, <span class="c-num">20 ether</span>);
+}
+
+<span class="c-string">Immunefi Severity:</span> <span style="color:#f87171">Critical — estimated reward $30,000–$50,000</span></div>
+    <div class="demo-content hidden" id="demo-content-2">
+<span class="c-comment">// Luna Code Review — api/auth/middleware.ts</span>
+<span class="c-comment">// 3 issues found · 1 critical · 2 warnings</span>
+
+<span class="c-keyword">❌ CRITICAL</span> — JWT secret falls back to empty string (line 34)
+<span class="c-comment">   process.env.JWT_SECRET ?? '' → any token signed with '' is valid</span>
+<span class="c-comment">   Attacker can forge arbitrary JWT claims with no secret</span>
+<span class="c-string">   Fix: throw new Error('JWT_SECRET missing') at startup if unset</span>
+
+<span class="c-keyword">⚠️  WARNING</span> — Rate limit not applied to /reset-password (line 89)
+<span class="c-comment">   Endpoint accepts unlimited attempts → account enumeration risk</span>
+<span class="c-string">   Fix: Apply existing rateLimitMiddleware() to all auth routes</span>
+
+<span class="c-keyword">⚠️  WARNING</span> — Stack trace returned to client in production (line 156)
+<span class="c-comment">   res.json({ error: err.stack }) leaks internal file paths</span>
+<span class="c-string">   Fix: Log internally only; return generic message to client</span></div>
+  </div>
+</section>
+
+<!-- ─── Pricing ───────────────────────────────────────────────────────────── -->
+<div class="pricing-bg" id="pricing">
+  <div class="pricing-inner">
+    <p class="section-label" style="text-align:center">Pricing</p>
+    <h2 class="section-title">Simple. Usage-based. No surprises.</h2>
+    <p class="section-sub">Pay in Grains via USDC on Solana. No monthly fees, no lock-in. Top up when you need it — 1 USDC = 1,000 Grains.</p>
+    <div class="pricing-grid">
+
+      <div class="price-card">
+        <div class="price-name">Starter</div>
+        <div class="price-amount"><span>$</span>29</div>
+        <div class="price-grains">30,000 Grains</div>
+        <div class="price-unit">~1,500 messages or 200 audits</div>
+        <ul class="price-features">
+          <li>All AI models included</li>
+          <li>Agentic task execution</li>
+          <li>Code review &amp; generation</li>
+          <li>Multimodal vision</li>
+          <li>Community support</li>
+        </ul>
+        <a href="#waitlist" class="price-btn outline">Get Started</a>
+      </div>
+
+      <div class="price-card featured">
+        <div class="price-badge">Most Popular</div>
+        <div class="price-name">Builder</div>
+        <div class="price-amount"><span>$</span>79</div>
+        <div class="price-grains">95,000 Grains</div>
+        <div class="price-unit">20% bonus · ~4,750 messages</div>
+        <ul class="price-features">
+          <li>Everything in Starter</li>
+          <li>Smart contract auditing</li>
+          <li>Bug bounty workflows</li>
+          <li>Solana native tools</li>
+          <li>Priority support</li>
+        </ul>
+        <a href="#waitlist" class="price-btn solid">Join Waitlist</a>
+      </div>
+
+      <div class="price-card">
+        <div class="price-name">Pro Hunter</div>
+        <div class="price-amount"><span>$</span>199</div>
+        <div class="price-grains">270,000 Grains</div>
+        <div class="price-unit">35% bonus · ~13,500 messages</div>
+        <ul class="price-features">
+          <li>Everything in Builder</li>
+          <li>Zero-cloud offline mode</li>
+          <li>Unlimited file workspace</li>
+          <li>Webhook automation</li>
+          <li>Dedicated support</li>
+        </ul>
+        <a href="#waitlist" class="price-btn outline">Join Waitlist</a>
+      </div>
+
+      <div class="price-card" style="border-color:rgba(249,115,22,.35)">
+        <div class="price-name" style="color:var(--accent3)">Elite</div>
+        <div class="price-amount"><span>$</span>499</div>
+        <div class="price-grains" style="color:#fb923c">750,000 Grains</div>
+        <div class="price-unit">50% bonus · Bounty without limits</div>
+        <ul class="price-features">
+          <li>Everything in Pro Hunter</li>
+          <li>Max-context sessions</li>
+          <li>Auto-agent pipelines</li>
+          <li>Custom model routing</li>
+          <li>White-glove onboarding</li>
+        </ul>
+        <a href="#waitlist" class="price-btn outline" style="border-color:rgba(249,115,22,.4);color:var(--accent3)">Contact Us</a>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ─── Docs ──────────────────────────────────────────────────────────────── -->
+<div class="docs-bg" id="docs">
+  <div class="docs-inner">
+    <p class="section-label">Documentation</p>
+    <h2 class="section-title">Everything you need to know</h2>
+    <p class="section-sub">Architecture, the Grains system, API reference, and quick-start guides — all in one place.</p>
+
+    <!-- Tabs horizontais (sem sticky, sem overlap) -->
+    <div class="docs-tabs">
+      <div class="docs-tab active" onclick="showDoc('overview',this)">🏗 Architecture</div>
+      <div class="docs-tab" onclick="showDoc('grains',this)">💎 Grains System</div>
+      <div class="docs-tab" onclick="showDoc('api',this)">⚡ API Reference</div>
+      <div class="docs-tab" onclick="showDoc('quickstart',this)">🚀 Quick Start</div>
+    </div>
+
+      <!-- Panels -->
+
+        <!-- Architecture -->
+        <div class="docs-panel active" id="doc-overview">
+          <h3>Architecture Overview</h3>
+          <p>Luna Agent is a two-tier desktop application. The Electron frontend handles the UI and communicates with a local FastAPI backend that orchestrates AI models, manages the file workspace, and processes Solana payments.</p>
+
+          <div class="docs-block">
+            <div class="docs-block-title">System Diagram</div>
+            <div class="arch-diagram">
+              <div class="arch-col">
+                <div class="arch-box highlight">🌙 Electron (React)</div>
+                <div class="arch-box">Chat UI / Workspace</div>
+                <div class="arch-box">File Tree / Editor</div>
+                <div class="arch-box">Solana Pay QR</div>
+              </div>
+              <div class="arch-arrow">
+                ⟷
+                <span>IPC / HTTP</span>
+                <span>localhost:8000</span>
+              </div>
+              <div class="arch-col">
+                <div class="arch-box highlight2">⚙ FastAPI (Python)</div>
+                <div class="arch-box">Agent Loop / LTM</div>
+                <div class="arch-box">Multi-model Router</div>
+                <div class="arch-box">Payment Service</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Tech Stack</div>
+            <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+              <span class="info-chip">⚛ React + TypeScript</span>
+              <span class="info-chip">🔷 Electron</span>
+              <span class="info-chip">🐍 FastAPI (Python)</span>
+              <span class="info-chip">🤖 Claude API</span>
+              <span class="info-chip">🗄 Supabase (Postgres)</span>
+              <span class="info-chip">⛓ Solana Web3.js</span>
+              <span class="info-chip">🔐 Helius Webhooks</span>
+              <span class="info-chip" style="color:var(--accent2)">☁ Cloudflare Workers</span>
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Agent Loop</div>
+            <div class="code-block">
+<span class="ch"># Simplified agent execution flow</span>
+<span class="ck">while</span> task_not_complete:
+    thought  = llm.think(task, context, tools)
+    action   = llm.choose_tool(thought)
+    result   = tools.execute(action)
+    context  = memory.update(result)
+    done     = llm.reflect(context)   <span class="ch"># self-check</span>
+    <span class="ck">if</span> done:
+        <span class="ck">yield</span> final_answer(context)
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Repository</div>
+            <div style="display:flex;flex-direction:column;gap:.7rem">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
+                <div>
+                  <div style="font-size:.88rem;font-weight:600;margin-bottom:.2rem">luna-agent <span style="background:rgba(94,234,212,.1);color:var(--accent2);border:1px solid rgba(94,234,212,.2);border-radius:4px;padding:.05rem .45rem;font-size:.65rem;font-weight:700;letter-spacing:.5px;margin-left:.4rem">PUBLIC</span></div>
+                  <div style="font-size:.8rem;color:var(--muted)">Monorepo — Electron frontend + FastAPI backend — MIT License</div>
+                </div>
+                <a href="https://github.com/prestes16/luna-agent" target="_blank" rel="noopener noreferrer" style="color:var(--accent);font-size:.8rem;font-weight:600;text-decoration:none;white-space:nowrap;border:1px solid rgba(124,106,247,.3);padding:.3rem .8rem;border-radius:7px">⭐ Star →</a>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">
+                <div>
+                  <div style="font-size:.88rem;font-weight:600;margin-bottom:.2rem">Sponsor Luna</div>
+                  <div style="font-size:.8rem;color:var(--muted)">Support development via GitHub Sponsors, Gitcoin or Solana</div>
+                </div>
+                <a href="https://github.com/sponsors/prestes16" target="_blank" rel="noopener noreferrer" style="color:#ea4aaa;font-size:.8rem;font-weight:600;text-decoration:none;white-space:nowrap;border:1px solid rgba(234,74,170,.3);padding:.3rem .8rem;border-radius:7px">❤️ Sponsor →</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Grains System -->
+        <div class="docs-panel" id="doc-grains">
+          <h3>Grains Credit System</h3>
+          <p>Grains are Luna's internal AI credits. They are purchased with USDC on the Solana blockchain via Solana Pay — no credit cards, no subscriptions. Every AI operation deducts a small number of Grains proportional to its computational cost.</p>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Exchange Rate</div>
+            <table class="grains-table">
+              <thead><tr><th>Package</th><th>USD</th><th>Grains</th><th>Bonus</th><th>Rate</th></tr></thead>
+              <tbody>
+                <tr><td>Starter</td><td>$29</td><td>30,000</td><td>—</td><td>1,034 /USDC</td></tr>
+                <tr><td>Builder</td><td>$79</td><td>95,000</td><td>+20%</td><td>1,202 /USDC</td></tr>
+                <tr><td>Pro Hunter</td><td>$199</td><td>270,000</td><td>+35%</td><td>1,357 /USDC</td></tr>
+                <tr class="highlight-row"><td>Elite</td><td>$499</td><td>750,000</td><td>+50%</td><td>1,503 /USDC</td></tr>
+              </tbody>
+            </table>
+            <div style="margin-top:.8rem;font-size:.78rem;color:var(--muted)">Base rate: <strong style="color:var(--text)">1,000 Grains per USDC</strong> — volume bonuses applied automatically</div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Grain Cost per Operation</div>
+            <table class="grains-table">
+              <thead><tr><th>Operation</th><th>Approx. Cost</th><th>Notes</th></tr></thead>
+              <tbody>
+                <tr><td>Chat message (short)</td><td>~18 Grains</td><td>Claude Haiku</td></tr>
+                <tr><td>Chat message (long)</td><td>~35–80 Grains</td><td>Claude Sonnet</td></tr>
+                <tr><td>Smart contract audit</td><td>~150–500 Grains</td><td>Multi-pass analysis</td></tr>
+                <tr><td>Vision / screenshot</td><td>~40–120 Grains</td><td>Depends on image size</td></tr>
+                <tr><td>Agent task (complex)</td><td>~200–800 Grains</td><td>Multi-step execution</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Payment Flow</div>
+            <div class="qs-step">
+              <div class="qs-num">1</div>
+              <div class="qs-content"><h4>QR Code generated</h4><p>Luna creates a Solana Pay URL with a unique <code style="font-family:'JetBrains Mono',monospace;font-size:.82em;color:var(--accent2)">reference</code> UUID. QR expires in 15 minutes.</p></div>
+            </div>
+            <div class="qs-step">
+              <div class="qs-num">2</div>
+              <div class="qs-content"><h4>User sends USDC on Solana</h4><p>Scan with Phantom, Backpack, or any Solana Pay-compatible wallet. USDC mint: <code style="font-family:'JetBrains Mono',monospace;font-size:.82em;color:var(--accent2)">EPjFWdd5Auqq...</code></p></div>
+            </div>
+            <div class="qs-step">
+              <div class="qs-num">3</div>
+              <div class="qs-content"><h4>Helius webhook confirms</h4><p>The backend validates the tx signature, checks the reference memo, and atomically credits Grains to your account via a Postgres RPC.</p></div>
+            </div>
+            <div class="qs-step">
+              <div class="qs-num">4</div>
+              <div class="qs-content"><h4>Retry guarantee</h4><p>If a credit fails due to a network issue, the retry job re-runs every 60 seconds for up to 10 attempts — you will never lose Grains.</p></div>
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Security</div>
+            <div style="display:flex;flex-wrap:wrap;gap:.5rem">
+              <span class="info-chip">🔑 HMAC-SHA256 webhook auth</span>
+              <span class="info-chip">🛡 Anti-replay (UNIQUE tx_signature)</span>
+              <span class="info-chip">⚛ Atomic Postgres RPC</span>
+              <span class="info-chip">🔄 60s retry loop</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- API Reference -->
+        <div class="docs-panel" id="doc-api">
+          <h3>API Reference</h3>
+          <p>The FastAPI backend runs on <code style="font-family:'JetBrains Mono',monospace;font-size:.9em;color:var(--accent2)">http://localhost:8000</code> when Luna is running. All endpoints require a valid session token passed as <code style="font-family:'JetBrains Mono',monospace;font-size:.9em;color:var(--accent2)">Authorization: Bearer &lt;token&gt;</code>.</p>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Agent</div>
+            <div class="endpoint-list">
+              <div class="endpoint">
+                <span class="method post">POST</span>
+                <div>
+                  <div class="endpoint-path">/api/agent/chat</div>
+                  <div class="endpoint-desc">Send a message to Luna. Returns a streaming SSE response with agent thoughts and tool outputs.</div>
+                </div>
+              </div>
+              <div class="endpoint">
+                <span class="method post">POST</span>
+                <div>
+                  <div class="endpoint-path">/api/agent/stop</div>
+                  <div class="endpoint-desc">Abort the current agent task. Drains remaining streamed output.</div>
+                </div>
+              </div>
+              <div class="endpoint">
+                <span class="method get">GET</span>
+                <div>
+                  <div class="endpoint-path">/api/agent/history</div>
+                  <div class="endpoint-desc">Retrieve conversation history for the current session.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Payments</div>
+            <div class="endpoint-list">
+              <div class="endpoint">
+                <span class="method post">POST</span>
+                <div>
+                  <div class="endpoint-path">/api/payments/session</div>
+                  <div class="endpoint-desc">Create a Solana Pay payment session. Returns QR URL, reference UUID, and expiry timestamp.</div>
+                </div>
+              </div>
+              <div class="endpoint">
+                <span class="method get">GET</span>
+                <div>
+                  <div class="endpoint-path">/api/payments/status/{reference}</div>
+                  <div class="endpoint-desc">Poll payment status: <code style="font-family:'JetBrains Mono',monospace;font-size:.85em">pending | finalized | expired</code></div>
+                </div>
+              </div>
+              <div class="endpoint">
+                <span class="method get">GET</span>
+                <div>
+                  <div class="endpoint-path">/api/payments/balance</div>
+                  <div class="endpoint-desc">Returns the current Grains balance for the authenticated user.</div>
+                </div>
+              </div>
+              <div class="endpoint">
+                <span class="method post">POST</span>
+                <div>
+                  <div class="endpoint-path">/api/payments/webhook</div>
+                  <div class="endpoint-desc">Helius webhook receiver. Validates HMAC signature, processes USDC transfers, credits Grains.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Workspace</div>
+            <div class="endpoint-list">
+              <div class="endpoint">
+                <span class="method get">GET</span>
+                <div>
+                  <div class="endpoint-path">/api/workspace/tree</div>
+                  <div class="endpoint-desc">Returns the file tree of the current workspace directory.</div>
+                </div>
+              </div>
+              <div class="endpoint">
+                <span class="method get">GET</span>
+                <div>
+                  <div class="endpoint-path">/api/workspace/file</div>
+                  <div class="endpoint-desc">Read file contents. Query param: <code style="font-family:'JetBrains Mono',monospace;font-size:.85em">?path=relative/path</code></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Example — Create Payment Session</div>
+            <div class="code-block">
+<span class="ch">// POST /api/payments/session</span>
+<span class="cv">const</span> res = <span class="ck">await</span> fetch(<span class="cs">'/api/payments/session'</span>, {
+  method: <span class="cs">'POST'</span>,
+  headers: { <span class="cs">'Content-Type'</span>: <span class="cs">'application/json'</span> },
+  body: JSON.stringify({ usdc_amount: <span class="cn">29</span> })
+});
+
+<span class="cv">const</span> { reference, solana_pay_url, expires_at, grains } = <span class="ck">await</span> res.json();
+<span class="ch">// grains = 30000 (29 USDC × 1000 + volume bonus)</span>
+<span class="ch">// solana_pay_url → render as QR code</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Start -->
+        <div class="docs-panel" id="doc-quickstart">
+          <h3>Quick Start</h3>
+          <p>Get Luna running locally in under 5 minutes. You'll need Node.js 18+, Python 3.11+, and an Anthropic API key.</p>
+
+          <div class="docs-block">
+            <div class="docs-block-title">1 — Clone &amp; Install</div>
+            <div class="code-block">
+<span class="ch"># Clone the monorepo</span>
+git clone https://github.com/prestes16/luna-agent
+<span class="ck">cd</span> luna-agent
+
+<span class="ch"># Install Python dependencies</span>
+python -m venv venv &amp;&amp; venv\Scripts\activate
+pip install -r requirements.txt
+
+<span class="ch"># Install frontend dependencies</span>
+<span class="ck">cd</span> luna-desktop &amp;&amp; npm install
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">2 — Configure Environment</div>
+            <div class="code-block">
+<span class="ch"># Copy and edit .env</span>
+cp .env.example .env
+
+<span class="ch"># Required keys (at least one LLM)</span>
+ANTHROPIC_API_KEY=<span class="cs">sk-ant-...</span>
+OPENAI_API_KEY=<span class="cs">sk-...</span>
+
+<span class="ch"># Optional — Solana payments</span>
+LUNA_RECEIVER_WALLET=<span class="cs">HfcPmtJEMABW...</span>
+GRAINS_PER_USDC=<span class="cn">1000</span>
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">3 — Launch (Windows one-click)</div>
+            <div class="code-block">
+<span class="ch"># Double-click or run:</span>
+start-luna.bat
+<span class="ch"># Opens backend + Electron automatically</span>
+<span class="ch"># Backend: http://localhost:8000/docs</span>
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">4 — Manual start (Linux / macOS)</div>
+            <div class="code-block">
+<span class="ch"># Terminal 1 — backend</span>
+uvicorn app.main:app --reload --port 8000
+
+<span class="ch"># Terminal 2 — frontend</span>
+<span class="ck">cd</span> luna-desktop &amp;&amp; npm run dev
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">5 — Run Supabase Migrations</div>
+            <div class="code-block">
+<span class="ch"># In Supabase SQL Editor, run in order:</span>
+<span class="ch"># migrations/001_users.sql</span>
+<span class="ch"># migrations/002_payment_history.sql</span>
+<span class="ch"># migrations/003_pending_credits.sql</span>
+<span class="ch"># migrations/004_memory.sql</span>
+<span class="ch"># migrations/005_atomic_deduct_grains.sql  ← critical</span>
+            </div>
+            <div style="margin-top:.8rem">
+              <span class="info-chip warn-chip">⚠ Run 005 before accepting live payments</span>
+            </div>
+          </div>
+
+          <div class="docs-block">
+            <div class="docs-block-title">Need Help?</div>
+            <div style="font-size:.88rem;color:var(--muted2);line-height:1.7">
+              Open an issue on <a href="https://github.com/prestes16/luna-agent" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none">GitHub</a>, DM us on <a href="https://x.com/agent_luna16" target="_blank" rel="noopener noreferrer" style="color:var(--accent);text-decoration:none">@agent_luna16</a>, or email <a href="mailto:lunaagent@bagsshield.org" style="color:var(--accent);text-decoration:none">lunaagent@bagsshield.org</a>.
+            </div>
+          </div>
+        </div>
+
+    </div><!-- end docs panels wrapper -->
+  </div>
+</div>
+
+<!-- ─── Waitlist ──────────────────────────────────────────────────────────── -->
+<section class="waitlist-section" id="waitlist">
+  <div class="waitlist-glow"></div>
+  <h2>Be first to use Luna.</h2>
+  <p>Join the waitlist and get early access + 500 free Grains to start your first session.</p>
+  <div class="form-row">
+    <input type="email" class="email-input" id="waitlist-email" placeholder="your@email.com"/>
+    <button class="btn-primary" onclick="submitWaitlist()" style="white-space:nowrap">Join Waitlist →</button>
+  </div>
+  <div class="form-success" id="form-success">✅ You're on the list! We'll reach out soon.</div>
+  <div class="social-proof">
+    <div class="avatars">
+      <div class="av">D</div><div class="av">R</div><div class="av">M</div><div class="av">A</div>
+    </div>
+    <span>Join developers &amp; security researchers on the waitlist</span>
+  </div>
+</section>
+
+<!-- ─── Footer ───────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="footer-inner">
+    <a href="#" class="footer-logo">
+      <div style="width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0">🌙</div>
+      Luna<span style="color:var(--accent)">Agent</span>
+    </a>
+    <div class="footer-links">
+      <a href="https://x.com/agent_luna16" target="_blank" rel="noopener noreferrer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.744l7.737-8.835L1.254 2.25H8.08l4.253 5.622 5.91-5.622Zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        @agent_luna16
+      </a>
+      <a href="https://github.com/prestes16/luna-agent" target="_blank" rel="noopener noreferrer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/></svg>
+        GitHub
+      </a>
+      <a href="#docs">Docs</a>
+      <a href="mailto:lunaagent@bagsshield.org">Contact</a>
+      <a href="#" onclick="alert('Privacy Policy coming soon. Contact: lunaagent@bagsshield.org');return false;">Privacy</a>
+      <a href="#" onclick="alert('Terms of Service coming soon. Contact: lunaagent@bagsshield.org');return false;">Terms</a>
+    </div>
+    <span>© 2026 Luna Agent. Built with Claude AI.</span>
+  </div>
+</footer>
+
+<script>
+/* ── Terminal animation ── */
+const lines=[
+  {prompt:'user@luna:~$',text:' audit ./solana-amm-protocol',delay:0,type:'cmd'},
+  {prompt:'luna >',text:' Reading project structure...',delay:900,type:'luna'},
+  {prompt:'',text:' ✓ Found 3 Anchor programs · 12,847 lines of Rust',delay:1600,type:'ok'},
+  {prompt:'luna >',text:' Running vulnerability scanner...',delay:2400,type:'luna'},
+  {prompt:'',text:' ⚠  CRITICAL: Unchecked arithmetic in swap_tokens() line 247',delay:3400,type:'warn'},
+  {prompt:'',text:' ⚠  HIGH:     Missing signer check in update_config() line 89',delay:4000,type:'warn'},
+  {prompt:'',text:' ✓  Generating PoC and Immunefi-format report...',delay:4800,type:'ok'},
+  {prompt:'',text:' ✓  Report saved → audit_report.md  (Potential bounty: $50,000)',delay:6000,type:'ok'},
+  {prompt:'user@luna:~$',text:' ',delay:7000,type:'cursor'},
+];
+const colors={cmd:'#e8e8f8',luna:'#5eead4',ok:'#4ade80',warn:'#fbbf24',cursor:'#e8e8f8'};
+const term=document.getElementById('terminal');
+let idx=0;
+function renderLine(l){
+  const d=document.createElement('div');d.className='term-line';
+  if(l.prompt){const p=document.createElement('span');p.className='term-prompt'+(l.type==='luna'?' luna':'');p.textContent=l.prompt;d.appendChild(p)}
+  const t=document.createElement('span');t.className='term-text';t.style.color=colors[l.type]||'#e8e8f8';
+  if(l.type==='cursor'){t.textContent=' ';const c=document.createElement('span');c.className='cursor';t.appendChild(c)}
+  else{t.textContent=l.text}
+  d.appendChild(t);term.appendChild(d);term.scrollTop=term.scrollHeight;
+}
+function animate(){
+  if(idx>=lines.length)return;
+  const l=lines[idx];const prev=idx>0?lines[idx-1].delay:0;
+  setTimeout(()=>{renderLine(l);idx++;animate();},l.delay-prev);
+}
+setTimeout(animate,800);
+
+/* ── Demo tabs ── */
+function showTab(i){
+  document.querySelectorAll('.tab').forEach((t,j)=>t.classList.toggle('active',i===j));
+  document.querySelectorAll('[id^="demo-content-"]').forEach((c,j)=>c.classList.toggle('hidden',i!==j));
+  document.getElementById('tab-title').textContent=['audit_report.md','vuln_report.md','code_review.diff'][i];
+}
+
+/* ── Docs navigation ── */
+function showDoc(id, el){
+  document.querySelectorAll('.docs-panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.docs-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('doc-'+id).classList.add('active');
+  el.classList.add('active');
+}
+
+/* ── Waitlist ── */
+function submitWaitlist(){
+  const emailEl=document.getElementById('waitlist-email');
+  const e=emailEl.value.trim();
+  if(!e||!e.includes('@')){emailEl.style.borderColor='#f87171';return}
+  emailEl.style.borderColor='';
+  const mailto='mailto:lunaagent@bagsshield.org'
+    +'?subject='+encodeURIComponent('Luna Agent — Early Access Request')
+    +'&body='+encodeURIComponent('Hi, I want early access to Luna Agent.\n\nEmail: '+e+'\n\nThanks!');
+  window.open(mailto,'_blank');
+  document.getElementById('form-success').style.display='block';
+  emailEl.value='';
+}
+
+/* ── Active nav link highlight on scroll ── */
+const sections=['how-it-works','features','pricing','docs','waitlist'];
+const observer=new IntersectionObserver(entries=>{
+  entries.forEach(e=>{
+    if(e.isIntersecting){
+      document.querySelectorAll('.nav-links a').forEach(a=>{
+        a.classList.toggle('active',a.getAttribute('href')==='#'+e.target.id);
+      });
+    }
+  });
+},{threshold:.25,rootMargin:'-64px 0px 0px 0px'});
+sections.forEach(id=>{const el=document.getElementById(id);if(el)observer.observe(el);});
+</script>
+</body>
+</html>

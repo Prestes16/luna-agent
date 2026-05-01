@@ -1,0 +1,565 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Luna Pay-Flow — Recarregar Grains</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode/build/qrcode.min.js"></script>
+  <style>
+    :root {
+      --bg:       #0d0d14;
+      --surface:  #15151f;
+      --border:   #2a2a3d;
+      --accent:   #7c6af7;
+      --accent2:  #a78bfa;
+      --green:    #22c55e;
+      --orange:   #f97316;
+      --red:      #ef4444;
+      --blue:     #3b82f6;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --radius:   14px;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 16px;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 36px;
+    }
+
+    .header h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header p {
+      color: var(--muted);
+      margin-top: 6px;
+      font-size: 0.9rem;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      width: 100%;
+      max-width: 460px;
+      margin-bottom: 20px;
+    }
+
+    .card h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 18px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .input-group {
+      display: flex;
+      align-items: center;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+
+    .input-group span {
+      padding: 0 14px;
+      color: var(--muted);
+      font-weight: 600;
+      background: var(--bg);
+      border-right: 1px solid var(--border);
+    }
+
+    .input-group input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      padding: 12px 14px;
+      color: var(--text);
+      font-size: 1.1rem;
+      outline: none;
+    }
+
+    input[type=number]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+    .grains-preview {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: rgba(124,106,247,0.08);
+      border: 1px solid rgba(124,106,247,0.2);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 20px;
+      font-size: 0.9rem;
+    }
+
+    .grains-preview .label { color: var(--muted); }
+    .grains-preview .value { color: var(--accent2); font-weight: 700; font-size: 1rem; }
+
+    .quick-amounts {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    .quick-btn {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+
+    .quick-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent2);
+    }
+
+    button.primary {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent), #5b21b6);
+      border: none;
+      border-radius: 10px;
+      color: #fff;
+      padding: 13px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    button.primary:hover { opacity: 0.88; }
+    button.primary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── QR Section ─────────────────────────────────── */
+
+    #qr-section { display: none; }
+
+    .qr-wrapper {
+      display: flex;
+      justify-content: center;
+      margin: 16px 0;
+    }
+
+    canvas#qrCanvas {
+      border-radius: 10px;
+      padding: 12px;
+      background: #fff;
+    }
+
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 16px;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 0.95rem;
+      margin-bottom: 14px;
+    }
+
+    .status-badge.pending  { background: rgba(249,115,22,0.12); color: var(--orange); border: 1px solid rgba(249,115,22,0.3); }
+    .status-badge.confirming { background: rgba(59,130,246,0.12); color: var(--blue); border: 1px solid rgba(59,130,246,0.3); }
+    .status-badge.finalized { background: rgba(34,197,94,0.12); color: var(--green); border: 1px solid rgba(34,197,94,0.3); }
+    .status-badge.expired  { background: rgba(239,68,68,0.12); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+    .status-badge.error    { background: rgba(239,68,68,0.12); color: var(--red); border: 1px solid rgba(239,68,68,0.3); }
+
+    .pulse { animation: pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+    .dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+
+    .timer {
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.82rem;
+      margin-bottom: 12px;
+    }
+
+    .solana-url {
+      word-break: break-all;
+      font-size: 0.72rem;
+      color: var(--muted);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px;
+      margin-top: 10px;
+      cursor: pointer;
+      transition: border-color 0.2s;
+    }
+
+    .solana-url:hover { border-color: var(--accent); }
+
+    .copy-hint {
+      text-align: center;
+      font-size: 0.75rem;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    /* ── Success overlay ────────────────────────────── */
+
+    .success-grains {
+      text-align: center;
+      padding: 10px 0;
+    }
+
+    .success-grains .big {
+      font-size: 2.2rem;
+      font-weight: 800;
+      color: var(--green);
+    }
+
+    .success-grains .sub {
+      color: var(--muted);
+      font-size: 0.9rem;
+      margin-top: 4px;
+    }
+
+    button.secondary {
+      width: 100%;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 11px;
+      font-size: 0.9rem;
+      cursor: pointer;
+      margin-top: 12px;
+      transition: border-color 0.2s;
+    }
+
+    button.secondary:hover { border-color: var(--accent); }
+
+    /* ── Balance pill ───────────────────────────────── */
+
+    .balance-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 8px 18px;
+      font-size: 0.85rem;
+      margin-bottom: 28px;
+    }
+
+    .balance-pill .icon { font-size: 1rem; }
+    .balance-pill .val  { color: var(--accent2); font-weight: 700; }
+    .balance-pill .lbl  { color: var(--muted); }
+
+    /* ── Nav ────────────────────────────────────────── */
+
+    .nav-back {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 0.85rem;
+      text-decoration: none;
+      margin-bottom: 28px;
+      transition: color 0.2s;
+    }
+
+    .nav-back:hover { color: var(--text); }
+
+    @media (max-width: 480px) {
+      .card { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+
+  <a href="/" class="nav-back">&#8592; Voltar para Luna</a>
+
+  <div class="header">
+    <h1>&#127769; Luna Pay-Flow</h1>
+    <p>Compre Luna Grains com USDC via Solana</p>
+  </div>
+
+  <!-- Saldo atual -->
+  <div class="balance-pill" id="balance-pill">
+    <span class="icon">&#9889;</span>
+    <span class="lbl">Seu saldo:</span>
+    <span class="val" id="balance-val">--</span>
+    <span class="lbl">Grains</span>
+  </div>
+
+  <!-- Formulario de compra -->
+  <div class="card" id="buy-card">
+    <h2>Recarregar</h2>
+
+    <label>Valor em USDC</label>
+    <div class="input-group">
+      <span>$</span>
+      <input type="number" id="usdc-input" placeholder="5.00" min="1" step="0.5" value="5" />
+    </div>
+
+    <div class="quick-amounts">
+      <button class="quick-btn" onclick="setAmount(1)">$1</button>
+      <button class="quick-btn" onclick="setAmount(5)">$5</button>
+      <button class="quick-btn" onclick="setAmount(10)">$10</button>
+      <button class="quick-btn" onclick="setAmount(25)">$25</button>
+      <button class="quick-btn" onclick="setAmount(50)">$50</button>
+    </div>
+
+    <div class="grains-preview">
+      <span class="label">&#9889; Voce recebera:</span>
+      <span class="value" id="grains-preview">5.000 Grains</span>
+    </div>
+
+    <label>ID de usuario (session_id)</label>
+    <div class="input-group" style="margin-bottom:20px">
+      <input type="text" id="user-id-input" placeholder="Seu session_id ou email" style="padding:12px 14px" />
+    </div>
+
+    <button class="primary" id="gen-btn" onclick="generateQR()">Gerar QR Code</button>
+  </div>
+
+  <!-- Secao QR / Status -->
+  <div class="card" id="qr-section">
+    <h2>Pagamento</h2>
+
+    <div id="status-badge" class="status-badge pending pulse">
+      <div class="dot"></div>
+      <span id="status-text">Aguardando Pagamento...</span>
+    </div>
+
+    <div class="timer" id="timer-text"></div>
+
+    <div class="qr-wrapper">
+      <canvas id="qrCanvas"></canvas>
+    </div>
+
+    <div id="success-info" style="display:none">
+      <div class="success-grains">
+        <div class="big" id="credited-grains">+0</div>
+        <div class="sub">Grains adicionados com sucesso!</div>
+      </div>
+    </div>
+
+    <div class="solana-url" id="solana-url-box" onclick="copyURL()" title="Clique para copiar">
+      <span id="solana-url-text"></span>
+    </div>
+    <div class="copy-hint">Clique no link para copiar — ou abra direto no Phantom</div>
+
+    <button class="secondary" onclick="resetFlow()">&#8592; Nova Recarga</button>
+  </div>
+
+  <script>
+    const GRAINS_PER_USDC = 1000;
+    let currentReference = null;
+    let pollingInterval  = null;
+    let expiresAt        = null;
+    let timerInterval    = null;
+
+    // ── Helpers ────────────────────────────────────────
+    const userId = () => document.getElementById('user-id-input').value.trim() || 'guest-' + Date.now();
+
+    function setAmount(v) {
+      document.getElementById('usdc-input').value = v;
+      updatePreview();
+    }
+
+    function updatePreview() {
+      const usdc   = parseFloat(document.getElementById('usdc-input').value) || 0;
+      const grains = (usdc * GRAINS_PER_USDC).toLocaleString('pt-BR');
+      document.getElementById('grains-preview').textContent = grains + ' Grains';
+    }
+
+    document.getElementById('usdc-input').addEventListener('input', updatePreview);
+    updatePreview();
+
+    // ── Carregar saldo ──────────────────────────────────
+    async function loadBalance() {
+      const uid = document.getElementById('user-id-input').value.trim();
+      if (!uid) return;
+      try {
+        const r = await fetch(`/payment/balance/${encodeURIComponent(uid)}`);
+        const d = await r.json();
+        if (d.success) {
+          document.getElementById('balance-val').textContent =
+            parseFloat(d.response.balance_grains).toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+        }
+      } catch {}
+    }
+
+    document.getElementById('user-id-input').addEventListener('blur', loadBalance);
+
+    // ── Gerar QR ────────────────────────────────────────
+    async function generateQR() {
+      const usdc = parseFloat(document.getElementById('usdc-input').value);
+      const uid  = userId();
+
+      if (!usdc || usdc <= 0) { alert('Informe um valor valido em USDC'); return; }
+
+      document.getElementById('gen-btn').disabled = true;
+      document.getElementById('gen-btn').textContent = 'Gerando...';
+
+      try {
+        const resp = await fetch('/payment/create', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ user_id: uid, usdc_amount: usdc }),
+        });
+
+        const data = await resp.json();
+        if (!data.success) throw new Error(data.detail || 'Erro ao criar sessao');
+
+        const { reference, solana_pay_url, expires_at } = data.response;
+        currentReference = reference;
+        expiresAt        = new Date(expires_at);
+
+        // Renderiza QR
+        QRCode.toCanvas(document.getElementById('qrCanvas'), solana_pay_url, {
+          width: 240, margin: 1, color: { dark: '#000', light: '#fff' },
+        });
+
+        document.getElementById('solana-url-text').textContent = solana_pay_url;
+        document.getElementById('buy-card').style.display   = 'none';
+        document.getElementById('qr-section').style.display = 'block';
+
+        startTimer();
+        startPolling();
+
+      } catch (err) {
+        alert('Erro: ' + err.message);
+        document.getElementById('gen-btn').disabled   = false;
+        document.getElementById('gen-btn').textContent = 'Gerar QR Code';
+      }
+    }
+
+    // ── Timer ───────────────────────────────────────────
+    function startTimer() {
+      clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        const remaining = Math.max(0, Math.round((expiresAt - Date.now()) / 1000));
+        const m = Math.floor(remaining / 60);
+        const s = remaining % 60;
+        document.getElementById('timer-text').textContent =
+          `Expira em ${m}:${String(s).padStart(2,'0')}`;
+        if (remaining === 0) clearInterval(timerInterval);
+      }, 1000);
+    }
+
+    // ── Polling de status ───────────────────────────────
+    function startPolling() {
+      clearInterval(pollingInterval);
+      pollingInterval = setInterval(checkStatus, 3000);
+    }
+
+    async function checkStatus() {
+      if (!currentReference) return;
+      try {
+        const r = await fetch(`/payment/status/${currentReference}`);
+        const d = await r.json();
+        if (!d.success) return;
+
+        const { status, grains_credited } = d.response;
+        setStatus(status, grains_credited);
+
+        if (status === 'finalized') {
+          clearInterval(pollingInterval);
+          clearInterval(timerInterval);
+          loadBalance();
+        }
+
+        if (status === 'expired' || status === 'pending_approval') {
+          clearInterval(pollingInterval);
+          clearInterval(timerInterval);
+        }
+
+      } catch {}
+    }
+
+    function setStatus(status, grains) {
+      const badge = document.getElementById('status-badge');
+      const text  = document.getElementById('status-text');
+      const info  = document.getElementById('success-info');
+
+      badge.className = 'status-badge';
+
+      const map = {
+        pending:          { cls: 'pending pulse',   txt: 'Aguardando Pagamento...' },
+        confirming:       { cls: 'confirming',       txt: 'Confirmando na Rede Solana...' },
+        finalized:        { cls: 'finalized',        txt: 'Creditos Adicionados com Sucesso!' },
+        pending_approval: { cls: 'expired',          txt: 'Tempo Esgotado — Aprovacao Manual Necessaria' },
+        expired:          { cls: 'expired',          txt: 'Sessao Expirada' },
+      };
+
+      const cfg = map[status] || { cls: 'error', txt: 'Status desconhecido' };
+      badge.classList.add(...cfg.cls.split(' '));
+      text.textContent = cfg.txt;
+
+      if (status === 'finalized' && grains) {
+        info.style.display = 'block';
+        document.getElementById('credited-grains').textContent =
+          '+' + parseFloat(grains).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
+      }
+    }
+
+    // ── Copiar URL ──────────────────────────────────────
+    function copyURL() {
+      const url = document.getElementById('solana-url-text').textContent;
+      navigator.clipboard.writeText(url).then(() => {
+        const box = document.getElementById('solana-url-box');
+        box.style.borderColor = 'var(--green)';
+        setTimeout(() => box.style.borderColor = '', 1500);
+      });
+    }
+
+    // ── Reset ───────────────────────────────────────────
+    function resetFlow() {
+      clearInterval(pollingInterval);
+      clearInterval(timerInterval);
+      currentReference = null;
+      document.getElementById('qr-section').style.display = 'none';
+      document.getElementById('buy-card').style.display   = 'block';
+      document.getElementById('gen-btn').disabled         = false;
+      document.getElementById('gen-btn').textContent      = 'Gerar QR Code';
+      document.getElementById('success-info').style.display = 'none';
+      document.getElementById('timer-text').textContent   = '';
+    }
+  </script>
+</body>
+</html>

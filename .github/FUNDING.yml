@@ -1,0 +1,8 @@
+# Luna Agent — Funding configuration
+# GitHub will display a "Sponsor" button linking to these
+
+github: [prestes16]
+open_collective: luna-agent
+custom:
+  - https://gitcoin.co
+  - https://lunaagent.dev/#pricing

@@ -1,0 +1,1531 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Luna — Recarregar Créditos</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&display=swap');
+
+/* ══════════════════════════════════════
+   RESET & TOKENS
+══════════════════════════════════════ */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:       #06080f;
+  --bg1:      #080c18;
+  --bg2:      #0c1120;
+  --surface:  rgba(15,19,35,0.95);
+  --surface2: rgba(20,25,45,0.8);
+  --border:   rgba(0,212,255,0.1);
+  --border2:  rgba(255,255,255,0.06);
+  --cyan:     #00d4ff;
+  --cyan-dim: rgba(0,212,255,0.15);
+  --purple:   #7c3aed;
+  --green:    #10b981;
+  --amber:    #f59e0b;
+  --red:      #ef4444;
+  --muted:    #475569;
+  --muted2:   #64748b;
+  --text:     #c8d4e3;
+  --text2:    #8899b0;
+  --white:    #f0f6ff;
+  --phantom:  #ab9ff2;
+  --font:     'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --mono:     'Space Mono', 'Fira Code', monospace;
+}
+
+html { scroll-behavior: smooth; }
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0 16px 80px;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Animated background */
+body::before {
+  content: '';
+  position: fixed; top: 0; left: 0; right: 0; height: 100vh;
+  background:
+    radial-gradient(ellipse 800px 400px at 50% -100px, rgba(0,212,255,0.07) 0%, transparent 70%),
+    radial-gradient(ellipse 600px 600px at 80% 80%, rgba(124,58,237,0.04) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+.page { position: relative; z-index: 1; width: 100%; max-width: 580px; }
+
+/* ══════════════════════════════════════
+   HEADER
+══════════════════════════════════════ */
+.header {
+  display: flex; flex-direction: column; align-items: center;
+  padding: 44px 0 28px; text-align: center; gap: 12px;
+}
+.logo-wrap {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+}
+.logo-ring {
+  width: 72px; height: 72px;
+  background: linear-gradient(135deg, var(--cyan), var(--purple));
+  border-radius: 22px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 32px;
+  box-shadow: 0 0 0 1px rgba(0,212,255,0.2), 0 0 40px rgba(0,212,255,0.2), 0 12px 32px rgba(0,0,0,0.5);
+}
+.brand { text-align: center; }
+.brand-name {
+  font-size: 30px; font-weight: 900; letter-spacing: 5px;
+  background: linear-gradient(90deg, #00d4ff, #7c3aed, #00d4ff);
+  background-size: 200%;
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  animation: shimmer 4s linear infinite;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+.brand-sub {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 3px;
+  color: var(--muted2); text-transform: uppercase; margin-top: 4px;
+}
+.badges {
+  display: flex; gap: 8px; flex-wrap: wrap; justify-content: center;
+  margin-top: 8px;
+}
+.badge {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 100px; font-size: 10px; font-weight: 600;
+  border: 1px solid; letter-spacing: 0.3px;
+}
+.badge-sol  { color: #9945FF; border-color: rgba(153,69,255,0.25); background: rgba(153,69,255,0.06); }
+.badge-usdc { color: #2775CA; border-color: rgba(39,117,202,0.25);  background: rgba(39,117,202,0.06); }
+.badge-helius { color: var(--green); border-color: rgba(16,185,129,0.25); background: rgba(16,185,129,0.06); }
+
+/* ══════════════════════════════════════
+   STEPS INDICATOR
+══════════════════════════════════════ */
+.steps-bar {
+  display: flex; align-items: center; justify-content: center;
+  gap: 0; margin-bottom: 28px;
+}
+.step {
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--muted); transition: color .3s; min-width: 72px;
+}
+.step.active { color: var(--cyan); }
+.step.done   { color: var(--green); }
+.step-dot {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700;
+  border: 2px solid var(--muted); background: var(--bg);
+  transition: all .3s;
+}
+.step.active .step-dot { border-color: var(--cyan); color: var(--cyan); box-shadow: 0 0 12px rgba(0,212,255,0.3); }
+.step.done   .step-dot { border-color: var(--green); background: var(--green); color: var(--bg); }
+.step-line   { width: 36px; height: 1px; background: var(--border2); margin-bottom: 20px; }
+
+/* ══════════════════════════════════════
+   CARD
+══════════════════════════════════════ */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 20px; padding: 22px; margin-bottom: 14px;
+  backdrop-filter: blur(20px);
+  position: relative; overflow: hidden;
+}
+.card::before {
+  content: ''; position: absolute; top: 0; left: 15%; right: 15%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,212,255,0.3), transparent);
+}
+.card-label {
+  font-family: var(--mono); font-size: 9px; letter-spacing: 2.5px;
+  text-transform: uppercase; color: var(--muted2); margin-bottom: 16px;
+  display: flex; align-items: center; gap: 8px;
+}
+.card-label::after { content: ''; flex: 1; height: 1px; background: var(--border2); }
+
+/* ══════════════════════════════════════
+   PLANS GRID
+══════════════════════════════════════ */
+.plans { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.plan {
+  position: relative; cursor: pointer;
+  background: rgba(0,0,0,0.2);
+  border: 1px solid var(--border2);
+  border-radius: 14px; padding: 16px 14px;
+  transition: all .2s; overflow: hidden;
+}
+.plan:hover { border-color: rgba(0,212,255,0.2); transform: translateY(-2px); background: rgba(0,212,255,0.03); }
+.plan.selected {
+  border-color: var(--cyan);
+  background: rgba(0,212,255,0.06);
+  box-shadow: 0 0 0 1px rgba(0,212,255,0.15), 0 0 24px rgba(0,212,255,0.08);
+}
+.plan-pop {
+  position: absolute; top: -1px; right: 10px;
+  background: linear-gradient(90deg, var(--cyan), var(--purple));
+  font-size: 7px; font-weight: 800; letter-spacing: 1.5px;
+  padding: 3px 8px; border-radius: 0 0 8px 8px; color: #fff;
+}
+.plan-chk {
+  position: absolute; top: 10px; right: 10px;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: var(--cyan); color: var(--bg);
+  font-size: 10px; font-weight: 700;
+  display: none; align-items: center; justify-content: center;
+}
+.plan.selected .plan-chk { display: flex; }
+.plan-name { font-family: var(--mono); font-size: 9px; letter-spacing: 2px; color: var(--cyan); margin-bottom: 8px; text-transform: uppercase; }
+.plan-price { font-size: 30px; font-weight: 800; color: var(--white); line-height: 1; }
+.plan-price sup { font-size: 14px; font-weight: 500; color: var(--muted2); vertical-align: super; line-height: 0; }
+.plan-grains { font-size: 13px; font-weight: 700; color: var(--cyan); margin-top: 6px; }
+.plan-desc   { font-size: 10px; color: var(--muted2); margin-top: 3px; }
+
+/* ══════════════════════════════════════
+   INPUT
+══════════════════════════════════════ */
+.input-wrap { position: relative; }
+.input-ico { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); font-size: 14px; }
+input[type=text] {
+  width: 100%; font-family: var(--mono); font-size: 13px;
+  background: rgba(0,0,0,0.35); border: 1px solid var(--border2); border-radius: 10px;
+  padding: 12px 14px 12px 38px; color: var(--white); outline: none;
+  transition: border-color .2s, box-shadow .2s;
+}
+input[type=text]:focus { border-color: rgba(0,212,255,0.35); box-shadow: 0 0 0 3px rgba(0,212,255,0.07); }
+.hint { font-size: 10px; color: var(--muted2); margin-top: 7px; padding-left: 2px; }
+
+/* ══════════════════════════════════════
+   PAYMENT METHOD TABS
+══════════════════════════════════════ */
+.tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.tab {
+  flex: 1; padding: 11px 10px; border-radius: 12px; cursor: pointer;
+  border: 1px solid var(--border2); background: rgba(0,0,0,0.2);
+  transition: all .2s; text-align: center;
+  font-size: 12px; font-weight: 600; color: var(--muted2);
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.tab .tab-icon { font-size: 18px; }
+.tab:hover { border-color: rgba(255,255,255,0.12); color: var(--text); }
+.tab.active {
+  border-color: var(--cyan); background: rgba(0,212,255,0.06);
+  color: var(--white); box-shadow: 0 0 16px rgba(0,212,255,0.08);
+}
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* ══════════════════════════════════════
+   PHANTOM CONNECT
+══════════════════════════════════════ */
+.phantom-card {
+  background: linear-gradient(135deg, rgba(171,159,242,0.06) 0%, rgba(124,58,237,0.04) 100%);
+  border: 1px solid rgba(171,159,242,0.15);
+  border-radius: 16px; padding: 24px; text-align: center;
+}
+.phantom-logo { font-size: 48px; margin-bottom: 12px; }
+.phantom-title { font-size: 16px; font-weight: 700; color: var(--white); margin-bottom: 6px; }
+.phantom-sub { font-size: 12px; color: var(--muted2); margin-bottom: 20px; line-height: 1.6; }
+.wallet-chip {
+  display: inline-flex; align-items: center; gap: 8px;
+  background: rgba(171,159,242,0.1); border: 1px solid rgba(171,159,242,0.2);
+  border-radius: 100px; padding: 6px 14px; margin-bottom: 16px;
+}
+.wallet-chip .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); animation: pulse 1.5s infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+.wallet-chip .addr { font-family: var(--mono); font-size: 11px; color: var(--phantom); }
+
+/* ══════════════════════════════════════
+   BUTTONS
+══════════════════════════════════════ */
+.btn {
+  width: 100%; padding: 15px 20px; border: none; border-radius: 12px;
+  cursor: pointer; font-family: var(--font); font-size: 14px; font-weight: 700;
+  transition: all .2s; display: flex; align-items: center; justify-content: center; gap: 8px;
+  letter-spacing: 0.3px;
+}
+.btn-cyan {
+  background: linear-gradient(135deg, var(--cyan), #0099cc);
+  color: #fff; box-shadow: 0 4px 20px rgba(0,212,255,0.25);
+}
+.btn-cyan:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,212,255,0.4); }
+.btn-purple {
+  background: linear-gradient(135deg, #ab9ff2, var(--purple));
+  color: #fff; box-shadow: 0 4px 20px rgba(124,58,237,0.3);
+}
+.btn-purple:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(124,58,237,0.45); }
+.btn-grad {
+  background: linear-gradient(135deg, var(--cyan), var(--purple));
+  color: #fff; box-shadow: 0 4px 20px rgba(0,212,255,0.2);
+}
+.btn-grad:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,212,255,0.3); }
+.btn-ghost {
+  background: transparent; color: var(--muted2); border: 1px solid var(--border2);
+}
+.btn-ghost:hover { color: var(--text); border-color: rgba(255,255,255,0.12); }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+.btn-sm { padding: 10px 16px; font-size: 12px; border-radius: 9px; width: auto; }
+.btn-mt { margin-top: 10px; }
+
+/* ══════════════════════════════════════
+   QR SECTION
+══════════════════════════════════════ */
+.monitor-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(16,185,129,0.08); border: 1px solid rgba(16,185,129,0.2);
+  border-radius: 100px; padding: 4px 12px; font-size: 10px; font-weight: 600; color: var(--green);
+}
+.live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: pulse 1.5s infinite; }
+
+/* Ring countdown */
+.ring-wrap { position: relative; width: 88px; height: 88px; margin: 0 auto 6px; }
+.ring-svg   { width: 88px; height: 88px; transform: rotate(-90deg); }
+.ring-bg    { fill: none; stroke: rgba(255,255,255,0.05); stroke-width: 5; }
+.ring-fg    { fill: none; stroke: var(--amber); stroke-width: 5; stroke-linecap: round; stroke-dasharray: 239; stroke-dashoffset: 0; transition: stroke-dashoffset 1s linear, stroke .5s; }
+.ring-time  { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--amber); }
+.ring-label { text-align: center; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted2); margin-top: 4px; }
+
+/* QR frame */
+.qr-frame {
+  background: #fff; border-radius: 18px; padding: 16px;
+  box-shadow: 0 0 0 1px rgba(0,212,255,0.2), 0 0 40px rgba(0,212,255,0.12), 0 16px 40px rgba(0,0,0,0.4);
+  display: inline-flex; flex-direction: column; align-items: center;
+  position: relative;
+}
+#qr-canvas, #qr-img { border-radius: 10px; display: block; }
+.qr-loading {
+  width: 220px; height: 220px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px; color: var(--muted2); font-size: 12px;
+}
+.spinner {
+  width: 36px; height: 36px;
+  border: 3px solid rgba(0,212,255,0.15); border-top-color: var(--cyan);
+  border-radius: 50%; animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Details row */
+.dets { background: rgba(0,0,0,0.2); border: 1px solid var(--border2); border-radius: 12px; padding: 4px 12px; }
+.det {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 9px 0; border-bottom: 1px solid var(--border2); font-size: 12px;
+}
+.det:last-child { border-bottom: none; }
+.dl { color: var(--text2); }
+.dv { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--white); }
+
+/* Wallet copy */
+.w-copy-wrap {
+  display: flex; gap: 8px; align-items: stretch;
+}
+.w-copy-addr {
+  flex: 1; font-family: var(--mono); font-size: 10px; color: var(--cyan);
+  background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 10px;
+  padding: 10px 12px; word-break: break-all; cursor: pointer; transition: border-color .2s;
+}
+.w-copy-addr:hover { border-color: rgba(0,212,255,0.3); }
+.copy-tag {
+  flex-shrink: 0; background: var(--cyan-dim); border: 1px solid rgba(0,212,255,0.2);
+  border-radius: 10px; padding: 0 14px; font-size: 11px; font-weight: 700;
+  color: var(--cyan); cursor: pointer; transition: all .2s; white-space: nowrap;
+  display: flex; align-items: center;
+}
+.copy-tag:hover { background: rgba(0,212,255,0.2); }
+.copy-tag.ok   { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.25); color: var(--green); }
+
+/* Warning */
+.warn {
+  background: rgba(245,158,11,0.05); border: 1px solid rgba(245,158,11,0.15);
+  border-radius: 10px; padding: 12px 14px; font-size: 11px; color: var(--amber); line-height: 1.65;
+}
+
+/* ══════════════════════════════════════
+   STATUS ALERTS
+══════════════════════════════════════ */
+#status-msg { padding: 12px 16px; border-radius: 10px; font-size: 12px; line-height: 1.6; margin-top: 12px; display: none; }
+.s-info    { background: rgba(0,212,255,0.06); border: 1px solid rgba(0,212,255,0.18); color: var(--cyan); }
+.s-error   { background: rgba(239,68,68,0.07);  border: 1px solid rgba(239,68,68,0.22);  color: #fca5a5; }
+.s-success { background: rgba(16,185,129,0.07); border: 1px solid rgba(16,185,129,0.22); color: #6ee7b7; }
+.s-warn    { background: rgba(245,158,11,0.07); border: 1px solid rgba(245,158,11,0.22); color: #fcd34d; }
+
+/* ══════════════════════════════════════
+   SUCCESS SCREEN
+══════════════════════════════════════ */
+#success-section { display: none; }
+.success-inner { text-align: center; padding: 12px; }
+.suc-anim  { font-size: 68px; animation: pop .5s cubic-bezier(.34,1.56,.64,1) both; }
+@keyframes pop { from{transform:scale(0);opacity:0} to{transform:scale(1);opacity:1} }
+.suc-title { font-size: 26px; font-weight: 800; color: var(--green); margin: 16px 0 8px; }
+.suc-sub   { font-size: 13px; color: var(--text2); line-height: 1.7; margin-bottom: 24px; }
+.suc-tx    { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 20px; text-align: left; }
+.suc-tx-label { font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--muted2); margin-bottom: 8px; }
+.suc-tx-link  { font-family: var(--mono); font-size: 11px; color: var(--cyan); text-decoration: none; word-break: break-all; line-height: 1.6; }
+.suc-tx-link:hover { text-decoration: underline; }
+
+/* ══════════════════════════════════════
+   COST TABLE
+══════════════════════════════════════ */
+.cost-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid var(--border2); font-size: 12px; }
+.cost-row:last-child { border-bottom: none; }
+.cost-l { color: var(--text2); }
+.cost-v { font-family: var(--mono); font-size: 11px; font-weight: 600; color: var(--white); }
+
+/* ══════════════════════════════════════
+   FOOTER
+══════════════════════════════════════ */
+.footer {
+  margin-top: 40px; padding: 24px 0; border-top: 1px solid var(--border2);
+  text-align: center; font-size: 11px; color: var(--muted); line-height: 1.9;
+}
+.footer a { color: var(--cyan); text-decoration: none; }
+.footer a:hover { text-decoration: underline; }
+
+/* ══════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════ */
+@media(max-width:400px){
+  .plans { grid-template-columns: 1fr; }
+  .plan-price { font-size: 24px; }
+  .brand-name { font-size: 24px; }
+}
+
+/* ══════════════════════════════════════
+   DESIGN ENHANCEMENTS — REALCE
+══════════════════════════════════════ */
+
+/* Logo glow pulsante */
+.logo-ring {
+  animation: logo-pulse 3s ease-in-out infinite;
+}
+@keyframes logo-pulse {
+  0%,100% { box-shadow: 0 0 0 1px rgba(0,212,255,0.2), 0 0 40px rgba(0,212,255,0.2), 0 12px 32px rgba(0,0,0,0.5); }
+  50%      { box-shadow: 0 0 0 1px rgba(0,212,255,0.4), 0 0 60px rgba(0,212,255,0.35), 0 0 80px rgba(124,58,237,0.2), 0 12px 32px rgba(0,0,0,0.5); }
+}
+
+/* Step ativo com glow */
+.step.active .step-dot {
+  box-shadow: 0 0 0 4px rgba(0,212,255,0.12), 0 0 16px rgba(0,212,255,0.4) !important;
+}
+
+/* Plan cards — glow no selected */
+.plan.selected {
+  box-shadow: 0 0 0 1px rgba(0,212,255,0.3), 0 0 30px rgba(0,212,255,0.12), inset 0 1px 0 rgba(0,212,255,0.1) !important;
+}
+
+/* Phantom card — gradiente mais profundo */
+.phantom-card {
+  background: linear-gradient(160deg, rgba(171,159,242,0.08) 0%, rgba(124,58,237,0.05) 50%, rgba(0,0,0,0.1) 100%) !important;
+  border: 1px solid rgba(171,159,242,0.2) !important;
+  position: relative; overflow: hidden;
+}
+.phantom-card::before {
+  content: ''; position: absolute; top: 0; left: 10%; right: 10%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(171,159,242,0.5), transparent);
+}
+
+/* Botão Phantom — glow animado */
+.btn-purple {
+  position: relative; overflow: hidden;
+}
+.btn-purple::after {
+  content: ''; position: absolute; inset: 0;
+  background: linear-gradient(105deg, transparent 40%, rgba(255,255,255,0.12) 50%, transparent 60%);
+  transform: translateX(-100%);
+  animation: btn-shine 3s ease-in-out infinite;
+}
+@keyframes btn-shine { 60%,100%{transform:translateX(200%)} }
+
+/* Wallet chip — realçado */
+.wallet-chip {
+  background: linear-gradient(135deg, rgba(171,159,242,0.15), rgba(124,58,237,0.1)) !important;
+  border: 1px solid rgba(171,159,242,0.35) !important;
+  box-shadow: 0 0 20px rgba(171,159,242,0.1), inset 0 1px 0 rgba(255,255,255,0.05);
+  padding: 8px 16px !important;
+}
+.wallet-chip .dot {
+  box-shadow: 0 0 8px var(--green);
+}
+.wallet-chip .addr {
+  font-size: 12px !important; font-weight: 600 !important;
+  color: #c8c0ff !important;
+}
+
+/* Monitor pill — mais visível */
+.monitor-pill {
+  background: rgba(16,185,129,0.1) !important;
+  border: 1px solid rgba(16,185,129,0.3) !important;
+  box-shadow: 0 0 12px rgba(16,185,129,0.08);
+  font-size: 11px !important;
+}
+
+/* Plan summary pill — mais highlight */
+#plan-pill {
+  background: linear-gradient(135deg, rgba(0,212,255,0.12), rgba(124,58,237,0.08)) !important;
+  border: 1px solid rgba(0,212,255,0.25) !important;
+  box-shadow: 0 0 20px rgba(0,212,255,0.08);
+  font-weight: 700 !important; font-size: 13px !important;
+  color: #a0f0ff !important;
+}
+
+/* Tabs — aba ativa com glow */
+.tab.active {
+  box-shadow: 0 0 0 1px rgba(0,212,255,0.2), 0 0 20px rgba(0,212,255,0.1) !important;
+}
+
+/* QR frame — glow animado mais vivo */
+.qr-frame {
+  box-shadow: 0 0 0 1px rgba(0,212,255,0.3), 0 0 50px rgba(0,212,255,0.18), 0 0 80px rgba(124,58,237,0.1), 0 16px 40px rgba(0,0,0,0.4) !important;
+  animation: qr-glow 3s ease-in-out infinite;
+}
+@keyframes qr-glow {
+  0%,100% { box-shadow: 0 0 0 1px rgba(0,212,255,0.25), 0 0 40px rgba(0,212,255,0.15), 0 16px 40px rgba(0,0,0,0.4); }
+  50%      { box-shadow: 0 0 0 1px rgba(0,212,255,0.4),  0 0 60px rgba(0,212,255,0.25), 0 0 80px rgba(124,58,237,0.12), 0 16px 40px rgba(0,0,0,0.4); }
+}
+
+/* Card border top — mais visível */
+.card::before {
+  background: linear-gradient(90deg, transparent, rgba(0,212,255,0.5), rgba(124,58,237,0.3), transparent) !important;
+}
+
+/* Success anim — glow verde */
+.suc-title {
+  text-shadow: 0 0 30px rgba(16,185,129,0.5);
+}
+
+/* Countdown ring — glow âmbar */
+.ring-wrap::after {
+  content:'';position:absolute;inset:-8px;border-radius:50%;
+  background:radial-gradient(ellipse, rgba(245,158,11,0.08) 0%, transparent 70%);
+  pointer-events:none;
+}
+
+/* Botão CTA principal — gradiente mais rico */
+.btn-grad {
+  background: linear-gradient(135deg, #00c8f0, #0099cc, #5b21b6, #7c3aed) !important;
+  background-size: 200% !important;
+  animation: btn-grad-shift 4s ease infinite !important;
+  box-shadow: 0 4px 24px rgba(0,212,255,0.25), 0 2px 8px rgba(0,0,0,0.3) !important;
+}
+@keyframes btn-grad-shift { 0%,100%{background-position:0% 50%} 50%{background-position:100% 50%} }
+.btn-grad:hover:not(:disabled) {
+  box-shadow: 0 8px 36px rgba(0,212,255,0.4), 0 4px 16px rgba(124,58,237,0.3) !important;
+}
+
+/* Background extra depth */
+body::after {
+  content: '';
+  position: fixed; bottom: 0; left: 0; right: 0; height: 40vh;
+  background: radial-gradient(ellipse 100% 100% at 50% 120%, rgba(124,58,237,0.06) 0%, transparent 70%);
+  pointer-events: none; z-index: 0;
+}
+
+/* ══ TOAST SYSTEM ══ */
+#toast-container{position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column-reverse;gap:8px;max-width:340px;pointer-events:none}
+.toast{
+  display:flex;align-items:flex-start;gap:10px;
+  background:rgba(15,20,35,0.97);
+  border:1px solid var(--border2);
+  border-radius:12px;padding:12px 14px;
+  font-size:12px;line-height:1.5;color:var(--text);
+  box-shadow:0 8px 32px rgba(0,0,0,0.5),0 0 0 1px rgba(255,255,255,0.04);
+  backdrop-filter:blur(20px);
+  pointer-events:all;
+  animation:toast-in .3s cubic-bezier(.34,1.56,.64,1) both;
+  cursor:pointer;
+}
+.toast.removing{animation:toast-out .25s ease forwards}
+@keyframes toast-in{from{transform:translateX(110%);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes toast-out{to{transform:translateX(110%);opacity:0}}
+.toast-icon{font-size:16px;flex-shrink:0;margin-top:1px}
+.toast-body{}
+.toast-title{font-weight:700;color:var(--white);margin-bottom:2px}
+.toast-msg{color:var(--text2)}
+.toast-success{border-color:rgba(16,185,129,0.25);background:rgba(15,20,35,0.97)}
+.toast-success .toast-title{color:var(--green)}
+.toast-error{border-color:rgba(239,68,68,0.25)}
+.toast-error .toast-title{color:#fca5a5}
+.toast-info{border-color:rgba(0,212,255,0.2)}
+.toast-info .toast-title{color:var(--cyan)}
+.toast-warn{border-color:rgba(245,158,11,0.25)}
+.toast-warn .toast-title{color:var(--amber)}
+.toast-progress{height:2px;background:rgba(255,255,255,0.08);border-radius:0 0 12px 12px;margin:-12px -14px 0;overflow:hidden}
+.toast-progress-bar{height:100%;width:100%;transform-origin:left;animation:progress-shrink var(--dur) linear forwards}
+@keyframes progress-shrink{to{transform:scaleX(0)}}
+</style>
+</head>
+<body>
+<div class="page">
+
+<!-- ════════ HEADER ════════ -->
+<div class="header">
+  <div class="logo-ring">⚡</div>
+  <div class="brand">
+    <div class="brand-name">LUNA</div>
+    <div class="brand-sub">Elite Agent · Recarregar Créditos</div>
+  </div>
+  <div class="badges">
+    <span class="badge badge-sol">◎ Solana</span>
+    <span class="badge badge-usdc">💵 USDC SPL</span>
+    <span class="badge badge-helius">🔒 Helius Verified</span>
+  </div>
+</div>
+
+<!-- ════════ STEPS ════════ -->
+<div class="steps-bar" id="steps-bar">
+  <div class="step active" id="step-1"><div class="step-dot">1</div><div>Plano</div></div>
+  <div class="step-line"></div>
+  <div class="step" id="step-2"><div class="step-dot">2</div><div>Pagar</div></div>
+  <div class="step-line"></div>
+  <div class="step" id="step-3"><div class="step-dot">3</div><div>Pronto</div></div>
+</div>
+
+<!-- ════════════════════════════════════
+     TELA 1 — SELECIONAR PLANO
+════════════════════════════════════ -->
+<div id="plan-section">
+
+  <!-- User ID -->
+  <div class="card">
+    <div class="card-label">Identificação</div>
+    <div class="input-wrap">
+      <span class="input-ico">👤</span>
+      <input type="text" id="user-id" placeholder="ID do usuário — ex: default_user" autocomplete="off"/>
+    </div>
+    <p class="hint">Os créditos serão adicionados a esta conta · Gerado automaticamente pelo app</p>
+  </div>
+
+  <!-- Plans -->
+  <div class="card">
+    <div class="card-label">Escolha um plano</div>
+    <div class="plans">
+      <div class="plan" data-usdc="1"  data-grains="1000"  data-label="Starter"    onclick="selectPlan(this)">
+        <div class="plan-chk">✓</div>
+        <div class="plan-name">Starter</div>
+        <div class="plan-price"><sup>$</sup>1</div>
+        <div class="plan-grains">1.000 Grains</div>
+        <div class="plan-desc">≈ 100 msgs chat</div>
+      </div>
+      <div class="plan" data-usdc="5"  data-grains="5000"  data-label="Builder"    onclick="selectPlan(this)">
+        <div class="plan-pop">POPULAR</div>
+        <div class="plan-chk">✓</div>
+        <div class="plan-name">Builder</div>
+        <div class="plan-price"><sup>$</sup>5</div>
+        <div class="plan-grains">5.000 Grains</div>
+        <div class="plan-desc">≈ 500 msgs / 333 scans</div>
+      </div>
+      <div class="plan" data-usdc="10" data-grains="10000" data-label="Pro Hunter" onclick="selectPlan(this)">
+        <div class="plan-chk">✓</div>
+        <div class="plan-name">Pro Hunter</div>
+        <div class="plan-price"><sup>$</sup>10</div>
+        <div class="plan-grains">10.000 Grains</div>
+        <div class="plan-desc">≈ 1k msgs / 666 scans</div>
+      </div>
+      <div class="plan" data-usdc="25" data-grains="25000" data-label="Elite"      onclick="selectPlan(this)">
+        <div class="plan-chk">✓</div>
+        <div class="plan-name">Elite</div>
+        <div class="plan-price"><sup>$</sup>25</div>
+        <div class="plan-grains">25.000 Grains</div>
+        <div class="plan-desc">Bounty &amp; audit intensivo</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cost table -->
+  <div class="card">
+    <div class="card-label">Tabela de custos</div>
+    <div class="cost-row"><span class="cost-l">Mensagem chat (Claude / GPT-4o)</span><span class="cost-v">1–3 Grains</span></div>
+    <div class="cost-row"><span class="cost-l">Security Scan (1k linhas de código)</span><span class="cost-v">15 Grains</span></div>
+    <div class="cost-row"><span class="cost-l">Análise de imagem / screenshot</span><span class="cost-v">50 Grains</span></div>
+    <div class="cost-row"><span class="cost-l">Groq / Llama (modo ultra-rápido)</span><span class="cost-v">~0.1 Grains</span></div>
+    <div class="cost-row" style="border:none;background:rgba(0,212,255,0.04);margin:6px -12px -4px;padding:10px 12px;border-radius:8px">
+      <span class="cost-l" style="color:var(--cyan);font-weight:600">Taxa de conversão</span>
+      <span class="cost-v" style="color:var(--cyan)">1 USDC = 1.000 Grains</span>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <button class="btn btn-grad" id="pay-btn" onclick="goToPayment()" disabled>
+    <span id="btn-ico">⚡</span>
+    <span id="btn-txt">Selecione um plano para continuar</span>
+  </button>
+  <div id="status-msg"></div>
+
+</div><!-- /plan-section -->
+
+<!-- ════════════════════════════════════
+     TELA 2 — PAGAMENTO
+════════════════════════════════════ -->
+<div id="pay-section" style="display:none">
+
+  <!-- Plan summary pill -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+    <div id="plan-pill" style="display:flex;align-items:center;gap:10px;background:rgba(0,212,255,0.07);border:1px solid rgba(0,212,255,0.15);border-radius:100px;padding:6px 14px;font-size:12px;color:var(--cyan);font-weight:600"></div>
+    <div class="monitor-pill"><div class="live-dot"></div> Monitorando</div>
+  </div>
+
+  <!-- Payment method tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('phantom')" id="tab-phantom">
+      <div class="tab-icon">👻</div>
+      <div>Phantom Wallet</div>
+    </div>
+    <div class="tab" onclick="switchTab('qr')" id="tab-qr">
+      <div class="tab-icon">📱</div>
+      <div>QR Code</div>
+    </div>
+  </div>
+
+  <!-- ── Tab: Phantom ── -->
+  <div class="tab-panel active" id="panel-phantom">
+    <div class="card" style="padding:28px">
+
+      <!-- NOT connected -->
+      <div id="phantom-connect-view">
+        <div class="phantom-card">
+          <div class="phantom-logo">👻</div>
+          <div class="phantom-title">Pagar com Phantom</div>
+          <div class="phantom-sub">
+            Conecte sua carteira Phantom para realizar o pagamento em USDC diretamente,<br>
+            sem precisar escanear QR Code.
+          </div>
+          <button class="btn btn-purple" onclick="connectPhantom()" id="connect-btn">
+            <span>Conectar Phantom</span>
+          </button>
+          <div id="phantom-unavail" style="display:none;margin-top:16px;font-size:11px;color:var(--muted2)">
+            Phantom não detectado.
+            <a href="https://phantom.app" target="_blank" style="color:var(--phantom)">Instalar extensão →</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connected — ready to pay -->
+      <div id="phantom-pay-view" style="display:none">
+        <div class="phantom-card">
+          <div class="wallet-chip">
+            <div class="dot"></div>
+            <div class="addr" id="wallet-addr-short">—</div>
+          </div>
+          <div class="phantom-title" id="phantom-pay-title">Confirmar Pagamento</div>
+          <div class="phantom-sub" id="phantom-pay-sub">Clique abaixo para assinar a transação no Phantom</div>
+
+          <button class="btn btn-purple" onclick="payWithPhantom()" id="phantom-pay-btn">
+            <span id="phan-ico">💸</span>
+            <span id="phan-txt">Pagar via Phantom</span>
+          </button>
+          <button class="btn btn-ghost btn-mt btn-sm" onclick="disconnectPhantom()" style="width:auto;margin:10px auto 0;display:flex">
+            Desconectar carteira
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Tab: QR Code ── -->
+  <div class="tab-panel" id="panel-qr">
+    <div class="card">
+
+      <!-- Countdown -->
+      <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:20px">
+        <div class="ring-wrap">
+          <svg class="ring-svg" viewBox="0 0 88 88">
+            <circle class="ring-bg" cx="44" cy="44" r="38"/>
+            <circle class="ring-fg" id="ring-fg" cx="44" cy="44" r="38"/>
+          </svg>
+          <div class="ring-time" id="ring-time">15:00</div>
+        </div>
+        <div class="ring-label">tempo para pagar</div>
+      </div>
+
+      <!-- QR -->
+      <div style="display:flex;flex-direction:column;align-items:center;margin-bottom:20px">
+        <div class="qr-frame">
+          <div class="qr-loading" id="qr-loading"><div class="spinner"></div><span style="font-size:11px">Gerando QR Code…</span></div>
+          <canvas id="qr-canvas" style="display:none;border-radius:10px"></canvas>
+          <img    id="qr-img"    style="display:none;border-radius:10px;width:220px;height:220px" alt="Solana Pay QR"/>
+        </div>
+        <p style="margin-top:12px;font-size:11px;color:var(--text2);text-align:center">
+          Escaneie com <strong style="color:var(--cyan)">Phantom</strong> ou <strong style="color:var(--cyan)">Solflare</strong> no celular
+        </p>
+      </div>
+
+      <!-- Details -->
+      <div class="dets" style="margin-bottom:14px">
+        <div class="det"><span class="dl">Valor</span><span class="dv" id="qr-usdc">—</span></div>
+        <div class="det"><span class="dl">Receberá</span><span class="dv" id="qr-grains">—</span></div>
+        <div class="det"><span class="dl">Token</span><span class="dv">USDC (SPL)</span></div>
+        <div class="det"><span class="dl">Rede</span><span class="dv">Solana Mainnet</span></div>
+        <div class="det"><span class="dl">Ref</span><span class="dv" id="qr-ref" style="font-size:9px">—</span></div>
+      </div>
+
+      <!-- Wallet address -->
+      <p style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted2);margin-bottom:8px">Ou envie manualmente:</p>
+      <div class="w-copy-wrap" style="margin-bottom:14px">
+        <div class="w-copy-addr" id="w-addr" onclick="copyWallet()">HfcPmtJEMABWtrZmURT3n7EmhQUHCX6hs6Vf51uoNpdL</div>
+        <div class="copy-tag" id="copy-wallet-btn" onclick="copyWallet()">Copiar</div>
+      </div>
+
+      <!-- Solana Pay URL -->
+      <p style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--muted2);margin-bottom:8px" id="pay-url-label" style="display:none">URL Solana Pay:</p>
+      <div class="w-copy-wrap" style="margin-bottom:14px" id="pay-url-row" style="display:none">
+        <div class="w-copy-addr" id="pay-url-display" style="font-size:9px;word-break:break-all"></div>
+        <div class="copy-tag" id="copy-url-btn" onclick="copyPayUrl()">Copiar</div>
+      </div>
+
+      <div class="warn">
+        ⚠️ Envie somente <strong>USDC SPL</strong> na rede <strong>Solana Mainnet</strong>.<br>
+        SOL, ETH-USDC, BSC-USDC e outras redes não são aceitos.
+      </div>
+
+    </div>
+  </div>
+
+  <button class="btn btn-ghost btn-mt" onclick="backToPlans()">← Voltar e escolher outro plano</button>
+  <div id="status-msg2" style="padding:12px 16px;border-radius:10px;font-size:12px;line-height:1.6;margin-top:12px;display:none"></div>
+</div>
+
+<!-- ════════════════════════════════════
+     TELA 3 — SUCESSO
+════════════════════════════════════ -->
+<div id="success-section">
+  <div class="card">
+    <div class="success-inner">
+      <div class="suc-anim">🎉</div>
+      <div class="suc-title">Pagamento Confirmado!</div>
+      <div class="suc-sub" id="suc-sub">Seus Grains foram creditados com sucesso.</div>
+      <div class="suc-tx">
+        <div class="suc-tx-label">Transação on-chain</div>
+        <a class="suc-tx-link" id="suc-tx" href="#" target="_blank" rel="noopener noreferrer">—</a>
+      </div>
+      <button class="btn btn-grad" onclick="reset()">⚡ Recarregar novamente</button>
+      <button class="btn btn-ghost btn-mt" onclick="openSolscan()">🔍 Verificar no Solscan</button>
+    </div>
+  </div>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+  Powered by <strong style="color:var(--cyan)">Luna Elite Agent</strong> ·
+  <a href="https://solscan.io" target="_blank">Solscan</a> ·
+  <a href="https://phantom.app" target="_blank">Phantom</a> ·
+  <a href="https://helius.dev" target="_blank">Helius</a><br>
+  Pagamentos verificados on-chain · Sem custódia · Sem intermediários
+</div>
+
+</div><!-- /page -->
+
+<div id="toast-container"></div>
+
+<!-- ════════════════════════════════════
+     LIBS (carregamento assíncrono)
+════════════════════════════════════ -->
+<script>
+// Carrega @solana/web3.js e qrcodejs em paralelo
+function loadScript(src, globalCheck, timeout = 8000) {
+  return new Promise((res, rej) => {
+    if (window[globalCheck]) return res()
+    const s = document.createElement('script')
+    s.src = src; s.async = true
+    s.onload = () => res()
+    s.onerror = () => rej(new Error(`Failed: ${src}`))
+    document.head.appendChild(s)
+    setTimeout(() => rej(new Error('timeout')), timeout)
+  })
+}
+
+// Carrega em paralelo, não bloqueia a UI
+Promise.allSettled([
+  loadScript('https://unpkg.com/@solana/web3.js@1.98.0/lib/index.iife.min.js', 'solanaWeb3'),
+  loadScript('https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js', 'QRCode')
+]).then(results => {
+  if (results[0].status === 'rejected') {
+    console.warn('[Luna] solana/web3.js não carregou — Phantom desabilitado')
+    window._solanaFailed = true
+  }
+  if (results[1].status === 'rejected') {
+    // tenta CDN alternativo
+    loadScript('https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js', 'QRCode')
+      .catch(() => { window._qrFailed = true })
+  }
+})
+</script>
+
+<script>
+// ═══════════════════════════════════════════════
+//  CONSTANTES
+// ═══════════════════════════════════════════════
+const RECEIVER_STR = 'HfcPmtJEMABWtrZmURT3n7EmhQUHCX6hs6Vf51uoNpdL'
+const USDC_MINT_STR = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+const TOKEN_PROGRAM_STR = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+const ASSOC_TOKEN_PROGRAM_STR = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bY'
+const SOLANA_RPC = 'https://api.mainnet-beta.solana.com'
+const RING_CIRC = 2 * Math.PI * 38   // circunferência do anel
+
+const API_BASE = window.location.origin
+
+// ═══════════════════════════════════════════════
+//  ESTADO
+// ═══════════════════════════════════════════════
+let selectedPlan    = null
+let pollInterval    = null
+let countdownTimer  = null
+let currentRef      = null
+let expiresAt       = null
+let currentPayUrl   = null
+let currentTxSig    = null
+let phantomPubkey   = null
+let activeTab       = 'phantom'
+let userId          = 'default_user'
+let initSeconds     = 900
+
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  const p = new URLSearchParams(window.location.search)
+  userId = p.get('user') || p.get('user_id') || 'default_user'
+  const usdcParam = parseFloat(p.get('usdc') || '0')
+
+  document.getElementById('user-id').value = userId
+
+  // Auto-select plan from URL param
+  if (usdcParam > 0) {
+    const el = document.querySelector(`.plan[data-usdc="${usdcParam}"]`)
+    if (el) { selectPlan(el); goToPayment() }
+  }
+
+  // Check if Phantom is available
+  checkPhantomAvailability()
+})
+
+function checkPhantomAvailability() {
+  // Check after DOM settles and Phantom extension injects window.solana
+  setTimeout(() => {
+    if (!window.solana || !window.solana.isPhantom) {
+      const el = document.getElementById('phantom-unavail')
+      if (el) el.style.display = 'block'
+    }
+  }, 500)
+}
+
+// ═══════════════════════════════════════════════
+//  STEPS
+// ═══════════════════════════════════════════════
+function setStep(n) {
+  for (let i = 1; i <= 3; i++) {
+    const el = document.getElementById(`step-${i}`)
+    el.className = 'step ' + (i < n ? 'done' : i === n ? 'active' : '')
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  PLAN SELECTION
+// ═══════════════════════════════════════════════
+function selectPlan(el) {
+  document.querySelectorAll('.plan').forEach(p => p.classList.remove('selected'))
+  el.classList.add('selected')
+  selectedPlan = { usdc: parseFloat(el.dataset.usdc), grains: parseInt(el.dataset.grains), label: el.dataset.label }
+  const btn = document.getElementById('pay-btn')
+  btn.disabled = false
+  document.getElementById('btn-ico').textContent = '⚡'
+  document.getElementById('btn-txt').textContent = `Pagar ${selectedPlan.label} — $${selectedPlan.usdc} USDC`
+  hideStatus('status-msg')
+}
+
+// ═══════════════════════════════════════════════
+//  GO TO PAYMENT
+// ═══════════════════════════════════════════════
+async function goToPayment() {
+  if (!selectedPlan) return
+  userId = document.getElementById('user-id').value.trim() || 'default_user'
+
+  // Update plan pill
+  document.getElementById('plan-pill').innerHTML =
+    `⚡ ${selectedPlan.label} &nbsp;·&nbsp; $${selectedPlan.usdc} USDC &nbsp;→&nbsp; ${selectedPlan.grains.toLocaleString('pt-BR')} Grains`
+
+  document.getElementById('plan-section').style.display = 'none'
+  document.getElementById('pay-section').style.display  = 'block'
+  setStep(2)
+
+  // Generate payment session for QR tab
+  createPaymentSession()
+}
+
+async function createPaymentSession() {
+  try {
+    const resp = await fetch(`${API_BASE}/payment/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId, usdc_amount: selectedPlan.usdc }),
+    })
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+    const data = await resp.json()
+    if (!data.success) throw new Error(data.detail || 'Erro ao criar sessão')
+
+    const s = data.response
+    currentRef  = s.reference
+    expiresAt   = s.expires_at ? new Date(s.expires_at) : new Date(Date.now() + 15 * 60000)
+    currentPayUrl = s.solana_pay_url
+
+    // Populate QR
+    document.getElementById('qr-usdc').textContent   = `$${s.usdc_amount} USDC`
+    document.getElementById('qr-grains').textContent = `${(s.grains || s.usdc_amount * 1000).toLocaleString('pt-BR')} Grains`
+    document.getElementById('qr-ref').textContent    = (s.reference || '').slice(0, 22) + '…'
+
+    if (s.solana_pay_url) {
+      document.getElementById('pay-url-display').textContent = s.solana_pay_url
+      document.getElementById('pay-url-row').style.display   = 'flex'
+      document.getElementById('pay-url-label').style.display = 'block'
+    }
+
+    renderQR(s.solana_pay_url)
+    startPolling()
+    startCountdown()
+    toastInfo('Sessão criada', 'QR Code gerado. Escaneie com Phantom no celular.')
+
+  } catch (err) {
+    showStatus2(`⚠️ Não foi possível criar sessão QR: ${err.message}.<br>O pagamento via Phantom ainda funciona normalmente.`, 's-warn')
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════
+function switchTab(name) {
+  activeTab = name
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'))
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'))
+  document.getElementById(`tab-${name}`).classList.add('active')
+  document.getElementById(`panel-${name}`).classList.add('active')
+}
+
+// ═══════════════════════════════════════════════
+//  PHANTOM WALLET CONNECT
+// ═══════════════════════════════════════════════
+async function connectPhantom() {
+  const provider = window.solana
+  if (!provider || !provider.isPhantom) {
+    window.open('https://phantom.app', '_blank')
+    return
+  }
+  const btn = document.getElementById('connect-btn')
+  btn.disabled = true
+  btn.innerHTML = '<span>Conectando…</span>'
+  try {
+    const resp = await provider.connect()
+    phantomPubkey = resp.publicKey.toString()
+    showPhantomPayView()
+    toastSuccess('Phantom conectado', phantomPubkey.slice(0,8)+'…'+phantomPubkey.slice(-8))
+  } catch (e) {
+    btn.disabled = false
+    btn.innerHTML = '<span>Conectar Phantom</span>'
+    showStatus2(`❌ Conexão cancelada: ${e.message}`, 's-error')
+  }
+}
+
+function showPhantomPayView() {
+  document.getElementById('phantom-connect-view').style.display = 'none'
+  document.getElementById('phantom-pay-view').style.display    = 'block'
+  const short = `${phantomPubkey.slice(0,4)}…${phantomPubkey.slice(-4)}`
+  document.getElementById('wallet-addr-short').textContent = short
+  document.getElementById('phantom-pay-title').textContent = `Pagar $${selectedPlan.usdc} USDC`
+  document.getElementById('phantom-pay-sub').textContent =
+    `${selectedPlan.label} · ${selectedPlan.grains.toLocaleString('pt-BR')} Grains · Rede Solana`
+}
+
+function disconnectPhantom() {
+  window.solana?.disconnect?.()
+  phantomPubkey = null
+  document.getElementById('phantom-connect-view').style.display = 'block'
+  document.getElementById('phantom-pay-view').style.display     = 'none'
+  document.getElementById('connect-btn').disabled  = false
+  document.getElementById('connect-btn').innerHTML = '<span>Conectar Phantom</span>'
+}
+
+// ─────────────────────────────────────────────
+//  SPL Token Transfer helpers (sem @solana/spl-token)
+// ─────────────────────────────────────────────
+function getATA(ownerPk, mintPk) {
+  const w = solanaWeb3
+  const [ata] = w.PublicKey.findProgramAddressSync(
+    [ownerPk.toBuffer(), new w.PublicKey(TOKEN_PROGRAM_STR).toBuffer(), mintPk.toBuffer()],
+    new w.PublicKey(ASSOC_TOKEN_PROGRAM_STR)
+  )
+  return ata
+}
+
+function encodeSPLTransfer(amountUsdc) {
+  // Transfer instruction index = 3, amount u64 LE, USDC 6 decimals
+  const amount = BigInt(Math.round(amountUsdc * 1_000_000))
+  const buf = new Uint8Array(9)
+  buf[0] = 3
+  let v = amount
+  for (let i = 1; i <= 8; i++) { buf[i] = Number(v & 0xFFn); v >>= 8n }
+  return buf
+}
+
+/**
+ * Instrução createAssociatedTokenAccount (clássica, discriminator=0).
+ * Chamada APENAS quando a ATA não existe (verificado via getAccountInfo).
+ * Usamos a versão clássica (não-idempotent) para máxima compatibilidade
+ * com todos os clientes RPC e versões do Associated Token Program.
+ */
+function createATAIdempotentIx(w, payer, ata, owner, mint) {
+  return new w.TransactionInstruction({
+    keys: [
+      { pubkey: payer,                                                          isSigner: true,  isWritable: true  },
+      { pubkey: ata,                                                            isSigner: false, isWritable: true  },
+      { pubkey: owner,                                                          isSigner: false, isWritable: false },
+      { pubkey: mint,                                                           isSigner: false, isWritable: false },
+      { pubkey: new w.PublicKey('11111111111111111111111111111111'),             isSigner: false, isWritable: false }, // System Program
+      { pubkey: new w.PublicKey(TOKEN_PROGRAM_STR),                             isSigner: false, isWritable: false }, // Token Program
+      { pubkey: new w.PublicKey('SysvarRent111111111111111111111111111111111'), isSigner: false, isWritable: false }, // Rent Sysvar
+    ],
+    programId: new w.PublicKey(ASSOC_TOKEN_PROGRAM_STR),
+    data: new Uint8Array([]),  // 0 bytes = instrução Create clássica (sem discriminador)
+  })
+}
+
+/** Retorna a primeira Connection que responde — proxy local primeiro (sem CORS) */
+async function getBestConnection(w) {
+  // Proxy no nosso backend (mesma origem = zero CORS, usa Helius/Ankr server-side)
+  const proxyUrl = `${API_BASE}/payment/solana-rpc`
+
+  // Lista: proxy local > Ankr > mainnet-beta (fallbacks externos, podem ter CORS)
+  const candidates = [
+    proxyUrl,
+    'https://rpc.ankr.com/solana',
+    'https://api.mainnet-beta.solana.com',
+  ]
+
+  for (const url of candidates) {
+    try {
+      const c = new w.Connection(url, { commitment: 'confirmed', disableRetryOnRateLimit: true })
+      await Promise.race([
+        c.getLatestBlockhash(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 5000)),
+      ])
+      console.log('[Luna] RPC conectado:', url)
+      return c
+    } catch (e) {
+      console.warn('[Luna] RPC falhou:', url, e.message)
+      continue
+    }
+  }
+  return null
+}
+
+async function payWithPhantom() {
+  if (!phantomPubkey || !selectedPlan || !window.solana) return
+
+  const btn = document.getElementById('phantom-pay-btn')
+  const setStatus = txt => { document.getElementById('phan-txt').textContent = txt }
+  btn.disabled = true
+  document.getElementById('phan-ico').textContent = '⏳'
+
+  try {
+    if (!window.solanaWeb3 || window._solanaFailed)
+      throw new Error('@solana/web3.js não carregou. Use o QR Code como alternativa.')
+
+    const w = solanaWeb3
+
+    // ── 1. Preflight server-side (sem CORS — backend verifica tudo) ─────────
+    //   Retorna: from_ata, to_ata, to_ata_exists, from_balance_usdc,
+    //            receiver, blockhash, last_valid_height
+    setStatus('Verificando saldo e contas…')
+    const preflightRes = await fetch(`${API_BASE}/payment/phantom-preflight`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sender:      phantomPubkey,
+        usdc_amount: selectedPlan.usdc,
+        user_id:     userId,
+      }),
+    })
+
+    if (!preflightRes.ok) {
+      const err = await preflightRes.json().catch(() => ({}))
+      throw new Error(err.detail || `Erro no preflight: ${preflightRes.status}`)
+    }
+
+    const pf = await preflightRes.json()
+    console.log('[Luna] preflight:', pf)
+
+    const senderPk   = new w.PublicKey(phantomPubkey)
+    const fromATAPk  = new w.PublicKey(pf.from_ata)
+    const toATAPk    = new w.PublicKey(pf.to_ata)
+    const receiverPk = new w.PublicKey(pf.receiver)
+    const mintPk     = new w.PublicKey(USDC_MINT_STR)
+
+    // ── 2. Monta transação com dados verificados ─────────────────────────────
+    setStatus('Montando transação…')
+
+    const transferIx = new w.TransactionInstruction({
+      keys: [
+        { pubkey: fromATAPk, isSigner: false, isWritable: true  },
+        { pubkey: toATAPk,   isSigner: false, isWritable: true  },
+        { pubkey: senderPk,  isSigner: true,  isWritable: false },
+      ],
+      programId: new w.PublicKey(TOKEN_PROGRAM_STR),
+      data: encodeSPLTransfer(selectedPlan.usdc),
+    })
+
+    const ref = currentRef || crypto.randomUUID()
+    const memoIx = new w.TransactionInstruction({
+      keys: [],
+      programId: new w.PublicKey('MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr'),
+      data: new TextEncoder().encode(`luna:${ref}:${userId}:${selectedPlan.usdc}`),
+    })
+
+    const tx = new w.Transaction()
+
+    // Só cria ATA se o servidor confirmou que ela não existe
+    if (!pf.to_ata_exists) {
+      console.log('[Luna] ATA destino não existe — adicionando createATA...')
+      const createToATAIx = createATAIdempotentIx(w, senderPk, toATAPk, receiverPk, mintPk)
+      tx.add(createToATAIx)
+    }
+
+    tx.add(transferIx, memoIx)
+    tx.recentBlockhash  = pf.blockhash
+    tx.feePayer         = senderPk
+
+    // ── 3. Assina e envia via Phantom ────────────────────────────────────────
+    setStatus('Aguardando assinatura no Phantom…')
+    const { signature } = await window.solana.signAndSendTransaction(tx)
+    currentTxSig = signature
+    console.log('[Luna] tx enviada:', signature)
+
+    // ── 4. Polling via proxy (mesmo RPC do servidor) ─────────────────────────
+    setStatus('Aguardando confirmação on-chain…')
+    const conn = await getBestConnection(w)
+    let confirmed = false
+
+    for (let i = 0; i < 35 && !confirmed; i++) {
+      await sleep(2000)
+      try {
+        const statusRes = await conn.getSignatureStatus(signature, { searchTransactionHistory: true })
+        const sv = statusRes?.value
+        if (!sv) continue
+
+        if (sv.err !== null && sv.err !== undefined) {
+          const errDetail = JSON.stringify(sv.err)
+          throw new Error(`Transação rejeitada pela rede.\nDetalhes: ${errDetail}\nSolscan: solscan.io/tx/${signature}`)
+        }
+
+        const conf = sv.confirmationStatus
+        if (conf === 'confirmed' || conf === 'finalized') confirmed = true
+      } catch (pollErr) {
+        if (pollErr.message.includes('rejeitada')) throw pollErr
+      }
+    }
+
+    if (!confirmed) {
+      toastWarn('Confirmação pendente', 'A tx foi enviada mas ainda não confirmada. Verifique no Solscan.')
+    }
+
+    // ── 5. Notifica backend ──────────────────────────────────────────────────
+    setStatus('Creditando Grains…')
+    try {
+      const ctrl = new AbortController()
+      const tmo  = setTimeout(() => ctrl.abort(), 12000)
+      const r = await fetch(`${API_BASE}/payment/confirm-tx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: userId, usdc_amount: selectedPlan.usdc, tx_signature: signature }),
+        signal: ctrl.signal,
+      })
+      clearTimeout(tmo)
+      const d = await r.json()
+      if (d.success) {
+        const grains  = d.response?.grains_credited || selectedPlan.grains
+        const status  = d.response?.status || 'finalized'
+        clearInterval(pollInterval); clearInterval(countdownTimer)
+        showSuccess({ tx_signature: signature, grains, usdc_amount: selectedPlan.usdc })
+        if (status === 'pending') {
+          // add_grains falhou mas pending_credit foi inserido — retry_job vai creditar
+          toastWarn('Crédito em processamento', 'Grains serão creditados automaticamente em até 1 minuto.')
+          // Inicia polling leve do status para atualizar a UI quando creditar
+          _pollCreditStatus(signature, grains)
+        } else {
+          toastSuccess('Pagamento confirmado!', `$${selectedPlan.usdc} USDC → ${Number(grains).toLocaleString('pt-BR')} Grains creditados`)
+        }
+        return
+      }
+    } catch (fetchErr) {
+      if (fetchErr.name === 'AbortError')
+        toastWarn('Backend lento', 'Grains creditados automaticamente via webhook Helius.')
+    }
+
+    clearInterval(pollInterval); clearInterval(countdownTimer)
+    showSuccess({ tx_signature: signature, grains: selectedPlan.grains, usdc_amount: selectedPlan.usdc })
+    toastSuccess('Pagamento enviado!', 'Tx confirmada on-chain. Grains em instantes.')
+
+  } catch (err) {
+    btn.disabled = false
+    document.getElementById('phan-ico').textContent = '💸'
+    document.getElementById('phan-txt').textContent = 'Pagar via Phantom'
+    toastError('Erro no pagamento', err.message)
+  }
+}
+
+// Polling leve: verifica status de crédito até ser confirmado (max 10 tentativas × 30s = 5 min)
+async function _pollCreditStatus(txSig, grains) {
+  const MAX_POLLS = 10
+  let count = 0
+  const timer = setInterval(async () => {
+    count++
+    try {
+      const r = await fetch(`${API_BASE}/payment/status/${txSig}`)
+      const d = await r.json()
+      const st = d.response?.status
+      if (st === 'credited' || st === 'finalized') {
+        clearInterval(timer)
+        toastSuccess('Grains creditados!', `${Number(grains).toLocaleString('pt-BR')} Grains disponíveis na sua conta.`)
+      }
+    } catch { /* silencia */ }
+    if (count >= MAX_POLLS) clearInterval(timer)
+  }, 30_000) // verifica a cada 30s
+}
+
+// ═══════════════════════════════════════════════
+//  QR CODE RENDERING
+// ═══════════════════════════════════════════════
+async function renderQR(url) {
+  if (!url) return
+  const loading = document.getElementById('qr-loading')
+  const canvas  = document.getElementById('qr-canvas')
+  const img     = document.getElementById('qr-img')
+  loading.style.display = 'flex'
+  canvas.style.display  = 'none'
+  img.style.display     = 'none'
+
+  // Wait for QR lib
+  await waitFor(() => typeof QRCode !== 'undefined', 4000)
+
+  // Try qrcodejs (new QRCode)
+  if (typeof QRCode !== 'undefined' && QRCode.prototype) {
+    try {
+      const div = document.createElement('div')
+      new QRCode(div, { text: url, width: 220, height: 220, colorDark: '#000', colorLight: '#fff',
+        correctLevel: QRCode.CorrectLevel?.H || 1 })
+      await sleep(250)
+      const child = div.querySelector('canvas') || div.querySelector('img')
+      if (child) {
+        if (child.tagName === 'CANVAS') {
+          canvas.width = child.width; canvas.height = child.height
+          canvas.getContext('2d').drawImage(child, 0, 0)
+          loading.style.display = 'none'; canvas.style.display = 'block'; return
+        }
+        img.src = child.src
+        img.onload = () => { loading.style.display = 'none'; img.style.display = 'block' }; return
+      }
+    } catch(e) { console.warn('qrcodejs:', e) }
+  }
+
+  // Try qrcode.toCanvas
+  if (typeof QRCode !== 'undefined' && typeof QRCode.toCanvas === 'function') {
+    try {
+      await QRCode.toCanvas(canvas, url, { width: 220, margin: 2 })
+      loading.style.display = 'none'; canvas.style.display = 'block'; return
+    } catch(e) { console.warn('qrcode.toCanvas:', e) }
+  }
+
+  // Google Charts (always works — no auth)
+  try {
+    const gcUrl = `https://chart.googleapis.com/chart?cht=qr&chs=220x220&chl=${encodeURIComponent(url)}&choe=UTF-8`
+    img.src = gcUrl
+    await new Promise((ok,fail) => { img.onload = ok; img.onerror = fail; setTimeout(fail, 5000) })
+    loading.style.display = 'none'; img.style.display = 'block'; return
+  } catch(e) { console.warn('google charts:', e) }
+
+  // QR Server API
+  try {
+    const qsUrl = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(url)}&size=220x220&margin=10`
+    img.src = qsUrl
+    await new Promise((ok,fail) => { img.onload = ok; img.onerror = fail; setTimeout(fail, 5000) })
+    loading.style.display = 'none'; img.style.display = 'block'; return
+  } catch(e) { console.warn('qrserver:', e) }
+
+  // Last resort
+  loading.innerHTML = `<div style="text-align:center;padding:12px"><p style="font-size:10px;color:#64748b;margin-bottom:10px">QR indisponível (modo offline)</p><p style="font-size:9px;color:#00d4ff;word-break:break-all;line-height:1.6">${url}</p></div>`
+}
+
+// ═══════════════════════════════════════════════
+//  COUNTDOWN RING
+// ═══════════════════════════════════════════════
+function startCountdown() {
+  if (countdownTimer) clearInterval(countdownTimer)
+  initSeconds = Math.max(60, Math.round((expiresAt - Date.now()) / 1000))
+  const ring  = document.getElementById('ring-fg')
+  const label = document.getElementById('ring-time')
+
+  countdownTimer = setInterval(() => {
+    const rem = Math.max(0, Math.round((expiresAt - Date.now()) / 1000))
+    const m = Math.floor(rem / 60), s = rem % 60
+    label.textContent = `${m}:${String(s).padStart(2,'0')}`
+    ring.style.strokeDashoffset = RING_CIRC * (1 - rem / initSeconds)
+    if (rem < 180) { ring.style.stroke = 'var(--red)'; label.style.color = 'var(--red)' }
+    if (rem <= 0)  { clearInterval(countdownTimer); onExpire() }
+  }, 1000)
+}
+
+function onExpire() {
+  clearInterval(pollInterval)
+  toastWarn('Sessão expirada', 'Gere um novo pagamento.')
+  setTimeout(backToPlans, 3000)
+}
+
+// ═══════════════════════════════════════════════
+//  POLLING
+// ═══════════════════════════════════════════════
+function startPolling() {
+  if (pollInterval) clearInterval(pollInterval)
+  poll()
+  pollInterval = setInterval(poll, 8000)
+}
+
+async function poll() {
+  if (!currentRef) return
+  try {
+    const r = await fetch(`${API_BASE}/payment/status/${currentRef}`)
+    if (!r.ok) return
+    const d = await r.json()
+    const st = d.response?.status
+    if (st === 'finalized') {
+      clearInterval(pollInterval); clearInterval(countdownTimer)
+      currentTxSig = d.response?.tx_signature || ''
+      showSuccess(d.response)
+    } else if (st === 'expired') {
+      clearInterval(pollInterval); clearInterval(countdownTimer)
+      onExpire()
+    }
+  } catch {}
+}
+
+// ═══════════════════════════════════════════════
+//  SUCCESS
+// ═══════════════════════════════════════════════
+function showSuccess(resp) {
+  document.getElementById('pay-section').style.display     = 'none'
+  document.getElementById('success-section').style.display = 'block'
+  setStep(3)
+
+  const grains = (resp?.grains_credited || resp?.grains || selectedPlan?.grains || 0).toLocaleString('pt-BR')
+  const usdc   = resp?.usdc_amount || selectedPlan?.usdc || 0
+  document.getElementById('suc-sub').textContent =
+    `$${usdc} USDC → ${grains} Grains creditados para "${userId}"`
+
+  const sig = resp?.tx_signature || currentTxSig || ''
+  const txEl = document.getElementById('suc-tx')
+  if (sig) {
+    txEl.href = `https://solscan.io/tx/${sig}`
+    txEl.textContent = `${sig.slice(0,20)}…${sig.slice(-12)}`
+    currentTxSig = sig
+  } else {
+    txEl.href = 'https://solscan.io'
+    txEl.textContent = 'Confirmado via webhook Helius → Ver no Solscan'
+  }
+}
+
+function openSolscan() {
+  window.open(currentTxSig ? `https://solscan.io/tx/${currentTxSig}` : 'https://solscan.io', '_blank')
+}
+
+// ═══════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════
+function backToPlans() {
+  clearInterval(pollInterval); clearInterval(countdownTimer)
+  currentRef = null; currentPayUrl = null
+  document.getElementById('pay-section').style.display  = 'none'
+  document.getElementById('plan-section').style.display = 'block'
+  document.getElementById('pay-btn').disabled = !selectedPlan
+  setStep(1)
+}
+
+function reset() {
+  clearInterval(pollInterval); clearInterval(countdownTimer)
+  currentRef = null; currentPayUrl = null; currentTxSig = null; selectedPlan = null; phantomPubkey = null
+  document.getElementById('success-section').style.display = 'none'
+  document.getElementById('plan-section').style.display    = 'block'
+  document.getElementById('pay-btn').disabled = true
+  document.getElementById('btn-ico').textContent = '⚡'
+  document.getElementById('btn-txt').textContent = 'Selecione um plano para continuar'
+  document.querySelectorAll('.plan').forEach(p => p.classList.remove('selected'))
+  disconnectPhantom()
+  setStep(1)
+}
+
+// ═══════════════════════════════════════════════
+//  COPY HELPERS
+// ═══════════════════════════════════════════════
+async function copyWallet()  { await copyTo(RECEIVER_STR, 'copy-wallet-btn') }
+async function copyPayUrl()  { if (currentPayUrl) await copyTo(currentPayUrl, 'copy-url-btn') }
+async function copyTo(text, btnId) {
+  try { await navigator.clipboard.writeText(text) }
+  catch { const t=document.createElement('textarea');t.value=text;document.body.appendChild(t);t.select();document.execCommand('copy');document.body.removeChild(t) }
+  const el = document.getElementById(btnId)
+  if (el) { el.textContent = '✓ Copiado'; el.classList.add('ok'); setTimeout(() => { el.textContent = 'Copiar'; el.classList.remove('ok') }, 2000) }
+}
+
+// ═══════════════════════════════════════════════
+//  STATUS
+// ═══════════════════════════════════════════════
+function showStatus(id, msg, cls) { const e=document.getElementById(id); e.className=cls; e.innerHTML=msg; e.style.display='block' }
+function hideStatus(id) { document.getElementById(id).style.display='none' }
+function showStatus2(msg, cls) { showStatus('status-msg2', msg, cls) }
+
+// ═══════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════
+//  TOAST SYSTEM (equiv. sonner)
+// ═══════════════════════════════════════════════
+function toast(title, msg='', type='info', duration=4000) {
+  const c   = document.getElementById('toast-container')
+  const el  = document.createElement('div')
+  el.className = `toast toast-${type}`
+  const icons = {success:'✅',error:'❌',info:'ℹ️',warn:'⚠️'}
+  el.style.setProperty('--dur', duration+'ms')
+  el.innerHTML = `
+    <div class="toast-icon">${icons[type]||'ℹ️'}</div>
+    <div class="toast-body">
+      <div class="toast-title">${title}</div>
+      ${msg ? `<div class="toast-msg">${msg}</div>` : ''}
+    </div>
+    <div class="toast-progress"><div class="toast-progress-bar"></div></div>`
+  el.onclick = () => removeToast(el)
+  c.appendChild(el)
+  setTimeout(() => removeToast(el), duration)
+  return el
+}
+function removeToast(el) {
+  if (el._removing) return; el._removing = true
+  el.classList.add('removing')
+  setTimeout(() => el.remove(), 260)
+}
+const toastSuccess = (t,m,d) => toast(t,m,'success',d)
+const toastError   = (t,m,d) => toast(t,m,'error',d||5000)
+const toastInfo    = (t,m,d) => toast(t,m,'info',d)
+const toastWarn    = (t,m,d) => toast(t,m,'warn',d)
+
+function waitFor(fn, ms) {
+  return new Promise(res => {
+    const t = Date.now()
+    const c = () => { if (fn() || Date.now()-t>ms) return res(); setTimeout(c,80) }
+    c()
+  })
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
+</script>
+</body>
+</html>

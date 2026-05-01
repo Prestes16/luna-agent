@@ -1,0 +1,7 @@
+{
+  "message": "repita esse teste",
+  "history": [
+    { "role": "user", "content": "repita esse teste" },
+    { "role": "user", "content": "repita esse teste" }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "name": "luna-desktop",
+  "version": "4.0.0",
+  "description": "Luna - Elite Autonomous AI Agent Desktop Application",
+  "main": "dist/main.js",
+  "homepage": "./",
+  "author": "Luna Team",
+  "license": "MIT",
+  "scripts": {
+    "dev": "npm run electron-compile && concurrently --kill-others-on-fail \"npm run react-dev\" \"electron .\"",
+    "react-dev": "vite",
+    "react-build": "vite build",
+    "electron-compile": "tsc -p tsconfig.electron.json",
+    "electron": "electron .",
+    "electron-dev": "electron . --dev",
+    "build": "npm run react-build && npm run electron-compile && npm run electron-builder",
+    "electron-builder": "electron-builder",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "dist-win": "electron-builder --win",
+    "dist-mac": "electron-builder --mac",
+    "dist-linux": "electron-builder --linux",
+    "prestart": "npm run react-build",
+    "start": "electron .",
+    "test": "vitest",
+    "lint": "eslint src --ext .ts,.tsx"
+  },
+  "dependencies": {
+    "@solana/web3.js": "^1.87.6",
+    "@supabase/supabase-js": "^2.104.1",
+    "axios": "^1.6.0",
+    "crypto-js": "^4.2.0",
+    "framer-motion": "^10.16.4",
+    "js-sha256": "^0.10.0",
+    "lucide-react": "^0.294.0",
+    "qrcode.react": "^4.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-markdown": "^9.0.1",
+    "react-router-dom": "^6.20.0",
+    "react-syntax-highlighter": "^15.5.0",
+    "recharts": "^2.10.3",
+    "remark-gfm": "^4.0.0",
+    "socket.io-client": "^4.7.2",
+    "tweetnacl": "^1.0.3",
+    "web3": "^4.3.0",
+    "zustand": "^4.4.1"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^14.1.2",
+    "@types/node": "^20.10.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@types/react-syntax-highlighter": "^15.5.11",
+    "@typescript-eslint/eslint-plugin": "^6.13.2",
+    "@typescript-eslint/parser": "^6.13.2",
+    "@vitejs/plugin-react": "^4.2.0",
+    "autoprefixer": "^10.4.16",
+    "concurrently": "^8.2.2",
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4",
+    "eslint": "^8.55.0",
+    "postcss": "^8.4.31",
+    "tailwindcss": "^3.3.6",
+    "typescript": "^5.3.2",
+    "vite": "^5.0.0",
+    "vitest": "^1.0.0"
+  },
+  "build": {
+    "appId": "com.luna.desktop",
+    "productName": "Luna Desktop",
+    "files": [
+      "dist/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "buildResources": "assets"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "certificateFile": null,
+      "certificatePassword": null
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    }
+  }
+}

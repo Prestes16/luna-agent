@@ -1,0 +1,6 @@
+{
+  "message": "qual nome pedi pra voce lembrar?",
+  "history": [
+    { "role": "user", "content": "seu nome é luna" }
+  ]
+}

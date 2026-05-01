@@ -1,0 +1,36 @@
+name: 🎯 Bug Bounty Tool Request
+description: Request a specific security analysis tool or audit capability
+labels: ["bounty-tooling", "enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hunting on Immunefi and wish Luna could do something specific? This template is for requesting security-focused features.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Target Platform
+      options:
+        - Solana / Anchor
+        - Ethereum / EVM
+        - Cross-chain / Bridge
+        - Web2 / API
+        - Other
+  - type: textarea
+    id: vulnerability_class
+    attributes:
+      label: Vulnerability Class
+      description: What type of vulnerability should Luna detect or analyze?
+      placeholder: "e.g. PDA authority checks, reentrancy, integer overflow, flash loan attacks"
+    validations:
+      required: true
+  - type: textarea
+    id: current_workflow
+    attributes:
+      label: Current Manual Workflow
+      description: How do you currently analyze this type of vulnerability?
+  - type: textarea
+    id: expected_output
+    attributes:
+      label: Expected Luna Output
+      description: What would Luna's output look like for this analysis?
