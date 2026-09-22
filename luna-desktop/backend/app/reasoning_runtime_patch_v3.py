@@ -98,7 +98,7 @@ def _nmap_targets(command: str) -> tuple[list[str], bool]:
 
     value_options = {
         "-p", "--top-ports", "--exclude-ports", "-s", "--script", "--script-args",
-        "-oN", "-oX", "-oG", "-oA", "-iL", "--exclude", "--dns-servers",
+        "-oN", "-oX", "-oS", "-oG", "-oA", "-iL", "--exclude", "--dns-servers",
         "--source-port", "-g", "--max-retries", "--host-timeout", "--scan-delay",
         "--max-rate", "--min-rate", "-S", "-e", "-D", "--proxies",
     }
