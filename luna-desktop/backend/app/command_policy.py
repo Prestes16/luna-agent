@@ -29,9 +29,9 @@ _NMAP_PRIVILEGED_FLAGS = {
 }
 _NMAP_OUTPUT_FLAGS = ("-oN", "-oA", "-oX", "-oG")
 _ARTIFACT_MARKERS = (
-    "salve", "salvar", "grave", "gravar", "arquivo", "ficheiro",
-    "output", "saída", "saida", "relatório", "relatorio", "log",
-    "persistir", "persistente", "evidência", "evidencia",
+    "salve", "salvar", "grave", "gravar", "output", "saída", "saida",
+    "relatório", "relatorio", "log", "persistir", "persistente",
+    "evidência", "evidencia",
 )
 _ARTIFACT_PATH_RE = re.compile(
     r"""(?i)(?P<path>(?:[A-Za-z]:[\\/]|/|~/)?[^\s`"']+\.(?:txt|log|xml|gnmap|nmap))"""
@@ -113,8 +113,8 @@ def _artifact_requested(message: str) -> bool:
     normalized = message.casefold()
     if any(flag.casefold() in normalized for flag in _NMAP_OUTPUT_FLAGS):
         return True
-    if _ARTIFACT_PATH_RE.search(message):
-        return True
+    # A filename alone can be an input (-iL targets.txt, wordlist etc.).
+    # Persistence is opt-in only through explicit output language/flags.
     return any(
         re.search(rf"(?<!\w){re.escape(marker)}(?!\w)", normalized)
         for marker in _ARTIFACT_MARKERS
