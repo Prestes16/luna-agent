@@ -122,7 +122,7 @@ class OperationalCommandPolicyTests(unittest.TestCase):
         self.assertTrue(assessment.artifact_required)
         self.assertIsNone(assessment.recommended_artifact)
 
-        response = "```bash\\nsudo nmap -sS -iL /home/kali/Desktop/targets.txt\\n```"
+        response = "```bash\nsudo nmap -sS -iL /home/kali/Desktop/targets.txt\n```"
         validation = self._validate(message, response)
         self.assertFalse(validation.valid)
         self.assertIn("nmap_scan_artifact_missing", validation.reasons)
@@ -145,6 +145,7 @@ class OperationalCommandPolicyTests(unittest.TestCase):
             assessment.recommended_artifact,
             "/home/kali/Desktop/scan_result.txt",
         )
+
     def test_target_mismatch_is_never_auto_repaired(self) -> None:
         response = "```bash\nnmap -sS example.com\n```"
         validation = self._validate(GENERIC_PROMPT, response)
