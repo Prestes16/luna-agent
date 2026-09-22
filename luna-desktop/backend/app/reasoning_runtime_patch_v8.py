@@ -1,9 +1,9 @@
 """Eighth-stage hardening: operational command policy and integrity metadata.
 
-Stage 7 scores strategy.  Stage 8 makes operator-readiness deterministic: commands
+Stage 7 scores strategy. Stage 8 makes operator-readiness deterministic: commands
 may be wrapped with sudo, privilege-sensitive Nmap modes must request elevation,
-and scan commands must persist an artifact instead of disappearing in terminal
-scrollback.  The exact approved command is also SHA-256 attestable.
+and output artifacts are enforced only when the operator explicitly requested
+persistence. The exact approved command is also SHA-256 attestable.
 """
 
 from __future__ import annotations
@@ -27,9 +27,12 @@ _INLINE_CURL_RE = re.compile(
     r"((?:sudo\s+)?curl(?:\.exe)?\s+[^\r\n`]+)"
 )
 _EXEC_RE = re.compile(
-    r"^(?:sudo(?:\s+(?:-[A-Za-z]+|--[^\s]+))*\s+)?"
-    r"(?:curl(?:\.exe)?|wget|http|httpie|nmap|python(?:3)?|pwsh|powershell|"
-    r"invoke-webrequest|iwr)\b",
+    r"^(?:sudo(?:\\s+(?:-[A-Za-z]+|--[^\\s]+))*\\s+)?"
+    r"(?:curl(?:\\.exe)?|wget|http|httpie|nmap|masscan|rustscan|ffuf|gobuster|"
+    r"feroxbuster|dirsearch|nikto|nuclei|sqlmap|wpscan|dig|nslookup|dnsenum|"
+    r"dnsrecon|amass|subfinder|traceroute|ping|whatweb|httpx|enum4linux(?:-ng)?|"
+    r"smbclient|netexec|crackmapexec|hydra|medusa|john|hashcat|searchsploit|"
+    r"msfconsole|python(?:3)?|pwsh|powershell|invoke-webrequest|iwr)\\b",
     re.IGNORECASE,
 )
 
@@ -116,19 +119,24 @@ def build_replan_instruction(validation, scenario_prompt: str, current_message: 
     reasons = set(validation.reasons)
     additions: list[str] = []
 
-    # Derive the recommended artifact name deterministically from the operator's
-    # target rather than asking the LLM to invent a filename.
+    # Output paths are operator-controlled. Never invent a filename merely
+    # because a scan command was requested.
     sample = assess_command_policy(current_message, "nmap target.invalid")
-    artifact = sample.recommended_artifact or "scan_target.txt"
+    artifact = sample.recommended_artifact
 
     if "nmap_privileged_mode_missing_sudo" in reasons:
         additions.append(
             "o modo Nmap escolhido usa recursos privilegiados/raw sockets: prefixe o comando com sudo antes de aprová-lo"
         )
     if "nmap_scan_artifact_missing" in reasons:
-        additions.append(
-            f"o scan deve persistir evidência: acrescente -oN {artifact} (ou outro formato de saída explicitamente solicitado pelo operador)"
-        )
+        if artifact:
+            additions.append(
+                f"o operador pediu persistência e informou este artefato: use literalmente {artifact}; não invente outro caminho"
+            )
+        else:
+            additions.append(
+                "o operador pediu persistência, mas nenhum caminho/nome de arquivo factual foi observado; não invente .txt nem path"
+            )
     if "command_policy_target_not_verified" in reasons:
         additions.append(
             "copie literalmente o alvo factual do contrato operacional; o policy engine não verificou o target do comando"
