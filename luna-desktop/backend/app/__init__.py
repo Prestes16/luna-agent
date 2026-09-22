@@ -1,13 +1,14 @@
 """Luna Desktop Backend App Package"""
 
 # Apply the runtime reasoning hardening before luna_engine imports the helpers.
-# This keeps ScenarioContext + validator behavior consistent in the active app
-# while the compatibility patch is exercised against the real local Ollama flow.
+# Stage 1 fixes command/action parsing; stage 2 fixes URL-aware endpoint validation.
 from . import reasoning_pipeline as _reasoning_pipeline
 from .reasoning_runtime_patch import (
     action_fingerprint as _patched_action_fingerprint,
     build_replan_instruction as _patched_build_replan_instruction,
     extract_commands as _patched_extract_commands,
+)
+from .reasoning_runtime_patch_v2 import (
     validate_model_response as _patched_validate_model_response,
 )
 
