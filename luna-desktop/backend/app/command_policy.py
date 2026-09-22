@@ -27,7 +27,7 @@ _NMAP_PRIVILEGED_FLAGS = {
     "--send-eth",
     "--privileged",
 }
-_NMAP_OUTPUT_FLAGS = ("-oN", "-oA", "-oX", "-oG")
+_NMAP_OUTPUT_FLAGS = ("-oN", "-oA", "-oX", "-oS", "-oG")
 _ARTIFACT_MARKERS = (
     "salve", "salvar", "grave", "gravar", "output", "saída", "saida",
     "relatório", "relatorio", "log", "persistir", "persistente",
