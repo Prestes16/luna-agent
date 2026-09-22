@@ -7,7 +7,8 @@
   "author": "Luna Team",
   "license": "MIT",
   "scripts": {
-    "dev": "npm run electron-compile && concurrently --kill-others-on-fail \"npm run react-dev\" \"electron .\"",
+    "ollama:ensure": "node scripts/ensure-ollama.cjs",
+    "dev": "npm run ollama:ensure && npm run electron-compile && concurrently --kill-others-on-fail \"npm run react-dev\" \"electron .\"",
     "react-dev": "vite",
     "react-build": "vite build",
     "electron-compile": "tsc -p tsconfig.electron.json",
@@ -20,7 +21,7 @@
     "dist-win": "electron-builder --win",
     "dist-mac": "electron-builder --mac",
     "dist-linux": "electron-builder --linux",
-    "prestart": "npm run react-build",
+    "prestart": "npm run ollama:ensure && npm run react-build",
     "start": "electron .",
     "test": "vitest",
     "test:run": "vitest run",
