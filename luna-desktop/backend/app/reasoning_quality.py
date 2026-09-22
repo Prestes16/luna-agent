@@ -24,8 +24,12 @@ from .reasoning_runtime_patch import extract_commands
 
 
 _KNOWN_TOOLS = (
-    "nmap", "curl", "ffuf", "gobuster", "feroxbuster", "nikto", "nuclei",
-    "sqlmap", "dig", "nslookup", "traceroute", "ping", "wget", "httpx",
+    "nmap", "masscan", "rustscan", "curl", "wget", "httpx", "whatweb",
+    "ffuf", "gobuster", "feroxbuster", "dirsearch", "nikto", "nuclei",
+    "sqlmap", "wpscan", "dig", "nslookup", "dnsenum", "dnsrecon", "amass",
+    "subfinder", "traceroute", "ping", "enum4linux", "enum4linux-ng",
+    "smbclient", "netexec", "crackmapexec", "hydra", "medusa", "john",
+    "hashcat", "searchsploit", "msfconsole",
 )
 _URL_RE = re.compile(r"https?://[^\s<>\]\)]+", re.IGNORECASE)
 
