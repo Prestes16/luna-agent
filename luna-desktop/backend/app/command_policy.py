@@ -164,7 +164,7 @@ def assess_command_policy(message: str, command: str) -> CommandPolicyAssessment
     if ast and tool == "nmap":
         requires_elevation = _requires_nmap_elevation(ast)
         # Output files are opt-in. A scan command must not silently create files.
-        artifact_required = bool(contract.wants_command and _artifact_requested(message))
+        artifact_required = _artifact_requested(message)
         artifact_path = _artifact_path(ast)
         artifact_present = artifact_path is not None
         recommended_artifact = _observed_artifact_path(message) if artifact_required else None
