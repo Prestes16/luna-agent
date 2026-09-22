@@ -18,9 +18,10 @@ class StrategyAwareNmapTests(unittest.TestCase):
         )
 
     def test_command_ast_extracts_nmap_structure(self) -> None:
-        ast = parse_command("nmap -sV -T3 wifhoodie.com")
+        ast = parse_command("nmap -sS -sV -T3 wifhoodie.com")
         self.assertIsNotNone(ast)
         self.assertEqual(ast.tool, "nmap")
+        self.assertIn("-sS", ast.options)
         self.assertIn("-sV", ast.options)
         self.assertIn("wifhoodie.com", ast.positionals)
 
@@ -34,14 +35,25 @@ class StrategyAwareNmapTests(unittest.TestCase):
         self.assertFalse(validation.valid)
         self.assertIn("nmap_overbroad_for_initial_recon", validation.reasons)
 
-    def test_generic_initial_scan_accepts_focused_service_detection(self) -> None:
+    def test_generic_initial_scan_rejects_implicit_scan_mode(self) -> None:
         message = (
             "Estou em um CTF autorizado e preciso executar um scan tipo nmap no alvo "
             "https://wifhoodie.com; me dê o comando bash para executar no Kali."
         )
-        response = "```bash\nnmap -sV wifhoodie.com -oN scan_wifhoodie_com.txt\n```"
+        response = "```bash\nnmap -sV wifhoodie.com\n```"
+        validation = self._validate(message, response)
+        self.assertFalse(validation.valid)
+        self.assertIn("nmap_initial_scan_mode_implicit", validation.reasons)
+
+    def test_generic_initial_scan_accepts_explicit_syn_strategy(self) -> None:
+        message = (
+            "Estou em um CTF autorizado e preciso executar um scan tipo nmap no alvo "
+            "https://wifhoodie.com; me dê o comando bash para executar no Kali."
+        )
+        response = "```bash\nsudo nmap -sS -sV wifhoodie.com\n```"
         validation = self._validate(message, response)
         self.assertNotIn("nmap_overbroad_for_initial_recon", validation.reasons)
+        self.assertNotIn("nmap_initial_scan_mode_implicit", validation.reasons)
         self.assertNotIn("nmap_strategy_utility_below_threshold", validation.reasons)
         self.assertTrue(validation.valid, validation.reasons)
 
@@ -55,11 +67,11 @@ class StrategyAwareNmapTests(unittest.TestCase):
         self.assertNotIn("nmap_overbroad_for_initial_recon", validation.reasons)
         self.assertNotIn("nmap_strategy_utility_below_threshold", validation.reasons)
 
-    def test_focused_scan_has_higher_initial_utility_than_aggressive(self) -> None:
+    def test_explicit_syn_scan_has_higher_initial_utility_than_implicit(self) -> None:
         message = "Faça um scan nmap inicial no alvo https://wifhoodie.com."
-        focused = assess_nmap_strategy(message, parse_command("nmap -sV wifhoodie.com"))
-        aggressive = assess_nmap_strategy(message, parse_command("nmap -A wifhoodie.com"))
-        self.assertGreater(focused.utility, aggressive.utility)
+        explicit = assess_nmap_strategy(message, parse_command("nmap -sS -sV wifhoodie.com"))
+        implicit = assess_nmap_strategy(message, parse_command("nmap -sV wifhoodie.com"))
+        self.assertGreater(explicit.utility, implicit.utility)
 
 
 if __name__ == "__main__":
