@@ -138,9 +138,10 @@ def _observed_artifact_path(message: str) -> str | None:
     # Only bind a path as an output artifact when it appears AFTER explicit
     # persistence language, preventing accidental overwrite of an input file.
     marker_group = "|".join(re.escape(marker) for marker in _ARTIFACT_MARKERS)
+    artifact_pattern = _ARTIFACT_PATH_RE.pattern.removeprefix("(?i)")
     contextual = re.search(
         rf"(?is)(?<!\w)(?:{marker_group})(?!\w).{{0,120}}?"
-        + _ARTIFACT_PATH_RE.pattern,
+        + artifact_pattern,
         message,
     )
     if contextual:
