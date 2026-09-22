@@ -15,7 +15,7 @@ from typing import Iterable
 
 _NMAP_VALUE_OPTIONS = {
     "-p", "--top-ports", "--exclude-ports", "--script", "--script-args",
-    "-oN", "-oX", "-oG", "-oA", "-iL", "--exclude", "--dns-servers",
+    "-oN", "-oX", "-oS", "-oG", "-oA", "-iL", "--exclude", "--dns-servers",
     "--source-port", "-g", "--max-retries", "--host-timeout", "--scan-delay",
     "--max-rate", "--min-rate", "-S", "-e", "-D", "--proxies",
 }
@@ -83,7 +83,7 @@ def parse_command(command: str) -> CommandAST | None:
             index += 2
             continue
 
-        compact_match = re.match(r"^(-p|-T|-oN|-oX|-oG|-oA)(.+)$", token)
+        compact_match = re.match(r"^(-p|-T|-oN|-oX|-oS|-oG|-oA)(.+)$", token)
         if compact_match:
             key, value = compact_match.groups()
             options.append(key)
