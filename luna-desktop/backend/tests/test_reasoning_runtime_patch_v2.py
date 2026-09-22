@@ -39,6 +39,101 @@ class UrlAwareValidatorTests(unittest.TestCase):
 
         self.assertIn("unobserved_endpoint_mentioned", validation.reasons)
 
+    def test_status_cannot_be_promoted_to_fact_for_untested_endpoint(self) -> None:
+        scenario = ScenarioContext()
+        message = (
+            "GET /api/me retornou HTTP/1.1 401 Unauthorized.\n"
+            "Também observei /api/admin/users. Esse endpoint ainda NÃO foi testado.\n"
+            "Separe fatos, inferências e hipóteses."
+        )
+        delta = scenario.update(message)
+        response = """FATOS:
+- 401 em /api/admin/users (implícito).
+
+INFERÊNCIAS:
+- O frontend sugere uma área administrativa.
+
+HIPÓTESES:
+- O backend pode aplicar autorização por role.
+"""
+        validation = validate_model_response(
+            message=message,
+            response=response,
+            scenario=scenario,
+            evidence_delta_count=delta.count,
+        )
+        self.assertFalse(validation.valid)
+        self.assertIn("status_claim_for_untested_endpoint", validation.reasons)
+
+    def test_hypothesis_for_untested_endpoint_must_remain_conditional(self) -> None:
+        scenario = ScenarioContext()
+        message = (
+            "Observei /api/admin/users. Esse endpoint ainda NÃO foi testado.\n"
+            "Separe fatos, inferências e hipóteses."
+        )
+        delta = scenario.update(message)
+        response = """FATOS:
+- /api/admin/users foi observado e ainda não foi testado.
+
+INFERÊNCIAS:
+- Ainda não há evidência da autorização server-side.
+
+HIPÓTESES:
+- /api/admin/users será 403 Forbidden.
+"""
+        validation = validate_model_response(
+            message=message,
+            response=response,
+            scenario=scenario,
+            evidence_delta_count=delta.count,
+        )
+        self.assertFalse(validation.valid)
+        self.assertIn("definitive_outcome_for_untested_endpoint", validation.reasons)
+
+    def test_conditional_hypothesis_is_allowed(self) -> None:
+        scenario = ScenarioContext()
+        message = (
+            "Observei /api/admin/users. Esse endpoint ainda NÃO foi testado.\n"
+            "Separe fatos, inferências e hipóteses."
+        )
+        delta = scenario.update(message)
+        response = """FATOS:
+- /api/admin/users foi observado e ainda não foi testado.
+
+INFERÊNCIAS:
+- O check visual não prova autorização server-side.
+
+HIPÓTESES:
+- Se o backend aplicar autorização por role, um 403 seria compatível; também pode haver outro comportamento.
+"""
+        validation = validate_model_response(
+            message=message,
+            response=response,
+            scenario=scenario,
+            evidence_delta_count=delta.count,
+        )
+        self.assertTrue(validation.valid, validation.reasons)
+
+    def test_unobserved_negative_client_behavior_is_rejected(self) -> None:
+        scenario = ScenarioContext()
+        message = (
+            "No frontend observei if (user.role === 'admin') showAdminPanel().\n"
+            "Também observei /api/admin/users; ainda não foi testado."
+        )
+        delta = scenario.update(message)
+        response = (
+            "O frontend não realiza chamadas API ainda. "
+            "/api/admin/users permanece não testado."
+        )
+        validation = validate_model_response(
+            message=message,
+            response=response,
+            scenario=scenario,
+            evidence_delta_count=delta.count,
+        )
+        self.assertFalse(validation.valid)
+        self.assertIn("unsupported_client_behavior_claim", validation.reasons)
+
 
 if __name__ == "__main__":
     unittest.main()
