@@ -27,12 +27,12 @@ _INLINE_CURL_RE = re.compile(
     r"((?:sudo\s+)?curl(?:\.exe)?\s+[^\r\n`]+)"
 )
 _EXEC_RE = re.compile(
-    r"^(?:sudo(?:\\s+(?:-[A-Za-z]+|--[^\\s]+))*\\s+)?"
-    r"(?:curl(?:\\.exe)?|wget|http|httpie|nmap|masscan|rustscan|ffuf|gobuster|"
+    r"^(?:sudo(?:\s+(?:-[A-Za-z]+|--[^\s]+))*\s+)?"
+    r"(?:curl(?:\.exe)?|wget|http|httpie|nmap|masscan|rustscan|ffuf|gobuster|"
     r"feroxbuster|dirsearch|nikto|nuclei|sqlmap|wpscan|dig|nslookup|dnsenum|"
     r"dnsrecon|amass|subfinder|traceroute|ping|whatweb|httpx|enum4linux(?:-ng)?|"
     r"smbclient|netexec|crackmapexec|hydra|medusa|john|hashcat|searchsploit|"
-    r"msfconsole|python(?:3)?|pwsh|powershell|invoke-webrequest|iwr)\\b",
+    r"msfconsole|python(?:3)?|pwsh|powershell|invoke-webrequest|iwr)\b",
     re.IGNORECASE,
 )
 
