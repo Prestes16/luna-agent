@@ -11,7 +11,8 @@ from __future__ import annotations
 from typing import Any
 
 from . import reasoning_pipeline as _rp
-from .command_ast import assess_nmap_strategy\nfrom .command_policy import assess_command_policy, parse_effective_command
+from .command_ast import assess_nmap_strategy
+from .command_policy import assess_command_policy, parse_effective_command
 from .operational_transform import transform_response_commands
 from .reasoning_runtime_patch_v8 import (
     build_replan_instruction as _previous_build_replan,
