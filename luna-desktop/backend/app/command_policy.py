@@ -34,7 +34,7 @@ _ARTIFACT_MARKERS = (
     "persistir", "persistente", "evidência", "evidencia",
 )
 _ARTIFACT_PATH_RE = re.compile(
-    r"""(?i)(?P<path>(?:[A-Za-z]:[\\/]|/|~/)?[^\\s`"']+\\.(?:txt|log|xml|gnmap|nmap))"""
+    r"""(?i)(?P<path>(?:[A-Za-z]:[\\/]|/|~/)?[^\s`"']+\.(?:txt|log|xml|gnmap|nmap))"""
 )
 
 
