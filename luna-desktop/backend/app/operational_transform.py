@@ -12,7 +12,8 @@ import re
 import shlex
 from dataclasses import asdict, dataclass
 
-from .command_ast import infer_nmap_intent\nfrom .command_policy import assess_command_policy, effective_tool, parse_effective_command
+from .command_ast import infer_nmap_intent
+from .command_policy import assess_command_policy, effective_tool, parse_effective_command
 
 
 _FENCE_RE = re.compile(r"```(?P<label>[A-Za-z0-9_+.-]*)[ \t]*(?P<body>.*?)```", re.DOTALL)
