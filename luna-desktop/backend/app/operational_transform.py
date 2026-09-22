@@ -12,7 +12,7 @@ import re
 import shlex
 from dataclasses import asdict, dataclass
 
-from .command_policy import assess_command_policy, effective_tool
+from .command_ast import infer_nmap_intent\nfrom .command_policy import assess_command_policy, effective_tool, parse_effective_command
 
 
 _FENCE_RE = re.compile(r"```(?P<label>[A-Za-z0-9_+.-]*)[ \t]*(?P<body>.*?)```", re.DOTALL)
@@ -22,12 +22,38 @@ _FENCE_RE = re.compile(r"```(?P<label>[A-Za-z0-9_+.-]*)[ \t]*(?P<body>.*?)```", 
 class OperationalMutation:
     original_sha256: str
     approved_sha256: str
+    scan_mode_added: bool
     sudo_added: bool
     artifact_added: bool
     artifact_path: str | None
 
     def to_safe_dict(self) -> dict:
         return asdict(self)
+
+
+_EXPLICIT_NMAP_SCAN_MODES = {"-ss", "-st", "-su", "-sn", "-sy", "-sz"}
+
+
+def _add_initial_syn_mode(command: str) -> str:
+    """Insert an explicit SYN scan mode while preserving the factual target."""
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        return command
+    if not tokens:
+        return command
+
+    nmap_index = next(
+        (
+            index for index, token in enumerate(tokens)
+            if token.casefold().removesuffix(".exe") == "nmap"
+        ),
+        None,
+    )
+    if nmap_index is None:
+        return command
+    tokens.insert(nmap_index + 1, "-sS")
+    return shlex.join(tokens)
 
 
 def _prepend_sudo(command: str) -> str:
@@ -48,11 +74,24 @@ def normalize_operator_command(message: str, command: str) -> tuple[str, Operati
         return command, None
 
     approved = command.strip()
+    scan_mode_added = False
     sudo_added = False
     artifact_added = False
     artifact_path = assessment.artifact_path
 
-    if assessment.requires_elevation and not assessment.has_sudo:
+    # Final operator-facing commands should not fail merely because a small local
+    # model omitted Nmap's scan technique on a generic initial scan.  That gap is
+    # mechanically repairable without changing target, ports, scripts or output.
+    ast = parse_effective_command(approved)
+    if ast and ast.tool == "nmap" and infer_nmap_intent(message) == "initial":
+        options = {option.casefold() for option in ast.options}
+        if not (options & _EXPLICIT_NMAP_SCAN_MODES):
+            approved = _add_initial_syn_mode(approved)
+            scan_mode_added = approved != command.strip()
+
+    # -sS requires raw sockets, so the same deterministic pass supplies sudo.
+    after_mode = assess_command_policy(message, approved)
+    if after_mode.requires_elevation and not after_mode.has_sudo:
         approved = _prepend_sudo(approved)
         sudo_added = True
 
@@ -74,6 +113,7 @@ def normalize_operator_command(message: str, command: str) -> tuple[str, Operati
     mutation = OperationalMutation(
         original_sha256=assessment.sha256,
         approved_sha256=final.sha256,
+        scan_mode_added=scan_mode_added,
         sudo_added=sudo_added,
         artifact_added=artifact_added,
         artifact_path=artifact_path,
