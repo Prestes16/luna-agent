@@ -57,13 +57,43 @@ def _observed_hosts(message: str) -> set[str]:
     return hosts
 
 
-def _nmap_targets(command: str) -> tuple[list[str], bool]:
-    """Return positional Nmap targets and whether a URL scheme was used."""
+def _effective_command_tokens(command: str) -> list[str]:
+    """Return executable argv after an optional sudo wrapper."""
     try:
         tokens = shlex.split(command, posix=True)
     except ValueError:
         tokens = command.split()
-    if not tokens or tokens[0].casefold() != "nmap":
+    if not tokens:
+        return []
+    if tokens[0].casefold() != "sudo":
+        return tokens
+
+    index = 1
+    value_options = {"-u", "--user", "-g", "--group", "-h", "--host", "-C", "--close-from"}
+    while index < len(tokens):
+        token = tokens[index]
+        if token == "--":
+            index += 1
+            break
+        if token in value_options and index + 1 < len(tokens):
+            index += 2
+            continue
+        if token.startswith("-"):
+            index += 1
+            continue
+        break
+    return tokens[index:]
+
+
+def _is_nmap_command(command: str) -> bool:
+    tokens = _effective_command_tokens(command)
+    return bool(tokens and tokens[0].casefold().removesuffix(".exe") == "nmap")
+
+
+def _nmap_targets(command: str) -> tuple[list[str], bool]:
+    """Return positional Nmap targets and whether a URL scheme was used."""
+    tokens = _effective_command_tokens(command)
+    if not tokens or tokens[0].casefold().removesuffix(".exe") != "nmap":
         return [], False
 
     value_options = {
@@ -102,7 +132,7 @@ def _nmap_targets(command: str) -> tuple[list[str], bool]:
 def _command_fidelity_reasons(message: str, response: str) -> list[str]:
     reasons: list[str] = []
     commands = extract_commands(response)
-    nmap_commands = [cmd for cmd in commands if cmd.casefold().startswith("nmap ")]
+    nmap_commands = [cmd for cmd in commands if _is_nmap_command(cmd)]
 
     if _requested_nmap(message):
         if not nmap_commands:
