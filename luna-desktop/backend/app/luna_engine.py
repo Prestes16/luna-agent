@@ -214,6 +214,23 @@ def _build_system_prompt(
             "Qualquer endpoint/header fora das allowlists factuais ou da mensagem atual é "
             "alucinação e não pode aparecer nem como histórico."
         ),
+        (
+            "Comandos Bash/Kali devem usar executáveis e flags reais. Preserve literalmente a "
+            "ferramenta e o target do operador; não invente nomes de produto, host, porta ou path."
+        ),
+        (
+            "Para Nmap inicial no Kali, prefira técnica explícita: -sS quando raw sockets/sudo "
+            "forem adequados; -sT quando a execução precisar ser não privilegiada. Não use -A "
+            "nem --script=vuln por padrão sem pedido correspondente."
+        ),
+        (
+            "Arquivos de saída são opt-in: não acrescente -oN/-oA/.txt/.xml nem caminho de "
+            "artefato se o operador não pediu explicitamente persistência."
+        ),
+        (
+            "Se o operador pedir somente um comando, entregue o comando executável de forma "
+            "direta; explicações extras devem ser mínimas e tecnicamente necessárias."
+        ),
         "Entregue somente a resposta final; nunca exponha chain-of-thought.",
     ]
 
