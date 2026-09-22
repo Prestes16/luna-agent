@@ -98,6 +98,18 @@ class OperationalCommandPolicyTests(unittest.TestCase):
         self.assertFalse(assessment.artifact_required)
         self.assertIsNone(assessment.recommended_artifact)
 
+    def test_input_filename_does_not_imply_output_artifact(self) -> None:
+        message = (
+            "CTF autorizado: use nmap com -iL /home/kali/Desktop/targets.txt "
+            "e me dê o comando bash."
+        )
+        assessment = assess_command_policy(
+            message,
+            "sudo nmap -sS -iL /home/kali/Desktop/targets.txt",
+        )
+        self.assertFalse(assessment.artifact_required)
+        self.assertIsNone(assessment.recommended_artifact)
+
     def test_target_mismatch_is_never_auto_repaired(self) -> None:
         response = "```bash\nnmap -sS example.com\n```"
         validation = self._validate(GENERIC_PROMPT, response)
