@@ -1,8 +1,7 @@
 """Structured command parsing for Luna's reasoning pipeline.
 
-The validator should reason over command structure, not raw strings.  This module
-provides a small deterministic AST for executable commands and a focused Nmap
-strategy assessment used by later quality gates.
+The validator reasons over command structure, not raw strings. This module
+provides a deterministic AST plus a multi-objective Nmap strategy score.
 """
 
 from __future__ import annotations
@@ -20,6 +19,7 @@ _NMAP_VALUE_OPTIONS = {
     "--source-port", "-g", "--max-retries", "--host-timeout", "--scan-delay",
     "--max-rate", "--min-rate", "-S", "-e", "-D", "--proxies",
 }
+_EXPLICIT_SCAN_MODES = {"-ss", "-st", "-su", "-sn", "-sy", "-sz"}
 
 
 @dataclass(frozen=True)
@@ -83,7 +83,6 @@ def parse_command(command: str) -> CommandAST | None:
             index += 2
             continue
 
-        # Common compact Nmap forms such as -p80,443, -T4 and -oNscan.txt.
         compact_match = re.match(r"^(-p|-T|-oN|-oX|-oG|-oA)(.+)$", token)
         if compact_match:
             key, value = compact_match.groups()
@@ -144,13 +143,13 @@ def _contains_option(ast: CommandAST, prefixes: Iterable[str]) -> bool:
 
 
 def assess_nmap_strategy(message: str, ast: CommandAST) -> NmapStrategyAssessment:
-    """Score Nmap strategy as information gain discounted by noise and cost.
+    """Score Nmap strategy as controlled information gain discounted by noise/cost.
 
-    U = IG * exp(-(lambda_n * N + lambda_c * C))
+    U = IG * K * exp(-(lambda_n * N + lambda_c * C))
 
-    The score is contextual.  A noisy command can be appropriate when the
-    operator explicitly requested a comprehensive/aggressive scan, but it should
-    not be the default answer to a generic initial reconnaissance request.
+    K is a control factor. For an initial operator-facing Kali command, an
+    explicit scan technique (-sS/-sT/-sU/...) is rewarded over relying on an
+    implicit Nmap default. This makes the command reproducible and intentional.
     """
     if ast.tool != "nmap":
         return NmapStrategyAssessment("not_nmap", 1.0, 0.0, 0.0, 1.0, ())
@@ -168,7 +167,11 @@ def assess_nmap_strategy(message: str, ast: CommandAST) -> NmapStrategyAssessmen
     vuln_scripts = "vuln" in values.get("--script", "")
     host_discovery_only = "-sn" in options
 
-    # Information gain estimates are deliberately coarse and deterministic.
+    syn_scan = "-ss" in options
+    connect_scan = "-st" in options
+    udp_scan = "-su" in options
+    explicit_scan_mode = bool(options & _EXPLICIT_SCAN_MODES)
+
     information_gain = 0.52
     if service_detection:
         information_gain += 0.22
@@ -182,12 +185,23 @@ def assess_nmap_strategy(message: str, ast: CommandAST) -> NmapStrategyAssessmen
         information_gain += 0.06
     if vuln_scripts:
         information_gain += 0.08
+    if udp_scan:
+        information_gain += 0.05
     if host_discovery_only:
         information_gain = 0.42
     information_gain = min(1.0, information_gain)
 
     noise = 0.14
     cost = 0.16
+    if syn_scan:
+        noise += 0.04
+        cost += 0.03
+    if connect_scan:
+        noise += 0.08
+        cost += 0.07
+    if udp_scan:
+        noise += 0.16
+        cost += 0.24
     if service_detection:
         noise += 0.10
         cost += 0.12
@@ -213,17 +227,25 @@ def assess_nmap_strategy(message: str, ast: CommandAST) -> NmapStrategyAssessmen
     noise = min(1.0, noise)
     cost = min(1.0, cost)
 
-    # For explicitly comprehensive/vulnerability scans, high noise is expected
-    # and should not be penalized as a strategy mismatch.
     lambda_noise = 0.20 if intent in {"comprehensive", "vulnerability"} else 0.90
     lambda_cost = 0.25 if intent in {"comprehensive", "vulnerability", "full_ports"} else 0.60
-    utility = information_gain * math.exp(-(lambda_noise * noise + lambda_cost * cost))
+
+    control_factor = 1.0
+    if intent == "initial":
+        control_factor = 1.05 if explicit_scan_mode else 0.82
+
+    utility = information_gain * control_factor * math.exp(
+        -(lambda_noise * noise + lambda_cost * cost)
+    )
+    utility = min(1.0, utility)
 
     reasons: list[str] = []
     if intent == "initial" and aggressive:
         reasons.append("nmap_overbroad_for_initial_recon")
     if intent == "initial" and vuln_scripts:
         reasons.append("nmap_vuln_scripts_not_requested")
+    if intent == "initial" and not explicit_scan_mode:
+        reasons.append("nmap_initial_scan_mode_implicit")
     if intent == "host_discovery" and not host_discovery_only:
         reasons.append("nmap_strategy_misses_host_discovery_intent")
 
