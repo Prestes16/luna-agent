@@ -87,7 +87,10 @@ def transform_response_commands(message: str, response: str) -> tuple[str, list[
 
     def replace_fence(match: re.Match[str]) -> str:
         label = match.group("label")
-        body = match.group("body")
+        # The fence regex deliberately does not consume newlines after the
+        # language label. Canonicalize them here so operator-visible output is
+        # stable: ```bash\ncommand, never ```bash\n\ncommand.
+        body = re.sub(r"^(?:\\r?\\n)+", "", match.group("body"))
         output_lines: list[str] = []
 
         for raw_line in body.splitlines():
