@@ -110,6 +110,41 @@ class OperationalCommandPolicyTests(unittest.TestCase):
         self.assertFalse(assessment.artifact_required)
         self.assertIsNone(assessment.recommended_artifact)
 
+    def test_input_file_is_not_reused_as_output_when_persistence_is_requested(self) -> None:
+        message = (
+            "CTF autorizado: use nmap com -iL /home/kali/Desktop/targets.txt, "
+            "salve o resultado e me dê o comando bash."
+        )
+        assessment = assess_command_policy(
+            message,
+            "sudo nmap -sS -iL /home/kali/Desktop/targets.txt",
+        )
+        self.assertTrue(assessment.artifact_required)
+        self.assertIsNone(assessment.recommended_artifact)
+
+        response = "```bash\\nsudo nmap -sS -iL /home/kali/Desktop/targets.txt\\n```"
+        validation = self._validate(message, response)
+        self.assertFalse(validation.valid)
+        self.assertIn("nmap_scan_artifact_missing", validation.reasons)
+
+        transformed, mutations = transform_response_commands(message, response)
+        self.assertEqual(mutations, [])
+        self.assertNotIn("-oN /home/kali/Desktop/targets.txt", transformed)
+
+    def test_output_path_after_persistence_marker_is_preserved(self) -> None:
+        message = (
+            "CTF autorizado: use nmap com -iL /home/kali/Desktop/targets.txt "
+            "e salve o resultado em /home/kali/Desktop/scan_result.txt."
+        )
+        assessment = assess_command_policy(
+            message,
+            "sudo nmap -sS -iL /home/kali/Desktop/targets.txt",
+        )
+        self.assertTrue(assessment.artifact_required)
+        self.assertEqual(
+            assessment.recommended_artifact,
+            "/home/kali/Desktop/scan_result.txt",
+        )
     def test_target_mismatch_is_never_auto_repaired(self) -> None:
         response = "```bash\nnmap -sS example.com\n```"
         validation = self._validate(GENERIC_PROMPT, response)
