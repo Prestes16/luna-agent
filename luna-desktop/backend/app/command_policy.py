@@ -134,11 +134,18 @@ def _observed_artifact_path(message: str) -> str | None:
             if token.startswith(flag) and len(token) > len(flag):
                 return token[len(flag):].strip("`'\".,;")
 
-    match = _ARTIFACT_PATH_RE.search(message)
-    if match:
-        return match.group("path").rstrip(".,;:")
+    # A free-standing filename may be an INPUT (-iL targets.txt, wordlist etc.).
+    # Only bind a path as an output artifact when it appears AFTER explicit
+    # persistence language, preventing accidental overwrite of an input file.
+    marker_group = "|".join(re.escape(marker) for marker in _ARTIFACT_MARKERS)
+    contextual = re.search(
+        rf"(?is)(?<!\w)(?:{marker_group})(?!\w).{{0,120}}?"
+        + _ARTIFACT_PATH_RE.pattern,
+        message,
+    )
+    if contextual:
+        return contextual.group("path").rstrip(".,;:")
     return None
-
 
 def assess_command_policy(message: str, command: str) -> CommandPolicyAssessment:
     """Evaluate deterministic operational requirements for an exact command."""
