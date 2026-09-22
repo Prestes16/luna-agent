@@ -116,7 +116,7 @@ def _artifact_requested(message: str) -> bool:
     if _ARTIFACT_PATH_RE.search(message):
         return True
     return any(
-        re.search(rf"(?<!\\w){re.escape(marker)}(?!\\w)", normalized)
+        re.search(rf"(?<!\w){re.escape(marker)}(?!\w)", normalized)
         for marker in _ARTIFACT_MARKERS
     )
 
