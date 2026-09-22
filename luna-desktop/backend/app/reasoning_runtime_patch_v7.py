@@ -1,7 +1,7 @@
 """Seventh-stage hardening: strategy-aware command validation.
 
 Stages 1-6 establish factual discipline, canonical parsing and critical tool/target
-vetoes.  Stage 7 evaluates whether a syntactically valid command is strategically
+vetoes. Stage 7 evaluates whether a syntactically valid command is strategically
 appropriate for the operator's stated intent.
 """
 
@@ -75,11 +75,15 @@ def build_replan_instruction(validation, scenario_prompt: str, current_message: 
 
     if "nmap_overbroad_for_initial_recon" in reasons:
         additions.append(
-            "o pedido é uma varredura inicial genérica: não use -A por padrão; escolha uma estratégia focalizada de alto ganho de informação e menor ruído"
+            "o pedido é uma varredura inicial genérica: não use -A por padrão; escolha uma técnica focalizada de alto ganho de informação e menor ruído"
         )
     if "nmap_vuln_scripts_not_requested" in reasons:
         additions.append(
             "não use --script=vuln se o operador não pediu avaliação de vulnerabilidades"
+        )
+    if "nmap_initial_scan_mode_implicit" in reasons:
+        additions.append(
+            "para um comando Nmap inicial no Kali, torne a técnica explícita: prefira -sS com sudo quando raw sockets forem adequados; use -sT quando a execução precisar ser não privilegiada"
         )
     if "nmap_strategy_misses_host_discovery_intent" in reasons:
         additions.append(
@@ -87,7 +91,7 @@ def build_replan_instruction(validation, scenario_prompt: str, current_message: 
         )
     if "nmap_strategy_utility_below_threshold" in reasons:
         additions.append(
-            "a utilidade estratégica U=IG*exp(-(lambda_n*N+lambda_c*C)) ficou abaixo do limiar; maximize informação útil por custo/ruído para a intenção atual"
+            "a utilidade estratégica U=IG*K*exp(-(lambda_n*N+lambda_c*C)) ficou abaixo do limiar; maximize informação útil e controle explícito por custo/ruído"
         )
 
     if not additions:
