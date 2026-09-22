@@ -50,6 +50,8 @@ def install_response_attestation(engine_cls: type) -> None:
         full_text = ""
         emitted_final_text = False
         sid = _session_id(args, kwargs)
+        final_visible_text: str | None = None
+        history_needs_rewrite = False
 
         async for raw_event in original(self, message, *args, **kwargs):
             try:
@@ -60,9 +62,9 @@ def install_response_attestation(engine_cls: type) -> None:
 
             event_type = event.get("type")
 
-            # The core engine already buffers generation until validation.  V9
-            # additionally withholds those text chunks for a final deterministic
-            # command normalization pass before anything reaches the operator.
+            # The core engine already buffers generation until validation. V9
+            # additionally withholds text for one deterministic normalization pass
+            # before the exact operator-visible command is released.
             if event_type == "text_chunk":
                 full_text += str(event.get("text", ""))
                 continue
@@ -70,6 +72,9 @@ def install_response_attestation(engine_cls: type) -> None:
             if event_type == "response_meta":
                 transformed, mutations = transform_response_commands(message, full_text)
                 visible_text = transformed or full_text
+                final_visible_text = visible_text
+                history_needs_rewrite = visible_text != full_text
+
                 reasons = event.get("validation_reasons") or ()
                 score = score_response_quality(message, visible_text, reasons)
                 attestations = command_attestations(message, visible_text)
@@ -82,9 +87,6 @@ def install_response_attestation(engine_cls: type) -> None:
                 if visible_text:
                     yield json.dumps({"type": "text_chunk", "text": visible_text}, ensure_ascii=False)
                     emitted_final_text = True
-
-                if visible_text != full_text:
-                    _replace_latest_assistant_history(self, sid, visible_text)
 
                 safe_mutations = [mutation.to_safe_dict() for mutation in mutations]
                 event.update({
@@ -115,6 +117,11 @@ def install_response_attestation(engine_cls: type) -> None:
                 continue
 
             yield raw_event
+
+        # The core stream persists history only after yielding response_meta, so
+        # rewrite it here, after the wrapped generator has fully completed.
+        if history_needs_rewrite and final_visible_text is not None:
+            _replace_latest_assistant_history(self, sid, final_visible_text)
 
         # Defensive fallback for providers/paths that ended without response_meta.
         if full_text and not emitted_final_text:
