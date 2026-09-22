@@ -115,7 +115,10 @@ def _artifact_requested(message: str) -> bool:
         return True
     if _ARTIFACT_PATH_RE.search(message):
         return True
-    return any(marker in normalized for marker in _ARTIFACT_MARKERS)
+    return any(
+        re.search(rf"(?<!\\w){re.escape(marker)}(?!\\w)", normalized)
+        for marker in _ARTIFACT_MARKERS
+    )
 
 
 def _observed_artifact_path(message: str) -> str | None:
