@@ -39,7 +39,7 @@ class StrategyAwareNmapTests(unittest.TestCase):
             "Estou em um CTF autorizado e preciso executar um scan tipo nmap no alvo "
             "https://wifhoodie.com; me dê o comando bash para executar no Kali."
         )
-        response = "```bash\nnmap -sV wifhoodie.com\n```"
+        response = "```bash\nnmap -sV wifhoodie.com -oN scan_wifhoodie_com.txt\n```"
         validation = self._validate(message, response)
         self.assertNotIn("nmap_overbroad_for_initial_recon", validation.reasons)
         self.assertNotIn("nmap_strategy_utility_below_threshold", validation.reasons)
