@@ -2,13 +2,14 @@
 
 # Apply runtime reasoning hardening before luna_engine imports the helpers.
 # Stage 1 fixes command/action parsing; stage 2 fixes URL-aware + semantic
-# validation; stage 3 validates command fidelity for operator-requested tools.
+# validation; stage 3 validates command fidelity; stage 4 adds a quantitative
+# instruction-fidelity quality gate.
 from . import reasoning_pipeline as _reasoning_pipeline
 from .reasoning_runtime_patch import (
     action_fingerprint as _patched_action_fingerprint,
     extract_commands as _patched_extract_commands,
 )
-from .reasoning_runtime_patch_v3 import (
+from .reasoning_runtime_patch_v4 import (
     build_replan_instruction as _patched_build_replan_instruction,
     validate_model_response as _patched_validate_model_response,
 )
