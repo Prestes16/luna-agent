@@ -3,6 +3,7 @@ import unittest
 
 from app.command_policy import assess_command_policy, effective_tool
 from app.luna_engine import LunaEngine  # noqa: F401
+from app.operational_transform import transform_response_commands
 from app.reasoning_pipeline import validate_model_response
 from app.reasoning_runtime_patch_v8 import command_attestations
 from app.scenario_context import ScenarioContext
@@ -29,22 +30,29 @@ class OperationalCommandPolicyTests(unittest.TestCase):
             evidence_delta_count=delta.count,
         )
 
-    def test_generic_scan_requires_persistent_artifact(self) -> None:
+    def test_generic_scan_missing_artifact_is_deterministically_repairable(self) -> None:
         response = "```bash\nnmap -sV wifhoodie.com\n```"
         validation = self._validate(GENERIC_PROMPT, response)
-        self.assertFalse(validation.valid)
-        self.assertIn("nmap_scan_artifact_missing", validation.reasons)
+        self.assertTrue(validation.valid, validation.reasons)
+        transformed, mutations = transform_response_commands(GENERIC_PROMPT, response)
+        self.assertEqual(len(mutations), 1)
+        self.assertIn("-oN scan_wifhoodie_com.txt", transformed)
 
     def test_focused_scan_with_artifact_is_operator_ready(self) -> None:
         response = "```bash\nnmap -sV wifhoodie.com -oN scan_wifhoodie_com.txt\n```"
         validation = self._validate(GENERIC_PROMPT, response)
         self.assertTrue(validation.valid, validation.reasons)
+        transformed, mutations = transform_response_commands(GENERIC_PROMPT, response)
+        self.assertEqual(mutations, [])
+        self.assertIn("nmap -sV wifhoodie.com -oN scan_wifhoodie_com.txt", transformed)
 
-    def test_privileged_nmap_mode_requires_sudo(self) -> None:
+    def test_privileged_nmap_mode_gets_deterministic_sudo(self) -> None:
         response = "```bash\nnmap -A wifhoodie.com -oN scan_wifhoodie_com.txt\n```"
         validation = self._validate(AGGRESSIVE_PROMPT, response)
-        self.assertFalse(validation.valid)
-        self.assertIn("nmap_privileged_mode_missing_sudo", validation.reasons)
+        self.assertTrue(validation.valid, validation.reasons)
+        transformed, mutations = transform_response_commands(AGGRESSIVE_PROMPT, response)
+        self.assertEqual(len(mutations), 1)
+        self.assertIn("sudo nmap -A wifhoodie.com", transformed)
 
     def test_sudo_wrapped_privileged_nmap_is_recognized(self) -> None:
         command = "sudo nmap -A wifhoodie.com -oN scan_wifhoodie_com.txt"
@@ -70,6 +78,14 @@ class OperationalCommandPolicyTests(unittest.TestCase):
     def test_policy_recommends_deterministic_artifact_name(self) -> None:
         assessment = assess_command_policy(GENERIC_PROMPT, "nmap -sV wifhoodie.com")
         self.assertEqual(assessment.recommended_artifact, "scan_wifhoodie_com.txt")
+
+    def test_target_mismatch_is_never_auto_repaired(self) -> None:
+        response = "```bash\nnmap -sV example.com\n```"
+        validation = self._validate(GENERIC_PROMPT, response)
+        self.assertFalse(validation.valid)
+        transformed, mutations = transform_response_commands(GENERIC_PROMPT, response)
+        self.assertEqual(mutations, [])
+        self.assertIn("example.com", transformed)
 
 
 if __name__ == "__main__":
