@@ -1,9 +1,9 @@
 """Deterministic operational policy for approved technical commands.
 
 The language model proposes a command; this module evaluates the exact command
-structure before it can be considered operator-ready.  The policy intentionally
-keeps non-compensable operational requirements outside the LLM: privilege needs,
-artifact persistence, target fidelity and command integrity.
+structure before it can be considered operator-ready. Non-compensable
+requirements stay outside the LLM: privilege needs, explicit artifact intent,
+target fidelity and command integrity.
 """
 
 from __future__ import annotations
@@ -28,6 +28,14 @@ _NMAP_PRIVILEGED_FLAGS = {
     "--privileged",
 }
 _NMAP_OUTPUT_FLAGS = ("-oN", "-oA", "-oX", "-oG")
+_ARTIFACT_MARKERS = (
+    "salve", "salvar", "grave", "gravar", "arquivo", "ficheiro",
+    "output", "saída", "saida", "relatório", "relatorio", "log",
+    "persistir", "persistente", "evidência", "evidencia",
+)
+_ARTIFACT_PATH_RE = re.compile(
+    r"(?i)(?P<path>(?:[A-Za-z]:[\\/]|/|~/)?[^\s`"']+\.(?:txt|log|xml|gnmap|nmap))"
+)
 
 
 @dataclass(frozen=True)
@@ -58,8 +66,6 @@ def _split_sudo(command: str) -> tuple[bool, list[str]]:
     if tokens[0].casefold() != "sudo":
         return False, tokens
 
-    # Support common non-interactive sudo switches without pretending to model
-    # the whole sudo grammar.  Value-taking options are skipped deterministically.
     index = 1
     value_options = {"-u", "--user", "-g", "--group", "-h", "--host", "-C", "--close-from"}
     while index < len(tokens):
@@ -82,18 +88,12 @@ def parse_effective_command(command: str) -> CommandAST | None:
     _, effective_tokens = _split_sudo(command)
     if not effective_tokens:
         return None
-    # shlex.join provides a deterministic shell-safe reconstruction.
     return _parse_base_command(shlex.join(effective_tokens))
 
 
 def effective_tool(command: str) -> str:
     ast = parse_effective_command(command)
     return ast.tool if ast else ""
-
-
-def _safe_target_slug(target: str) -> str:
-    slug = re.sub(r"[^A-Za-z0-9_-]+", "_", target.strip().rstrip(".")).strip("_")
-    return slug[:96] or "target"
 
 
 def _artifact_path(ast: CommandAST) -> str | None:
@@ -107,6 +107,34 @@ def _artifact_path(ast: CommandAST) -> str | None:
 def _requires_nmap_elevation(ast: CommandAST) -> bool:
     folded = {option.casefold() for option in ast.options}
     return bool(folded & _NMAP_PRIVILEGED_FLAGS)
+
+
+def _artifact_requested(message: str) -> bool:
+    normalized = message.casefold()
+    if any(flag.casefold() in normalized for flag in _NMAP_OUTPUT_FLAGS):
+        return True
+    if _ARTIFACT_PATH_RE.search(message):
+        return True
+    return any(marker in normalized for marker in _ARTIFACT_MARKERS)
+
+
+def _observed_artifact_path(message: str) -> str | None:
+    # Explicit Nmap output flag takes precedence and preserves the operator path.
+    try:
+        tokens = shlex.split(message, posix=True)
+    except ValueError:
+        tokens = message.split()
+    for index, token in enumerate(tokens):
+        if token in _NMAP_OUTPUT_FLAGS and index + 1 < len(tokens):
+            return tokens[index + 1].strip("`'\".,;")
+        for flag in _NMAP_OUTPUT_FLAGS:
+            if token.startswith(flag) and len(token) > len(flag):
+                return token[len(flag):].strip("`'\".,;")
+
+    match = _ARTIFACT_PATH_RE.search(message)
+    if match:
+        return match.group("path").rstrip(".,;:")
+    return None
 
 
 def assess_command_policy(message: str, command: str) -> CommandPolicyAssessment:
@@ -124,13 +152,11 @@ def assess_command_policy(message: str, command: str) -> CommandPolicyAssessment
 
     if ast and tool == "nmap":
         requires_elevation = _requires_nmap_elevation(ast)
-        artifact_required = bool(contract.wants_command)
+        # Output files are opt-in. A scan command must not silently create files.
+        artifact_required = bool(contract.wants_command and _artifact_requested(message))
         artifact_path = _artifact_path(ast)
         artifact_present = artifact_path is not None
-        target_for_name = contract.target_hosts[0] if contract.target_hosts else (
-            ast.positionals[-1] if ast.positionals else "target"
-        )
-        recommended_artifact = f"scan_{_safe_target_slug(target_for_name)}.txt"
+        recommended_artifact = _observed_artifact_path(message) if artifact_required else None
 
     normalized_positionals = {
         value.casefold().rstrip(".") for value in (ast.positionals if ast else ())
