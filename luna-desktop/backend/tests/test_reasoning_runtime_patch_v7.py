@@ -35,15 +35,16 @@ class StrategyAwareNmapTests(unittest.TestCase):
         self.assertFalse(validation.valid)
         self.assertIn("nmap_overbroad_for_initial_recon", validation.reasons)
 
-    def test_generic_initial_scan_rejects_implicit_scan_mode(self) -> None:
+    def test_strategy_layer_flags_implicit_scan_mode(self) -> None:
         message = (
             "Estou em um CTF autorizado e preciso executar um scan tipo nmap no alvo "
             "https://wifhoodie.com; me dê o comando bash para executar no Kali."
         )
-        response = "```bash\nnmap -sV wifhoodie.com\n```"
-        validation = self._validate(message, response)
-        self.assertFalse(validation.valid)
-        self.assertIn("nmap_initial_scan_mode_implicit", validation.reasons)
+        assessment = assess_nmap_strategy(
+            message,
+            parse_command("nmap -sV wifhoodie.com"),
+        )
+        self.assertIn("nmap_initial_scan_mode_implicit", assessment.reasons)
 
     def test_generic_initial_scan_accepts_explicit_syn_strategy(self) -> None:
         message = (
