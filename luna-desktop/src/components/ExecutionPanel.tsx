@@ -163,33 +163,30 @@ const CategorySection: React.FC<{
 
   return (
     <div className="mb-1">
-      <button
-        onClick={() => setCollapsed(!collapsed)}
-        className="w-full flex items-center gap-1.5 px-2 py-1 rounded-sm text-[9px] font-mono font-bold tracking-wider transition-colors"
-        style={{ background: cat.bg, color: cat.text }}
-      >
-        {collapsed
-          ? <ChevronRight size={10} />
-          : <ChevronDown size={10} />
-        }
-        <span>{cat.label}</span>
-        <span className="opacity-50 font-normal">{lines.length} linhas</span>
-        {runningCount > 0 && (
-          <span
-            className="ml-1 px-1 rounded-sm"
-            style={{ background: cat.border + '33', color: cat.text }}
-          >
-            {runningCount} ativos
-          </span>
-        )}
+      <div className="group flex items-center rounded-sm" style={{ background: cat.bg, color: cat.text }}>
         <button
-          onClick={(e) => { e.stopPropagation(); onClear() }}
-          className="ml-auto opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
+          type="button"
+          onClick={() => setCollapsed(!collapsed)}
+          className="flex flex-1 items-center gap-1.5 px-2 py-1 text-left font-mono text-[9px] font-bold tracking-wider"
+        >
+          {collapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
+          <span>{cat.label}</span>
+          <span className="font-normal opacity-50">{lines.length} linhas</span>
+          {runningCount > 0 ? (
+            <span className="ml-1 rounded-sm px-1" style={{ background: cat.border + '33', color: cat.text }}>
+              {runningCount} ativos
+            </span>
+          ) : null}
+        </button>
+        <button
+          type="button"
+          onClick={onClear}
+          className="mr-2 opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
           title="Limpar seção"
         >
           <Trash2 size={9} />
         </button>
-      </button>
+      </div>
       {!collapsed && (
         <div className="mt-0.5 space-y-px">
           {lines.map((line) => <LogLine key={line.id} line={line} />)}
@@ -203,7 +200,7 @@ const CategorySection: React.FC<{
 const StatsTab: React.FC = () => {
   const { lessonStats } = useStore()
 
-  if (!lessonStats?.by_type) {
+  if (!lessonStats?.by_type || lessonStats.total_lessons <= 0) {
     return (
       <div className="flex flex-col items-center justify-center h-40 gap-2 mt-8">
         <BarChart2 size={24} className="text-cyber-dim" />
@@ -279,13 +276,26 @@ const ContextTab: React.FC = () => {
   const [editContent, setEditContent] = useState('')
   const [contextDraft, setContextDraft] = useState(userContext)
   const [contextSaved, setContextSaved] = useState(false)
+  const contextSavedTimerRef = useRef<number | null>(null)
   const markdown = workspacePath ? (projectMarkdown[workspacePath] ?? '') : ''
   const sorted   = [...activeFiles].sort((a, b) => b.timestamp - a.timestamp)
+
+  useEffect(() => () => {
+    if (contextSavedTimerRef.current !== null) {
+      window.clearTimeout(contextSavedTimerRef.current)
+    }
+  }, [])
 
   const saveUserContext = () => {
     setUserContext(contextDraft)
     setContextSaved(true)
-    setTimeout(() => setContextSaved(false), 2000)
+    if (contextSavedTimerRef.current !== null) {
+      window.clearTimeout(contextSavedTimerRef.current)
+    }
+    contextSavedTimerRef.current = window.setTimeout(() => {
+      setContextSaved(false)
+      contextSavedTimerRef.current = null
+    }, 2_000)
   }
 
   const getFileName = (p: string) => p.split(/[/\\]/).pop() ?? p
@@ -456,11 +466,13 @@ const ExecutionPanel: React.FC = () => {
     clearExecutionLog,
     setExecutionActiveCategory,
     setExecutionPanelVisible,
+    rightPanelTab,
+    setRightPanelTab,
     liveToolEvents,
     activeFiles,
   } = useStore()
 
-  const [tab, setTab] = useState<'exec' | 'context' | 'stats'>('exec')
+  const tab: 'exec' | 'context' | 'stats' = rightPanelTab === 'tools' ? 'exec' : rightPanelTab
   const scrollRef = useRef<HTMLDivElement>(null)
   const isAtBottom = useRef(true)
 
@@ -512,7 +524,7 @@ const ExecutionPanel: React.FC = () => {
         ).map(({ id, label, icon: Icon, badge }) => (
           <button
             key={id}
-            onClick={() => setTab(id)}
+            onClick={() => setRightPanelTab(id === 'exec' ? 'tools' : id)}
             className={`tab-cyber flex items-center gap-1 ${tab === id ? 'active' : ''}`}
           >
             <Icon size={10} />

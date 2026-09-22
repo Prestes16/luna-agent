@@ -138,7 +138,7 @@ const CompressBar = ({ progress, message }: { progress: number; message: string 
 const Projects: React.FC = () => {
   const navigate = useNavigate()
   const {
-    backendUrl, currentModel, userId, lunaApiToken, zeroCloudMode,
+    backendUrl, currentModel, lunaApiToken, zeroCloudMode,
     projects, activeProjectId, projectMessages,
     setProjects, setActiveProject, setProjectMessages, addProjectMessage, updateProjectMessage,
     setWorkspace, setProjectContext, setRightPanelTab, addActiveFile,
@@ -171,6 +171,12 @@ const Projects: React.FC = () => {
   )
   const activeMessages = activeProjectId ? (projectMessages[activeProjectId] ?? []) : []
 
+  const projectFetch = useCallback((path: string, init: RequestInit = {}) => {
+    const headers = new Headers(init.headers)
+    if (lunaApiToken) headers.set('X-Luna-Token', lunaApiToken)
+    return fetch(`${backendUrl}${path}`, { ...init, headers })
+  }, [backendUrl, lunaApiToken])
+
   // ── Auto-scroll ──────────────────────────────────────────────────────────
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -185,38 +191,41 @@ const Projects: React.FC = () => {
   const fetchProjects = useCallback(async () => {
     try {
       setFetchError(null)
-      const res = await fetch(`${backendUrl}/api/projects`)
+      const res = await projectFetch('/api/projects')
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setProjects(data.projects ?? [])
-    } catch (e: any) {
+    } catch {
       setFetchError('Não foi possível carregar projetos. Backend online?')
     }
-  }, [backendUrl, setProjects])
+  }, [projectFetch, setProjects])
 
   const fetchMessages = useCallback(async (projectId: number) => {
     try {
-      const res = await fetch(`${backendUrl}/api/projects/${projectId}/messages`)
+      const res = await projectFetch(`/api/projects/${projectId}/messages`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setProjectMessages(projectId, data.messages ?? [])
     } catch { /* silent */ }
-  }, [backendUrl, setProjectMessages])
+  }, [projectFetch, setProjectMessages])
 
   const fetchFacts = useCallback(async (projectId: number) => {
     try {
-      const res = await fetch(`${backendUrl}/api/projects/${projectId}/facts`)
+      const res = await projectFetch(`/api/projects/${projectId}/facts`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setFacts(data.facts ?? [])
     } catch { /* silent */ }
-  }, [backendUrl])
+  }, [projectFetch])
 
   const fetchContext = useCallback(async (projectId: number) => {
     try {
-      const res = await fetch(`${backendUrl}/api/projects/${projectId}/context`)
+      const res = await projectFetch(`/api/projects/${projectId}/context`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const data = await res.json()
       setContextText(data.context ?? '')
     } catch { /* silent */ }
-  }, [backendUrl])
+  }, [projectFetch])
 
   useEffect(() => { fetchProjects() }, [fetchProjects])
 
@@ -236,7 +245,7 @@ const Projects: React.FC = () => {
     if (!createForm.name.trim()) return
     setLoading(true)
     try {
-      const res = await fetch(`${backendUrl}/api/projects`, {
+      const res = await projectFetch('/api/projects', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(createForm),
@@ -248,7 +257,9 @@ const Projects: React.FC = () => {
       setCreateForm({ name: '', path: '', project_type: 'other', description: '', color: 'cyan' })
       // Auto-select the new project
       if (data.id) setActiveProject(data.id)
-    } catch { /* silent */ }
+    } catch (error) {
+      setFetchError(error instanceof Error ? `Falha ao criar projeto: ${error.message}` : 'Falha ao criar projeto')
+    }
     finally { setLoading(false) }
   }
 
@@ -271,7 +282,7 @@ const Projects: React.FC = () => {
     // Save user message to backend
     let userBackendId: number | undefined
     try {
-      const savedUser = await fetch(`${backendUrl}/api/projects/${activeProject.id}/messages`, {
+      const savedUser = await projectFetch(`/api/projects/${activeProject.id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: 'user', content, model: currentModel }),
@@ -316,7 +327,6 @@ const Projects: React.FC = () => {
         body: JSON.stringify({
           message: content,
           session_id: `project-${activeProject.id}`,
-          user_id: userId || undefined,
           model: currentModel,
           workspace_path: activeProject.path || null,
           zero_cloud_mode: zeroCloudMode,
@@ -374,7 +384,7 @@ const Projects: React.FC = () => {
               setStreamingMsgId(null)
               // Persist Luna response to backend
               try {
-                const saved = await fetch(`${backendUrl}/api/projects/${activeProject.id}/messages`, {
+                const saved = await projectFetch(`/api/projects/${activeProject.id}/messages`, {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({ role: 'luna', content: finalText, model: currentModel }),
@@ -451,8 +461,8 @@ const Projects: React.FC = () => {
           } catch { /* JSON parse error — ignore */ }
         }
       }
-    } catch (err: any) {
-      if (err?.name !== 'AbortError') {
+    } catch (error: unknown) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
         updateProjectMessage(activeProject.id, lunaId, {
           content: `⚠️ Erro de conexão com o backend. Verifique se Luna está rodando em ${backendUrl}`,
         })
@@ -466,7 +476,7 @@ const Projects: React.FC = () => {
       fetchContext(activeProject.id)
     }
   }, [
-    activeProject, input, sending, backendUrl, currentModel, lunaApiToken, userId, zeroCloudMode,
+    activeProject, input, sending, backendUrl, currentModel, lunaApiToken, zeroCloudMode, projectFetch,
     addProjectMessage, updateProjectMessage, setProjectContext, setRightPanelTab, addActiveFile,
     setWorkspace, fetchFacts, fetchContext,
   ])
@@ -483,11 +493,12 @@ const Projects: React.FC = () => {
   const addFact = async () => {
     if (!activeProjectId || !newFact.trim()) return
     try {
-      await fetch(`${backendUrl}/api/projects/${activeProjectId}/facts`, {
+      const response = await projectFetch(`/api/projects/${activeProjectId}/facts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fact: newFact.trim() }),
       })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
       setNewFact('')
       fetchFacts(activeProjectId)
     } catch { /* silent */ }
@@ -495,7 +506,8 @@ const Projects: React.FC = () => {
 
   const compressProject = async (projectId: number) => {
     try {
-      await fetch(`${backendUrl}/api/projects/${projectId}/compress`, { method: 'POST' })
+      const response = await projectFetch(`/api/projects/${projectId}/compress`, { method: 'POST' })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
       fetchMessages(projectId)
       fetchContext(projectId)
     } catch { /* silent */ }
@@ -503,7 +515,8 @@ const Projects: React.FC = () => {
 
   const deleteProject = async (projectId: number) => {
     try {
-      await fetch(`${backendUrl}/api/projects/${projectId}`, { method: 'DELETE' })
+      const response = await projectFetch(`/api/projects/${projectId}`, { method: 'DELETE' })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
       if (activeProjectId === projectId) setActiveProject(null)
       fetchProjects()
     } catch { /* silent */ }
@@ -511,25 +524,26 @@ const Projects: React.FC = () => {
 
   const togglePin = async (project: Project) => {
     try {
-      await fetch(`${backendUrl}/api/projects/${project.id}`, {
+      const response = await projectFetch(`/api/projects/${project.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ pinned: !project.pinned }),
       })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
       fetchProjects()
     } catch { /* silent */ }
   }
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="projects-page flex h-full min-h-0 flex-col">
       <TopBar title="Projects" />
 
-      <div className="flex flex-1 min-h-0" style={{ background: 'rgba(10, 15, 28, 0.95)' }}>
+      <div className="projects-layout flex min-h-0 flex-1" style={{ background: 'rgba(10, 15, 28, 0.95)' }}>
 
         {/* ── Left: Project list ─────────────────────────────────────── */}
         <div
-          className={`${sidebarOpen ? 'min-w-[220px] max-w-[280px] w-[260px]' : 'w-[52px]'} flex-shrink-0 border-r flex flex-col transition-all duration-200`}
+          className={`projects-list ${sidebarOpen ? 'projects-list-open min-w-[220px] max-w-[280px] w-[260px]' : 'w-[52px]'} flex flex-shrink-0 flex-col border-r transition-all duration-200`}
           style={{ borderColor: 'rgba(0, 212, 255, 0.15)' }}
         >
           <div
@@ -587,8 +601,12 @@ const Projects: React.FC = () => {
                   className="cursor-pointer rounded-xl border transition-all"
                   style={{
                     background: active ? 'rgba(0,212,255,0.04)' : 'rgba(255,255,255,0.015)',
-                    borderColor: active ? 'rgba(0,212,255,0.35)' : 'rgba(0,212,255,0.1)',
-                    borderLeft: `3px solid ${border}`,
+                    borderTopColor: active ? 'rgba(0,212,255,0.35)' : 'rgba(0,212,255,0.1)',
+                    borderRightColor: active ? 'rgba(0,212,255,0.35)' : 'rgba(0,212,255,0.1)',
+                    borderBottomColor: active ? 'rgba(0,212,255,0.35)' : 'rgba(0,212,255,0.1)',
+                    borderLeftColor: border,
+                    borderLeftStyle: 'solid',
+                    borderLeftWidth: 3,
                     boxShadow: active ? `0 0 16px rgba(0,212,255,0.08)` : 'none',
                   }}
                 >
@@ -659,7 +677,7 @@ const Projects: React.FC = () => {
         </div>
 
         {/* ── Center: Chat ───────────────────────────────────────────── */}
-        <div className="flex-1 min-w-0 flex flex-col border-r" style={{ borderColor: 'rgba(0, 212, 255, 0.15)', minWidth: '400px' }}>
+        <div className="projects-chat flex min-w-0 flex-1 flex-col border-r" style={{ borderColor: 'rgba(0, 212, 255, 0.15)' }}>
           {activeProject ? (
             <>
               {/* Header */}
@@ -764,7 +782,7 @@ const Projects: React.FC = () => {
         </div>
 
         {/* ── Right: Context panel ───────────────────────────────────── */}
-        <div className="w-[240px] flex-shrink-0 flex flex-col min-h-0">
+        <div className="projects-context-panel flex min-h-0 w-[240px] flex-shrink-0 flex-col">
           <div className="px-4 py-3 border-b flex-shrink-0" style={{ borderColor: 'rgba(0, 212, 255, 0.15)' }}>
             <div className="flex items-center gap-2 font-semibold text-sm" style={{ color: '#a78bfa' }}>
               <Brain size={15} />

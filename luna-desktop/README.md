@@ -1,14 +1,14 @@
-# Luna Desktop v3.0 🌙
+# Luna Cyber 🌙
 
-**Elite Autonomous AI Agent - Desktop Application**
+**Local AI Copilot para cybersecurity e desenvolvimento**
 
 Luna Desktop é uma aplicação multiplataforma de alta performance que traz toda a inteligência e capacidades do agente Luna para seu computador. Especializada em programação de grande porte, análise de segurança, criptografia e blockchain Solana.
 
 ## 🌟 Características Principais
 
-### 🧠 Inteligência Avançada
-- **Multi-Model AI**: Suporte a OpenAI GPT-4, Grok, Google Gemini e Anthropic Claude
-- **Raciocínio ReAct**: Análise profunda com pensamento, ação e reflexão
+### 🧠 Inteligência Local
+- **Ollama local**: `luna-cyber-fast` como modelo principal e `qwen3.5:4b` como fallback
+- **Copiloto supervisionado**: o operador mantém controle sobre comandos e ações
 - **Memória Persistente**: STM (curto prazo) + LTM (longo prazo) com busca semântica
 - **Interpretação Avançada**: Compreensão profunda de prompts complexos
 
@@ -31,8 +31,9 @@ Luna Desktop é uma aplicação multiplataforma de alta performance que traz tod
 - **DeFi Tools**: Ferramentas para interação com protocolos DeFi
 
 ### 🎨 Interface Moderna
-- **Design Responsivo**: Funciona perfeitamente em qualquer resolução
-- **Tema Claro/Escuro**: Alternância dinâmica de temas
+- **Layout ajustável**: sidebar persistente e painel de execução redimensionável
+- **Design responsivo**: painel direito recolhido automaticamente em janelas estreitas sem perder a preferência
+- **Tema dark-first**: identidade visual lunar/cyber otimizada para desktop
 - **Gráficos em Tempo Real**: Visualizações de dados e métricas
 - **Terminal Integrado**: Acesso a comandos avançados
 
@@ -62,10 +63,10 @@ pip install -r requirements.txt
 cd ..
 ```
 
-4. **Configure variáveis de ambiente**
+4. **Confira a configuração local**
 ```bash
 cp .env.example .env
-# Edite .env e adicione suas chaves de API
+# Nenhuma chave cloud é necessária
 ```
 
 5. **Inicie a aplicação**
@@ -116,7 +117,10 @@ luna-desktop/
 Visão geral do sistema com métricas em tempo real, gráficos de uso e atividades recentes.
 
 ### Chat
-Interface de conversa com Luna com suporte a múltiplos modelos de IA, histórico e memória.
+Interface de conversa com streaming local, histórico, memória, workspace e imagens. O autoscroll acompanha a resposta somente quando a leitura está no final.
+
+### Projects
+Projetos locais com mensagens, fatos e contexto persistidos em JSON UTF-8 por escrita atômica. O diretório vem de `LUNA_PROJECTS_DIR` e usa `D:\LunaCyber\projects` como fallback.
 
 ### Code Analyzer
 Análise avançada de código com detecção de complexidade, problemas e recomendações.
@@ -128,17 +132,18 @@ Scanner de segurança, verificação de vulnerabilidades e status de ameaças.
 Gerenciamento de carteira Solana, transações e interação com smart contracts.
 
 ### Settings
-Configuração de chaves de API, modelos de IA e preferências de segurança.
+Configuração do Ollama, modelos locais, workspace, módulos e segurança.
 
-## 🔑 Configuração de API Keys
+## 🦙 Configuração local
 
-Edite o arquivo `.env` e adicione suas chaves:
+O frontend não exige conta ou chave de provedor. As configurações principais são:
 
 ```env
-VITE_OPENAI_API_KEY=sk-...
-VITE_GROK_API_KEY=xai-...
-VITE_GEMINI_API_KEY=AIza...
-VITE_CLAUDE_API_KEY=sk-ant-...
+VITE_API_URL=http://localhost:8000
+OLLAMA_BASE_URL=http://localhost:11434/v1
+LUNA_DEFAULT_MODEL=luna-cyber-fast
+LUNA_PROJECTS_DIR=D:\LunaCyber\projects
+ZERO_CLOUD_MODE=true
 VITE_SOLANA_RPC_URL=https://api.mainnet-beta.solana.com
 ```
 
@@ -161,7 +166,10 @@ npm run dist-mac        # Instalador macOS
 npm run dist-linux      # Instalador Linux
 
 # Testes
-npm run test            # Executa testes
+npm run test:run        # Executa testes do frontend uma vez
+npm run typecheck       # Valida TypeScript sem gerar arquivos
+cd backend
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
 
 # Linting
 npm run lint            # Verifica código

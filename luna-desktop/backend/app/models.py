@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 class ModelProvider(str, Enum):
     """Available LLM providers"""
+    OLLAMA = "ollama"
     OPENAI = "openai"
     GROK = "grok"
     GEMINI = "gemini"
@@ -21,9 +22,9 @@ class ChatRequest(BaseModel):
     """Chat request model"""
     message: str = Field(..., description="User message")
     conversation_id: str = Field(default="default", description="Conversation ID")
-    model: Optional[ModelProvider] = Field(default=ModelProvider.OPENAI, description="Model to use")
-    temperature: Optional[float] = Field(default=0.7, ge=0, le=1)
-    max_tokens: Optional[int] = Field(default=2000, ge=1, le=4000)
+    model: Optional[ModelProvider] = Field(default=ModelProvider.OLLAMA, description="Model to use")
+    temperature: Optional[float] = Field(default=0, ge=0, le=1)
+    max_tokens: Optional[int] = Field(default=512, ge=1, le=4000)
     system_prompt: Optional[str] = Field(default=None)
 
 
@@ -87,9 +88,9 @@ class Transaction(BaseModel):
 
 class LunaConfig(BaseModel):
     """Luna configuration"""
-    default_model: ModelProvider = ModelProvider.OPENAI
-    temperature: float = 0.7
-    max_tokens: int = 2000
+    default_model: ModelProvider = ModelProvider.OLLAMA
+    temperature: float = 0
+    max_tokens: int = 512
     enable_memory: bool = True
     enable_blockchain: bool = True
     enable_security_scan: bool = True

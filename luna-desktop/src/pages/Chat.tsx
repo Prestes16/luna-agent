@@ -3,8 +3,9 @@ import { useLocation } from 'react-router-dom'
 import { useStore, Message, ActiveFile } from '@store/appStore'
 import { useI18n } from '@i18n/hooks'
 import TopBar from '@components/TopBar'
-import { Send, FolderOpen, Zap, Volume2, VolumeX, Mic, MicOff, ImagePlus, X as XIcon, FolderSymlink, Copy, Check, RotateCcw, Plus, History, Trash2 } from 'lucide-react'
+import { Send, FolderOpen, Zap, Volume2, VolumeX, Mic, MicOff, ImagePlus, X as XIcon, FolderSymlink, Copy, Check, RotateCcw, Plus, History, Trash2, ChevronDown } from 'lucide-react'
 import { ChatSession } from '@store/appStore'
+import { parseNumberedListItem } from '@/utils/markdown'
 
 // ── Image helpers ─────────────────────────────────────────────────────────────
 interface AttachedImage {
@@ -13,6 +14,38 @@ interface AttachedImage {
   data: string      // só o base64 (para enviar ao backend)
   mime: string
   name: string
+}
+
+function createStreamingMessageWriter(
+  messageId: string,
+  updateMessage: (id: string, patch: Partial<Message>) => void,
+) {
+  let latest = ''
+  let frame: number | null = null
+  let finished = false
+
+  const cancelFrame = () => {
+    if (frame !== null) cancelAnimationFrame(frame)
+    frame = null
+  }
+
+  return {
+    push(content: string) {
+      latest = content
+      if (finished || frame !== null) return
+      frame = requestAnimationFrame(() => {
+        frame = null
+        updateMessage(messageId, { content: latest, isStreaming: true })
+      })
+    },
+    finish(content = latest) {
+      if (finished) return
+      finished = true
+      latest = content
+      cancelFrame()
+      updateMessage(messageId, { content: latest, isStreaming: false })
+    },
+  }
 }
 
 async function fileToAttachedImage(file: File): Promise<AttachedImage | null> {
@@ -95,33 +128,6 @@ function renderMarkdown(text: string): React.ReactNode[] {
   let i = 0
   let key = 0
 
-  // ── Pré-processamento: detecta listas numeradas "seccionadas"
-  // O LLM às vezes gera:  "1. Título\nconteúdo...\n\n1. Próximo título\nconteúdo..."
-  // onde cada item é "1." mas pertencem à mesma lista sequencial.
-  // Marcamos os índices de linha que são início de item numerado e atribuímos
-  // números sequenciais globais para todo o texto.
-  const numberedLineNum = new Map<number, number>() // lineIndex → número real
-  {
-    let counter = 0
-    let lastWasStructural = true // reset ao ver heading ou hr
-    for (let j = 0; j < lines.length; j++) {
-      const l = lines[j]
-      if (l.match(/^#{1,3} /)) { counter = 0; lastWasStructural = true; continue }
-      if (l.match(/^---+$/))   { counter = 0; lastWasStructural = true; continue }
-      if (l.match(/^\d+\. /)) {
-        // Se a linha anterior era structural e o número é 1, pode ser nova lista
-        // Se o número é > 1, é continuação da mesma lista
-        const declaredNum = parseInt(l.match(/^(\d+)\./)?.[1] ?? '1', 10)
-        if (declaredNum === 1 && lastWasStructural) counter = 0
-        counter++
-        numberedLineNum.set(j, counter)
-        lastWasStructural = false
-      } else {
-        lastWasStructural = l.trim() === ''
-      }
-    }
-  }
-
   while (i < lines.length) {
     const line = lines[i]
 
@@ -171,13 +177,15 @@ function renderMarkdown(text: string): React.ReactNode[] {
       continue
     }
 
-    // Numbered list — usa o número global calculado no pré-processamento
-    if (line.match(/^\d+\. /)) {
+    // Numbered list — preserva o marcador declarado e remove só duplicação idêntica.
+    if (parseNumberedListItem(line)) {
       const items: Array<{ text: string; num: number }> = []
-      while (i < lines.length && lines[i].match(/^\d+\. /)) {
+      while (i < lines.length) {
+        const item = parseNumberedListItem(lines[i])
+        if (!item) break
         items.push({
-          text: lines[i].replace(/^\d+\. /, ''),
-          num:  numberedLineNum.get(i) ?? items.length + 1,
+          text: item.text,
+          num: item.number,
         })
         i++
       }
@@ -528,7 +536,6 @@ const Chat: React.FC = () => {
     isSpeaking: isSpeakingStore, setIsSpeaking,
     lunaApiToken,
     zeroCloudMode,
-    userId,
     // Chat sessions
     chatSessions, createNewChat, loadChatSession, deleteChatSession, archiveCurrentChat,
   } = useStore()
@@ -542,12 +549,16 @@ const Chat: React.FC = () => {
   const [compressing, setCompressing]   = useState(false)
   const [compressProgress, setCompressProgress] = useState(0)
   const [compressMsg, setCompressMsg]   = useState('')
+  const [showJumpToLatest, setShowJumpToLatest] = useState(false)
 
   // Vision — imagens anexadas à próxima mensagem
   const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([])
   const imageInputRef = useRef<HTMLInputElement>(null)
 
   const messagesEndRef  = useRef<HTMLDivElement>(null)
+  const messagesScrollRef = useRef<HTMLDivElement>(null)
+  const shouldFollowMessagesRef = useRef(true)
+  const scrollFrameRef = useRef<number | null>(null)
   const inputRef        = useRef<HTMLTextAreaElement>(null)
   const abortRef        = useRef<AbortController | null>(null)
   const toolCounterRef  = useRef(0)
@@ -561,10 +572,35 @@ const Chat: React.FC = () => {
     })
   }, [setIsSpeaking])
 
-  // Auto-scroll on new messages
+  const handleMessagesScroll = useCallback(() => {
+    const element = messagesScrollRef.current
+    if (!element) return
+    const atBottom = element.scrollHeight - element.scrollTop - element.clientHeight < 72
+    shouldFollowMessagesRef.current = atBottom
+    setShowJumpToLatest((visible) => visible === !atBottom ? visible : !atBottom)
+  }, [])
+
+  const scrollToLatest = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    shouldFollowMessagesRef.current = true
+    setShowJumpToLatest(false)
+    messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' })
+  }, [])
+
+  // Follow streaming only while the operator remains at the bottom.
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages.length, isStreaming])
+    if (!shouldFollowMessagesRef.current) return
+    if (scrollFrameRef.current !== null) cancelAnimationFrame(scrollFrameRef.current)
+    scrollFrameRef.current = requestAnimationFrame(() => {
+      scrollFrameRef.current = null
+      messagesEndRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
+    })
+    return () => {
+      if (scrollFrameRef.current !== null) {
+        cancelAnimationFrame(scrollFrameRef.current)
+        scrollFrameRef.current = null
+      }
+    }
+  }, [messages, isStreaming])
 
   useEffect(() => {
     if (messages.length > 0) setShowWelcome(false)
@@ -657,6 +693,8 @@ const Chat: React.FC = () => {
 
   const sendMessage = useCallback(async () => {
     if ((!input.trim() && attachedImages.length === 0) || isStreaming) return
+    shouldFollowMessagesRef.current = true
+    setShowJumpToLatest(false)
 
     // Stop any STT in progress
     if (sttState !== 'idle') stt.stop()
@@ -691,6 +729,7 @@ const Chat: React.FC = () => {
       timestamp: Date.now(),
       isStreaming: true,
     })
+    const streamWriter = createStreamingMessageWriter(lunaId, updateMessage)
 
     try {
       abortRef.current = new AbortController()
@@ -704,7 +743,6 @@ const Chat: React.FC = () => {
         body: JSON.stringify({
           message:          msgContent,
           session_id:       sessionId,
-          user_id:          userId || undefined,   // Supabase account ID (substitui device ID no pay-flow)
           model:            currentModel,
           workspace_path:   workspacePath || null,
           zero_cloud_mode:  zeroCloudMode,
@@ -783,11 +821,11 @@ const Chat: React.FC = () => {
 
             else if (event.type === 'text_chunk') {
               fullText += event.text
-              updateMessage(lunaId, { content: fullText, isStreaming: true })
+              streamWriter.push(fullText)
             }
 
             else if (event.type === 'done') {
-              updateMessage(lunaId, { content: fullText || event.final_text || '', isStreaming: false })
+              streamWriter.finish(fullText || event.final_text || '')
               commitLiveToolsToMessage(lunaId)
             }
 
@@ -876,10 +914,7 @@ const Chat: React.FC = () => {
               // Limpa barra de progresso (compressing) imediatamente ao receber erro
               setCompressing(false)
               setCompressProgress(0)
-              updateMessage(lunaId, {
-                content: `⚠️ Erro: ${event.message}`,
-                isStreaming: false,
-              })
+              streamWriter.finish(`⚠️ Erro: ${event.message}`)
             }
 
             // Limpa barra ao finalizar normalmente também
@@ -892,16 +927,13 @@ const Chat: React.FC = () => {
           }
         }
       }
-    } catch (err: any) {
+    } catch (error: unknown) {
       setCompressing(false)
       setCompressProgress(0)
-      if (err?.name !== 'AbortError') {
-        updateMessage(lunaId, {
-          content: `⚠️ Erro de conexão com o backend. Verifique se Luna está rodando em ${backendUrl}`,
-          isStreaming: false,
-        })
-      }
+      if (error instanceof DOMException && error.name === 'AbortError') streamWriter.finish()
+      else streamWriter.finish(`⚠️ Erro de conexão com o backend. Verifique se Luna está rodando em ${backendUrl}`)
     } finally {
+      streamWriter.finish()
       setIsStreaming(false)
       setCurrentStreamingId(null)
       abortRef.current = null
@@ -912,6 +944,8 @@ const Chat: React.FC = () => {
   // IMPORTANT: mirrors sendMessage SSE handling exactly — must stay in sync.
   const sendRaw = useCallback(async (text: string) => {
     if (!text.trim() || isStreaming) return
+    shouldFollowMessagesRef.current = true
+    setShowJumpToLatest(false)
 
     const userMsg: Message = {
       id: `user-${Date.now()}`,
@@ -927,6 +961,7 @@ const Chat: React.FC = () => {
     const lunaId = `luna-${Date.now()}`
     setCurrentStreamingId(lunaId)
     addMessage({ id: lunaId, role: 'luna', content: '', timestamp: Date.now(), isStreaming: true })
+    const streamWriter = createStreamingMessageWriter(lunaId, updateMessage)
 
     try {
       abortRef.current = new AbortController()
@@ -939,7 +974,6 @@ const Chat: React.FC = () => {
         body: JSON.stringify({
           message:          text,
           session_id:       sessionId,
-          user_id:          userId || undefined,
           model:            currentModel,
           workspace_path:   workspacePath || null,
           zero_cloud_mode:  zeroCloudMode,
@@ -1010,10 +1044,10 @@ const Chat: React.FC = () => {
             }
             else if (event.type === 'text_chunk') {
               fullText += event.text
-              updateMessage(lunaId, { content: fullText, isStreaming: true })
+              streamWriter.push(fullText)
             }
             else if (event.type === 'done') {
-              updateMessage(lunaId, { content: fullText || event.final_text || '', isStreaming: false })
+              streamWriter.finish(fullText || event.final_text || '')
               commitLiveToolsToMessage(lunaId)
             }
             else if (event.type === 'compressing') {
@@ -1076,7 +1110,7 @@ const Chat: React.FC = () => {
             else if (event.type === 'error') {
               setCompressing(false)
               setCompressProgress(0)
-              updateMessage(lunaId, { content: `⚠️ Erro: ${event.message}`, isStreaming: false })
+              streamWriter.finish(`⚠️ Erro: ${event.message}`)
             }
             if (event.type === 'done') {
               setCompressing(false)
@@ -1085,19 +1119,16 @@ const Chat: React.FC = () => {
           } catch (_) { /* JSON parse error — ignore */ }
         }
       }
-    } catch (err: any) {
-      if (err?.name !== 'AbortError') {
-        updateMessage(lunaId, {
-          content: `⚠️ Erro de conexão com o backend. Verifique se Luna está rodando em ${backendUrl}`,
-          isStreaming: false,
-        })
-      }
+    } catch (error: unknown) {
+      if (error instanceof DOMException && error.name === 'AbortError') streamWriter.finish()
+      else streamWriter.finish(`⚠️ Erro de conexão com o backend. Verifique se Luna está rodando em ${backendUrl}`)
     } finally {
+      streamWriter.finish()
       setIsStreaming(false)
       setCurrentStreamingId(null)
       abortRef.current = null
     }
-  }, [isStreaming, addMessage, updateMessage, setIsStreaming, currentModel, sessionId, backendUrl, workspacePath, lunaApiToken, userId, userContext, addLiveToolEvent, updateLiveToolEvent, commitLiveToolsToMessage, clearLiveToolEvents, setProjectContext, addLogLine, setCompressing, setCompressProgress, setCompressMsg])
+  }, [isStreaming, addMessage, updateMessage, setIsStreaming, currentModel, sessionId, backendUrl, workspacePath, lunaApiToken, userContext, addLiveToolEvent, updateLiveToolEvent, commitLiveToolsToMessage, clearLiveToolEvents, setProjectContext, addLogLine, setCompressing, setCompressProgress, setCompressMsg])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -1225,85 +1256,63 @@ const Chat: React.FC = () => {
         </div>
       )}
 
-      {/* Zero-Cloud Mode banner */}
+      {/* Local runtime notice */}
       {zeroCloudMode && (
         <div
-          className="flex items-center gap-2 px-4 py-2 text-[11px] font-mono"
+          className="flex items-center gap-2 px-4 py-1.5 text-[10px] font-mono"
           style={{
-            background: 'rgba(124,58,237,0.12)',
-            borderBottom: '1px solid rgba(124,58,237,0.25)',
-            color: '#a78bfa',
+            background: 'rgba(0,212,255,0.035)',
+            borderBottom: '1px solid rgba(0,212,255,0.08)',
+            color: '#94a3b8',
           }}
         >
           <span>🔒</span>
-          <span><strong>Modo Zero-Cloud ativo</strong> — Luna está usando Ollama local. Nenhum dado sai do dispositivo.</span>
+          <span><strong>Operação local supervisionada</strong> · zero-cloud · Ollama</span>
         </div>
       )}
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto px-4 py-4">
+      <div ref={messagesScrollRef} onScroll={handleMessagesScroll} className="flex-1 overflow-y-auto px-4 py-4">
         {showWelcome && messages.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-6 max-w-lg mx-auto">
-            {/* Logo V4 */}
+          <div className="flex h-full max-w-xl flex-col items-center justify-center gap-6 px-4 mx-auto">
             <div className="relative">
               <div
-                className="w-20 h-20 rounded-2xl flex items-center justify-center text-4xl"
+                className="flex h-16 w-16 items-center justify-center rounded-xl border border-cyber-cyan/30 bg-[#0d1728] text-3xl"
                 style={{
-                  background: 'linear-gradient(135deg, rgba(124,58,237,0.35), rgba(0,212,255,0.25))',
-                  border: '1px solid rgba(0,212,255,0.35)',
-                  boxShadow: '0 0 40px rgba(0,212,255,0.18), 0 0 80px rgba(124,58,237,0.12)',
+                  boxShadow: '0 0 8px rgba(0,212,255,0.16)',
                 }}
               >
                 🌙
               </div>
-              {/* V4 badge */}
               <div
-                className="absolute -bottom-1.5 -right-1.5 text-[8px] font-mono font-bold px-1.5 py-0.5 rounded"
+                className="absolute -bottom-1.5 -right-3 rounded-full px-2 py-0.5 font-mono text-[8px] font-bold"
                 style={{
-                  background: 'rgba(0,212,255,0.15)',
-                  border: '1px solid rgba(0,212,255,0.35)',
-                  color: '#00d4ff',
+                  background: 'rgba(20,241,149,0.12)',
+                  border: '1px solid rgba(20,241,149,0.3)',
+                  color: '#14f195',
                   letterSpacing: '0.1em',
                 }}
               >
-                V4
+                LOCAL
               </div>
             </div>
 
-            <div className="text-center space-y-1">
-              <h1 className="text-2xl font-bold font-mono tracking-wide">
-                <span className="text-cyber-text">LUNA </span>
-                <span style={{ color: '#00d4ff', textShadow: '0 0 16px rgba(0,212,255,0.7)' }}>
-                  ELITE AGENT
-                </span>
-              </h1>
-              <p className="text-[12px] text-cyber-dim font-mono tracking-wider uppercase">
-                Split Intelligence · Bug Bounty · Web3 · Code
+            <div className="space-y-2 text-center">
+              <h1 className="font-mono text-2xl font-bold tracking-tight text-cyber-text">Luna Cyber</h1>
+              <p className="text-[12px] leading-relaxed text-cyber-muted">
+                Copiloto local para análise, desenvolvimento e segurança.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 w-full">
+            <div className="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
               {suggestions.map((s, i) => (
                 <button
+                  type="button"
                   key={i}
                   onClick={() => setInput(s.text)}
-                  className="text-left p-3 rounded-lg transition-all text-[11px] text-cyber-muted font-mono"
+                  className="rounded-lg border border-cyber-cyan/10 bg-[#0a101c]/80 p-3 text-left font-mono text-[11px] text-cyber-muted transition-colors hover:border-cyber-cyan/30 hover:bg-[#0d1728] hover:text-cyber-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-cyan/50"
                   style={{
-                    background: 'rgba(10,16,28,0.7)',
-                    border: '1px solid rgba(0,212,255,0.1)',
                     boxShadow: 'inset 0 1px 0 rgba(0,212,255,0.04)',
-                  }}
-                  onMouseEnter={(e) => {
-                    const el = e.currentTarget as HTMLElement
-                    el.style.borderColor = 'rgba(0,212,255,0.3)'
-                    el.style.color = '#e2e8f0'
-                    el.style.boxShadow = '0 0 12px rgba(0,212,255,0.08), inset 0 1px 0 rgba(0,212,255,0.06)'
-                  }}
-                  onMouseLeave={(e) => {
-                    const el = e.currentTarget as HTMLElement
-                    el.style.borderColor = 'rgba(0,212,255,0.1)'
-                    el.style.color = '#64748b'
-                    el.style.boxShadow = 'inset 0 1px 0 rgba(0,212,255,0.04)'
                   }}
                 >
                   <span className="block text-base mb-1">{s.icon}</span>
@@ -1367,6 +1376,17 @@ const Chat: React.FC = () => {
           </>
         )}
       </div>
+
+      {showJumpToLatest ? (
+        <button
+          type="button"
+          onClick={() => scrollToLatest()}
+          className="absolute bottom-[112px] left-1/2 z-20 flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-cyber-cyan/25 bg-[#08111f]/95 px-3 py-1.5 font-mono text-[10px] text-cyber-cyan shadow-lg shadow-black/30 transition-colors hover:border-cyber-cyan/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-cyan/50"
+          aria-label="Ir para a última mensagem"
+        >
+          <ChevronDown size={12} /> última mensagem
+        </button>
+      ) : null}
 
       {/* Compression progress banner */}
       {compressing && (
@@ -1484,20 +1504,24 @@ const Chat: React.FC = () => {
         >
           {/* Folder quick button */}
           <button
+            type="button"
             onClick={() => setInput('/allow ')}
             className="p-2 rounded-lg transition-colors text-cyber-muted hover:text-cyber-cyan flex-shrink-0 self-end"
             title="Liberar diretório"
+            aria-label="Liberar diretório"
           >
             <FolderOpen size={16} />
           </button>
 
           {/* Image upload button */}
           <button
+            type="button"
             onClick={() => imageInputRef.current?.click()}
             disabled={isStreaming || attachedImages.length >= 4}
             className="p-2 rounded-lg transition-colors flex-shrink-0 self-end"
             style={{ color: attachedImages.length > 0 ? '#00d4ff' : '#475569' }}
             title="Anexar imagem (PNG, JPG, WEBP — max 5MB)"
+            aria-label="Anexar imagem"
           >
             <ImagePlus size={16} />
           </button>
@@ -1541,6 +1565,7 @@ const Chat: React.FC = () => {
           {/* Mic button (STT) */}
           {micSupported && (
             <button
+              type="button"
               onClick={handleMic}
               disabled={isStreaming}
               className="flex-shrink-0 p-2 rounded-lg transition-all self-end"
@@ -1549,6 +1574,7 @@ const Chat: React.FC = () => {
                 : { background: 'rgba(0,212,255,0.04)', border: '1px solid rgba(0,212,255,0.12)', color: '#475569' }
               }
               title={micActive ? 'Parar gravação' : 'Falar com Luna (voz → texto)'}
+              aria-label={micActive ? 'Parar gravação' : 'Falar com Luna'}
             >
               {micActive
                 ? <Mic size={16} className="animate-pulse" />
@@ -1560,15 +1586,18 @@ const Chat: React.FC = () => {
           {/* Send or Stop */}
           {isStreaming ? (
             <button
+              type="button"
               onClick={stopStreaming}
               className="flex-shrink-0 p-2 rounded-lg transition-all self-end"
               style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#ef4444' }}
               title="Parar"
+              aria-label="Parar geração"
             >
               <Zap size={16} />
             </button>
           ) : (
             <button
+              type="button"
               onClick={sendMessage}
               disabled={!input.trim() && attachedImages.length === 0}
               className="flex-shrink-0 p-2 rounded-lg transition-all self-end"
@@ -1579,6 +1608,7 @@ const Chat: React.FC = () => {
                 boxShadow: (input.trim() || attachedImages.length > 0) ? '0 0 10px rgba(0,212,255,0.2)' : 'none',
               }}
               title="Enviar (Enter)"
+              aria-label="Enviar mensagem"
             >
               <Send size={16} />
             </button>

@@ -1,384 +1,278 @@
 import React, { useState } from 'react'
 import { useStore } from '@store/appStore'
 import {
-  ChevronDown, PanelRight, Trash2, Zap, Volume2,
-  FolderOpen, BookMarked, Terminal, Activity,
+  Activity,
+  BookMarked,
+  ChevronDown,
+  Circle,
+  FolderOpen,
+  PanelRight,
+  ShieldCheck,
+  Terminal,
+  Trash2,
+  Volume2,
 } from 'lucide-react'
 
-// ── Model registry ────────────────────────────────────────────────────────────
 interface ModelDef {
-  id: string
+  id: 'luna-cyber-fast' | 'qwen3.5:4b'
   label: string
-  provider: string
-  color: string
-  cost: 'free' | 'low' | 'mid' | 'high' | 'premium'
-  desc?: string
+  description: string
+  accent: string
 }
 
-const MODELS: ModelDef[] = [
+const LOCAL_MODELS: ModelDef[] = [
   {
-    id: 'auto', label: 'Auto', provider: 'Smart', color: '#00d4ff', cost: 'low',
-    desc: 'Roteia por tipo: segurança→Claude · Web3/código→Grok-3 · triage→Llama grátis',
+    id: 'luna-cyber-fast',
+    label: 'Luna Cyber Fast',
+    description: 'Modelo local principal',
+    accent: '#14f195',
   },
   {
-    id: 'grok-3', label: 'Grok-3', provider: 'xAI', color: '#7c3aed', cost: 'high',
-    desc: 'Flagship xAI · Web3 · código · 131k contexto',
-  },
-  {
-    id: 'grok-3-mini', label: 'Grok-3 Mini', provider: 'xAI', color: '#7c3aed', cost: 'mid',
-    desc: 'Rápido · custo-benefício · raciocínio eficiente',
-  },
-  {
-    id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', provider: 'Anthropic', color: '#e040fb', cost: 'high',
-    desc: 'Elite security research · bug bounty · 200k contexto',
-  },
-  {
-    id: 'claude-opus-4-6', label: 'Claude Opus 4.6', provider: 'Anthropic', color: '#e040fb', cost: 'premium',
-    desc: 'Raciocínio máximo · exploits cirúrgicos · auditoria profunda',
-  },
-  {
-    id: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', provider: 'Anthropic', color: '#e040fb', cost: 'low',
-    desc: 'Ultra-rápido · análise de snippets · custo mínimo',
-  },
-  {
-    id: 'gpt-4o', label: 'GPT-4o', provider: 'OpenAI', color: '#10b981', cost: 'high',
-    desc: 'Fallback confiável · visão · multimodal',
-  },
-  {
-    id: 'gpt-4o-mini', label: 'GPT-4o Mini', provider: 'OpenAI', color: '#10b981', cost: 'low',
-    desc: 'Tarefas simples · baixo custo',
-  },
-  {
-    id: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B', provider: 'Groq', color: '#f97316', cost: 'free',
-    desc: 'Grátis · consultas gerais · análise rápida',
-  },
-  {
-    id: 'llama-3.1-8b-instant', label: 'Llama 3.1 8B', provider: 'Groq', color: '#f97316', cost: 'free',
-    desc: 'Grátis · triage instantâneo · < 200ms',
-  },
-  {
-    id: 'meta-llama/Llama-3.1-405B-Instruct-Turbo', label: 'Llama 3.1 405B', provider: 'Together', color: '#f59e0b', cost: 'mid',
-    desc: 'Open-source máximo · 128k · deep audit',
+    id: 'qwen3.5:4b',
+    label: 'Qwen 3.5 4B',
+    description: 'Fallback local compatível',
+    accent: '#00d4ff',
   },
 ]
 
-const costColors: Record<string, string> = {
-  free: '#10b981', low: '#00d4ff', mid: '#f59e0b', high: '#ef4444', premium: '#a855f7',
+interface TopBarProps {
+  title?: string
 }
-const costLabels: Record<string, string> = {
-  free: 'grátis', low: '$', mid: '$$', high: '$$$', premium: '$$$$',
-}
-
-interface TopBarProps { title?: string }
 
 const TopBar: React.FC<TopBarProps> = ({ title = 'Chat' }) => {
   const {
-    currentModel, setCurrentModel,
-    executionPanelVisible, setExecutionPanelVisible,
-    clearMessages, isStreaming,
-    liveToolEvents, activeToolCount,
-    isSpeaking, voiceEnabled,
-    activeFiles, workspaceName, workspacePath,
-    projectMarkdown, userContext,
+    currentModel,
+    setCurrentModel,
+    backendStatus,
+    executionPanelVisible,
+    executionPanelAutoCollapsed,
+    setExecutionPanelVisible,
+    clearMessages,
+    isStreaming,
+    liveToolEvents,
+    isSpeaking,
+    voiceEnabled,
+    activeFiles,
+    workspaceName,
+    workspacePath,
+    projectMarkdown,
+    userContext,
   } = useStore()
-
   const [showModels, setShowModels] = useState(false)
+  const showChatControls = title.toLocaleLowerCase('pt-BR') === 'chat'
 
-  const current       = MODELS.find((m) => m.id === currentModel) ?? MODELS[0]
-  const runningTools  = liveToolEvents.filter((e) => e.status === 'running').length
-  const isAuto        = current.id === 'auto'
-  const hasContextDoc = !!(workspacePath && projectMarkdown[workspacePath])
-  const hasUserCtx    = !!(userContext?.trim())
+  const current = LOCAL_MODELS.find((model) => model.id === currentModel) ?? LOCAL_MODELS[0]
+  const runningTools = liveToolEvents.filter((event) => event.status === 'running').length
+  const hasContextDoc = Boolean(workspacePath && projectMarkdown[workspacePath])
+  const hasUserContext = Boolean(userContext.trim())
+  const normalizedModels = backendStatus.availableModels.map((model) => model.replace(':latest', ''))
+  const currentModelAvailable = normalizedModels.length === 0
+    || normalizedModels.includes(currentModel.replace(':latest', ''))
+  const runtimeOnline = backendStatus.connected && backendStatus.ollama && currentModelAvailable
+  const runtimeLabel = !backendStatus.connected
+    ? 'Backend'
+    : !backendStatus.ollama
+      ? 'Ollama'
+      : currentModelAvailable
+        ? 'Ollama'
+        : 'Modelo ausente'
+  const runtimeTitle = !backendStatus.connected
+    ? backendStatus.error || 'Backend local indisponível'
+    : !backendStatus.ollama
+      ? 'Ollama indisponível em localhost:11434'
+      : currentModelAvailable
+        ? `${current.label} disponível no Ollama local`
+        : `${current.label} não foi encontrado no Ollama local`
+  const panelEffectivelyVisible = executionPanelVisible && !executionPanelAutoCollapsed
 
   return (
-    <div
-      className="flex-shrink-0 relative"
+    <header
+      className="topbar-local relative flex-shrink-0"
       style={{
         background: 'rgba(5,8,16,0.97)',
         borderBottom: isStreaming
           ? '1px solid rgba(0,212,255,0.35)'
           : '1px solid rgba(0,212,255,0.1)',
         boxShadow: isStreaming
-          ? '0 1px 0 rgba(0,212,255,0.08), 0 2px 20px rgba(0,212,255,0.06)'
+          ? '0 2px 12px rgba(0,212,255,0.06)'
           : '0 1px 0 rgba(0,212,255,0.03)',
-        transition: 'border-color 0.3s, box-shadow 0.3s',
       }}
     >
-      {/* ── Streaming progress line ──────────────────────────────────────── */}
-      {isStreaming && (
-        <div
-          className="absolute bottom-0 left-0 right-0 h-[2px] overflow-hidden"
-          style={{ background: 'rgba(0,212,255,0.06)' }}
-        >
-          <div
-            className="h-full"
-            style={{
-              background: 'linear-gradient(90deg, transparent, #00d4ff, #7c3aed, transparent)',
-              animation: 'topbar-scan 2s linear infinite',
-              width: '40%',
-            }}
-          />
+      {isStreaming ? (
+        <div className="absolute inset-x-0 bottom-0 h-px overflow-hidden" aria-hidden="true">
+          <div className="h-full w-2/5 bg-gradient-to-r from-transparent via-cyber-cyan to-transparent [animation:topbar-scan_2s_linear_infinite]" />
         </div>
-      )}
+      ) : null}
 
-      <div className="flex items-center justify-between px-4 h-[52px]">
-        {/* ── Left ────────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="flex h-[54px] items-center justify-between gap-3 px-4">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <span className="topbar-title flex-shrink-0 font-mono text-sm font-semibold tracking-[0.12em] text-cyber-text">
+            {title.toUpperCase()}
+          </span>
+          <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-cyber-green/25 bg-cyber-green/10 px-2 py-0.5 font-mono text-[9px] font-semibold text-cyber-green">
+            <ShieldCheck size={10} />
+            LOCAL
+          </span>
 
-          {/* Title with V4 badge */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span
-              className="text-sm font-bold font-mono tracking-widest"
-              style={{
-                color: isStreaming ? '#00d4ff' : '#94a3b8',
-                textShadow: isStreaming ? '0 0 12px rgba(0,212,255,0.5)' : 'none',
-                transition: 'color 0.3s, text-shadow 0.3s',
-              }}
-            >
-              {title.toUpperCase()}
-            </span>
-            <span
-              className="text-[8px] font-mono px-1 rounded tracking-wider flex-shrink-0"
-              style={{ background: 'rgba(0,212,255,0.08)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.15)' }}
-            >
-              V4
-            </span>
+          <div
+            className="topbar-status inline-flex flex-shrink-0 items-center gap-1.5 rounded-md border px-2 py-1 font-mono text-[10px]"
+            style={{
+              borderColor: runtimeOnline ? 'rgba(20,241,149,0.2)' : 'rgba(239,68,68,0.22)',
+              background: runtimeOnline ? 'rgba(20,241,149,0.06)' : 'rgba(239,68,68,0.06)',
+              color: runtimeOnline ? '#14f195' : '#f87171',
+            }}
+            title={runtimeTitle}
+          >
+            <Circle size={7} fill="currentColor" />
+            <span>{runtimeLabel}</span>
           </div>
 
-          {/* Streaming status badge */}
-          {isStreaming && (
-            <div
-              className="flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-mono flex-shrink-0"
-              style={{
-                background: 'rgba(0,212,255,0.08)',
-                border: '1px solid rgba(0,212,255,0.25)',
-                color: '#00d4ff',
-              }}
-            >
-              <Activity size={8} className="animate-pulse" />
-              {runningTools > 0
-                ? `${runningTools} tool${runningTools > 1 ? 's' : ''}`
-                : 'pensando…'
-              }
+          {isStreaming ? (
+            <div className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full border border-cyber-cyan/25 bg-cyber-cyan/10 px-2 py-0.5 font-mono text-[10px] text-cyber-cyan">
+              <Activity size={9} className="animate-pulse" />
+              {runningTools > 0 ? `${runningTools} operação${runningTools > 1 ? 'ões' : ''}` : 'gerando'}
             </div>
-          )}
+          ) : null}
 
-          {!isStreaming && activeToolCount > 0 && (
-            <span className="text-[10px] font-mono text-cyber-dim flex-shrink-0">
-              {activeToolCount} ops
-            </span>
-          )}
-
-          {/* Workspace pill */}
-          {workspaceName && (
+          {workspaceName ? (
             <button
+              type="button"
               onClick={() => setExecutionPanelVisible(true)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono transition-all hover:opacity-80 flex-shrink-0 max-w-[130px]"
-              style={{
-                background: 'rgba(0,212,255,0.06)',
-                border: '1px solid rgba(0,212,255,0.13)',
-                color: '#64748b',
-              }}
-              title={workspacePath ?? ''}
+              className="topbar-workspace inline-flex max-w-[150px] flex-shrink items-center gap-1.5 rounded-md border border-cyber-cyan/15 bg-cyber-cyan/5 px-2 py-1 font-mono text-[10px] text-cyber-muted transition-colors hover:border-cyber-cyan/30 hover:text-cyber-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-cyan/50"
+              title={workspacePath}
             >
-              <FolderOpen size={9} className="text-cyber-cyan flex-shrink-0" />
+              <FolderOpen size={10} className="flex-shrink-0" />
               <span className="truncate">{workspaceName}</span>
-              {activeFiles.length > 0 && (
-                <span
-                  className="ml-0.5 px-1 rounded-full text-[8px] font-bold flex-shrink-0"
-                  style={{ background: 'rgba(0,212,255,0.15)', color: '#00d4ff' }}
-                >
+              {activeFiles.length > 0 ? (
+                <span className="rounded-full bg-cyber-cyan/15 px-1 text-[8px] text-cyber-cyan">
                   {activeFiles.length}
                 </span>
-              )}
+              ) : null}
             </button>
-          )}
+          ) : null}
 
-          {/* Context doc pill */}
-          {hasContextDoc && (
+          {hasContextDoc ? (
             <button
+              type="button"
               onClick={() => setExecutionPanelVisible(true)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono transition-all hover:opacity-80 flex-shrink-0"
-              style={{
-                background: 'rgba(124,58,237,0.08)',
-                border: '1px solid rgba(124,58,237,0.2)',
-                color: '#a78bfa',
-              }}
-              title="Contexto do projeto salvo"
+              className="topbar-context rounded-md border border-purple-400/20 bg-purple-400/10 p-1 text-purple-300 transition-colors hover:border-purple-400/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-400/50"
+              aria-label="Abrir contexto do workspace"
+              title="Contexto do workspace carregado"
             >
-              <BookMarked size={9} />
-              <span>Ctx</span>
+              <BookMarked size={11} />
             </button>
-          )}
+          ) : null}
 
-          {/* User context pill */}
-          {hasUserCtx && (
-            <div
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono flex-shrink-0"
-              style={{
-                background: 'rgba(29,158,117,0.08)',
-                border: '1px solid rgba(29,158,117,0.2)',
-                color: '#5DCAA5',
-              }}
-              title={userContext ?? ''}
+          {hasUserContext ? (
+            <span
+              className="topbar-context inline-flex items-center gap-1 rounded-md border border-emerald-400/20 bg-emerald-400/5 px-1.5 py-1 font-mono text-[9px] text-emerald-300"
+              title={userContext}
             >
-              <Terminal size={9} />
-              <span>⚡ctx</span>
-            </div>
-          )}
+              <Terminal size={9} /> contexto
+            </span>
+          ) : null}
 
-          {/* Voice speaking indicator */}
-          {voiceEnabled && isSpeaking && (
-            <div
-              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono flex-shrink-0"
-              style={{
-                background: 'rgba(0,212,255,0.08)',
-                border: '1px solid rgba(0,212,255,0.25)',
-                color: '#00d4ff',
-              }}
-            >
-              <Volume2 size={9} className="animate-pulse" />
-              <span>Voz</span>
-            </div>
-          )}
+          {voiceEnabled && isSpeaking ? (
+            <span className="topbar-context text-cyber-cyan" title="Resposta em áudio">
+              <Volume2 size={12} className="animate-pulse" />
+            </span>
+          ) : null}
         </div>
 
-        {/* ── Right ───────────────────────────────────────────────────── */}
-        <div className="flex items-center gap-2 flex-shrink-0">
-
-          {/* Model selector */}
+        <div className="flex flex-shrink-0 items-center gap-2">
           <div className="relative">
             <button
-              onClick={() => setShowModels((v) => !v)}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-mono transition-all"
+              type="button"
+              onClick={() => setShowModels((visible) => !visible)}
+              className="inline-flex min-h-8 items-center gap-2 rounded-md border px-2.5 py-1 font-mono text-[11px] transition-colors hover:bg-white/[0.03] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-cyan/50"
               style={{
-                background: isAuto ? 'rgba(0,212,255,0.1)' : `${current.color}12`,
-                border: `1px solid ${isAuto ? 'rgba(0,212,255,0.4)' : `${current.color}30`}`,
-                color: current.color,
-                boxShadow: isAuto ? '0 0 8px rgba(0,212,255,0.1)' : 'none',
+                borderColor: `${current.accent}40`,
+                background: `${current.accent}0d`,
+                color: current.accent,
               }}
+              aria-haspopup="listbox"
+              aria-expanded={showModels}
             >
-              {isAuto && <Zap size={10} />}
-              <span>{current.label}</span>
-              <ChevronDown size={11} style={{ color: '#64748b' }} />
+              <span className="topbar-model-label">{current.label}</span>
+              <ChevronDown size={12} />
             </button>
 
-            {showModels && (
+            {showModels ? (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setShowModels(false)} />
+                <button
+                  type="button"
+                  className="fixed inset-0 z-40 cursor-default"
+                  onClick={() => setShowModels(false)}
+                  aria-label="Fechar seletor de modelo"
+                />
                 <div
-                  className="absolute top-full right-0 mt-1 z-50 rounded-xl overflow-hidden"
-                  style={{
-                    background: '#0a0f1e',
-                    border: '1px solid rgba(0,212,255,0.18)',
-                    boxShadow: '0 16px 48px rgba(0,0,0,0.8), 0 0 0 1px rgba(0,212,255,0.04)',
-                    minWidth: 230,
-                  }}
+                  className="absolute right-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-xl border border-cyber-cyan/20 bg-[#0a0f1e] shadow-lg shadow-black/50"
+                  role="listbox"
+                  aria-label="Modelos locais"
                 >
-                  {[
-                    { key: 'Smart',     label: '⚡ Smart Routing' },
-                    { key: 'xAI',       label: '✕ xAI · Grok' },
-                    { key: 'Anthropic', label: '◈ Anthropic · Claude' },
-                    { key: 'OpenAI',    label: '◉ OpenAI' },
-                    { key: 'Groq',      label: '▸ Groq · Llama (grátis)' },
-                    { key: 'Together',  label: '⬟ Together AI' },
-                  ].map(({ key, label }) => {
-                    const groupModels = MODELS.filter((m) => m.provider === key)
-                    if (groupModels.length === 0) return null
-                    return (
-                      <div key={key}>
-                        <div
-                          className="px-3 pt-2.5 pb-1 text-[8px] font-mono uppercase tracking-[0.15em]"
-                          style={{ color: '#1e293b' }}
-                        >
-                          {label}
-                        </div>
-                        {groupModels.map((m) => (
-                          <button
-                            key={m.id}
-                            onClick={() => { setCurrentModel(m.id); setShowModels(false) }}
-                            className="w-full text-left px-3 py-2 flex items-center gap-2.5 transition-colors hover:bg-white/[0.04]"
-                            style={{
-                              background: m.id === currentModel ? `${m.color}10` : 'transparent',
-                            }}
-                          >
-                            <div
-                              style={{
-                                width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
-                                background: m.color,
-                                boxShadow: m.id === currentModel ? `0 0 6px ${m.color}` : 'none',
-                              }}
-                            />
-                            <div className="flex-1 min-w-0">
-                              <span
-                                className="text-[11px] font-mono block"
-                                style={{ color: m.id === currentModel ? m.color : '#94a3b8' }}
-                              >
-                                {m.label}
-                              </span>
-                              {m.desc && (
-                                <p className="text-[9px] truncate mt-0.5" style={{ color: '#334155' }}>
-                                  {m.desc}
-                                </p>
-                              )}
-                            </div>
-                            <span
-                              className="text-[9px] font-mono px-1.5 py-0.5 rounded flex-shrink-0"
-                              style={{
-                                background: `${costColors[m.cost]}15`,
-                                color: costColors[m.cost],
-                                border: `1px solid ${costColors[m.cost]}25`,
-                              }}
-                            >
-                              {costLabels[m.cost]}
-                            </span>
-                          </button>
-                        ))}
-                      </div>
-                    )
-                  })}
-
-                  <div
-                    className="px-3 py-2.5 mt-1 space-y-0.5"
-                    style={{ borderTop: '1px solid rgba(0,212,255,0.06)' }}
-                  >
-                    <p className="text-[8px] font-mono" style={{ color: '#1e293b' }}>AUTO ROUTING</p>
-                    <p className="text-[9px]" style={{ color: '#334155' }}>🔴 Bounty/Segurança → Claude Sonnet</p>
-                    <p className="text-[9px]" style={{ color: '#334155' }}>🟣 Web3/Código → Grok-3</p>
-                    <p className="text-[9px]" style={{ color: '#334155' }}>🟢 Triage/Chat → Llama grátis</p>
+                  <div className="border-b border-cyber-cyan/10 px-3 py-2">
+                    <p className="font-mono text-[9px] font-semibold text-cyber-cyan">MODELOS LOCAIS</p>
+                    <p className="mt-0.5 text-[9px] text-cyber-muted">Sem custo por mensagem e sem API key</p>
                   </div>
+                  {LOCAL_MODELS.map((model) => (
+                    <button
+                      type="button"
+                      key={model.id}
+                      role="option"
+                      aria-selected={model.id === current.id}
+                      onClick={() => {
+                        setCurrentModel(model.id)
+                        setShowModels(false)
+                      }}
+                      className="flex w-full items-center gap-2.5 px-3 py-2.5 text-left transition-colors hover:bg-white/[0.04] focus-visible:outline-none focus-visible:bg-white/[0.06]"
+                      style={{ background: model.id === current.id ? `${model.accent}0d` : undefined }}
+                    >
+                      <span
+                        className="h-1.5 w-1.5 flex-shrink-0 rounded-full"
+                        style={{ background: model.accent, boxShadow: model.id === current.id ? `0 0 6px ${model.accent}` : undefined }}
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="block font-mono text-[11px] text-cyber-text">{model.label}</span>
+                        <span className="mt-0.5 block text-[9px] text-cyber-muted">{model.description}</span>
+                      </span>
+                      {model.id === current.id ? (
+                        <span className="font-mono text-[8px] text-cyber-green">ATIVO</span>
+                      ) : null}
+                    </button>
+                  ))}
                 </div>
               </>
-            )}
+            ) : null}
           </div>
 
-          {/* Clear chat */}
-          <button
+          {showChatControls ? <button
+            type="button"
             onClick={clearMessages}
-            className="p-1.5 rounded-md transition-colors text-cyber-muted hover:text-cyber-red flex-shrink-0"
-            style={{ background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.1)' }}
-            title="Limpar chat"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-red-400/10 bg-red-400/5 text-cyber-muted transition-colors hover:border-red-400/25 hover:text-red-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/50"
+            aria-label="Limpar conversa"
+            title="Limpar conversa"
           >
             <Trash2 size={13} />
-          </button>
+          </button> : null}
 
-          {/* Toggle execution panel */}
-          <button
+          {showChatControls ? <button
+            type="button"
             onClick={() => setExecutionPanelVisible(!executionPanelVisible)}
-            className="p-1.5 rounded-md transition-all flex-shrink-0"
+            className="inline-flex h-8 items-center justify-center gap-1.5 rounded-md border px-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyber-cyan/50"
             style={{
-              background: executionPanelVisible ? 'rgba(0,212,255,0.12)' : 'rgba(0,212,255,0.04)',
-              border: `1px solid ${executionPanelVisible ? 'rgba(0,212,255,0.35)' : 'rgba(0,212,255,0.1)'}`,
-              color: executionPanelVisible ? '#00d4ff' : '#64748b',
-              boxShadow: executionPanelVisible ? '0 0 10px rgba(0,212,255,0.15)' : 'none',
+              background: panelEffectivelyVisible ? 'rgba(0,212,255,0.12)' : 'rgba(0,212,255,0.04)',
+              borderColor: panelEffectivelyVisible ? 'rgba(0,212,255,0.35)' : 'rgba(0,212,255,0.1)',
+              color: panelEffectivelyVisible ? '#00d4ff' : '#64748b',
             }}
-            title={executionPanelVisible ? 'Ocultar painel de execução' : 'Mostrar painel de execução'}
+            aria-label={executionPanelAutoCollapsed ? 'Painel de execução recolhido automaticamente' : executionPanelVisible ? 'Ocultar painel de execução' : 'Mostrar painel de execução'}
+            title={executionPanelAutoCollapsed ? 'Painel recolhido automaticamente nesta largura' : executionPanelVisible ? 'Ocultar painel de execução' : 'Mostrar painel de execução'}
           >
             <PanelRight size={13} />
-          </button>
+            <span className="topbar-panel-label font-mono text-[9px]">Execução</span>
+          </button> : null}
         </div>
       </div>
-    </div>
+    </header>
   )
 }
 

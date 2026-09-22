@@ -8,7 +8,9 @@ import os
 import json
 import logging
 import asyncio
+import re
 import socket
+import time
 from typing import Optional, List, Dict, Any, AsyncIterator
 from datetime import datetime
 
@@ -16,6 +18,14 @@ from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
 
 from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
+from .module_loader import ModuleLoader
+from .reasoning_pipeline import (
+    build_replan_instruction,
+    classify_complexity,
+    redact_sensitive_text,
+    validate_model_response,
+)
+from .scenario_context import ScenarioContext
 from .tools import (
     TOOL_DEFINITIONS, TOOL_DEFINITIONS_CLAUDE, execute_tool,
 )
@@ -24,18 +34,14 @@ logger = logging.getLogger(__name__)
 
 # ── Ollama local endpoint ─────────────────────────────────────────────────────
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
+OLLAMA_API_ROOT = OLLAMA_BASE_URL.removesuffix("/v1").rstrip("/")
 
 # Modelos Ollama recomendados — usuário precisa ter feito `ollama pull <model>`
-_OLLAMA_DEFAULT_MODEL   = "llama3.3:70b"      # melhor qualidade local
-_OLLAMA_FAST_MODEL      = "llama3.1:8b"       # rápido, menor uso de VRAM
-_OLLAMA_ALT_MODELS      = [                    # tentativa em cascata
-    "qwen2.5:72b",
-    "llama3.3:70b",
-    "llama3.1:70b",
-    "llama3.2:latest",
-    "llama3.1:8b",
-    "mistral:latest",
-]
+_OLLAMA_DEFAULT_MODEL = "luna-cyber-fast"
+_OLLAMA_FALLBACK_MODEL = "qwen3.5:4b"
+_OLLAMA_ALT_MODELS = [_OLLAMA_FALLBACK_MODEL]
+_OLLAMA_MODELS_CACHE: tuple[float, List[str]] = (0.0, [])
+_OLLAMA_MODELS_CACHE_TTL_SECONDS = 30.0
 
 # ── Model routing map ─────────────────────────────────────────────────────────
 MODEL_MAP: Dict[str, tuple] = {
@@ -57,7 +63,11 @@ MODEL_MAP: Dict[str, tuple] = {
     'llama-3.1-405b':        ('together', 'meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo'),
     'meta-llama/405B':       ('together', 'meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo'),
     # Local — Ollama (zero-cloud)
+    'luna-cyber-fast':       ('ollama',   _OLLAMA_DEFAULT_MODEL),
+    'ollama':                ('ollama',   _OLLAMA_DEFAULT_MODEL),
     'ollama:auto':           ('ollama',   _OLLAMA_DEFAULT_MODEL),
+    'ollama:luna-cyber-fast': ('ollama',  _OLLAMA_DEFAULT_MODEL),
+    'ollama:qwen3.5:4b':     ('ollama',   _OLLAMA_FALLBACK_MODEL),
     'ollama:llama3.3:70b':   ('ollama',   'llama3.3:70b'),
     'ollama:llama3.1:70b':   ('ollama',   'llama3.1:70b'),
     'ollama:llama3.1:8b':    ('ollama',   'llama3.1:8b'),
@@ -82,18 +92,24 @@ def _ollama_is_available_sync() -> bool:
         return False
 
 
-async def _ollama_list_models_async() -> List[str]:
+async def _ollama_list_models_async(*, force: bool = False) -> List[str]:
     """
     Retorna lista de modelos disponíveis no Ollama local.
     Usa httpx de forma assíncrona. Retorna [] se Ollama não está rodando.
     """
+    global _OLLAMA_MODELS_CACHE
+    cached_at, cached_models = _OLLAMA_MODELS_CACHE
+    if not force and cached_models and time.monotonic() - cached_at < _OLLAMA_MODELS_CACHE_TTL_SECONDS:
+        return list(cached_models)
     try:
         import httpx
         async with httpx.AsyncClient(timeout=2.0) as client:
-            r = await client.get("http://localhost:11434/api/tags")
+            r = await client.get(f"{OLLAMA_API_ROOT}/api/tags")
             if r.status_code == 200:
                 data = r.json()
-                return [m["name"] for m in data.get("models", [])]
+                models = [m["name"] for m in data.get("models", [])]
+                _OLLAMA_MODELS_CACHE = (time.monotonic(), models)
+                return list(models)
     except Exception:
         pass
     return []
@@ -108,22 +124,13 @@ async def _ollama_best_model_async(preferred: str = _OLLAMA_DEFAULT_MODEL) -> st
     if not available:
         return preferred  # vai falhar na chamada — o erro vai ser tratado no fallback
 
-    # Normaliza nomes (remove tag :latest duplicada)
-    avail_set = set()
-    for m in available:
-        avail_set.add(m)
-        avail_set.add(m.split(":")[0])   # permite matching sem tag
-
     def _matches(model: str) -> Optional[str]:
-        if model in avail_set:
+        if model in available:
             return model
-        base = model.split(":")[0]
-        if base in avail_set:
-            return base
-        # Busca por prefixo
-        for a in available:
-            if a.startswith(base):
-                return a
+        if ":" not in model:
+            tagged = f"{model}:latest"
+            if tagged in available:
+                return tagged
         return None
 
     for candidate in [preferred] + _OLLAMA_ALT_MODELS:
@@ -131,8 +138,8 @@ async def _ollama_best_model_async(preferred: str = _OLLAMA_DEFAULT_MODEL) -> st
         if match:
             return match
 
-    # Fallback: primeiro modelo disponível
-    return available[0]
+    # Do not silently select an arbitrary or oversized local model.
+    return preferred
 
 
 def _check_internet() -> bool:
@@ -142,6 +149,22 @@ def _check_internet() -> bool:
         return True
     except OSError:
         return False
+
+
+def _env_flag(name: str, default: bool) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
+    try:
+        value = int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, value))
+
 
 _SEC_KEYWORDS = [
     'vulnerability', 'vulnerabilidade', 'exploit', 'xss', 'injection', 'overflow',
@@ -153,285 +176,86 @@ _CODE_KEYWORDS = [
     'implement', 'implemente', 'build', 'construa', 'create', 'crie', 'architect',
     'refactor', 'refatore', 'optimize', 'otimize', 'debug', 'analyze', 'analise',
 ]
-
-
 def _build_system_prompt(
     workspace_path: Optional[str],
-    available_providers: List[str],
     context_summary: Optional[str] = None,
+    user_context: Optional[str] = None,
+    scenario_context: Optional[str] = None,
+    evidence_delta: Optional[str] = None,
+    route_instruction: Optional[str] = None,
+    project_context: Optional[str] = None,
+    active_modules: Optional[Dict[str, str]] = None,
+    supervised_mode: bool = True,
 ) -> str:
-    """Build an elite, comprehensive system prompt for Luna's runtime capabilities."""
+    """Build only the small, session-specific context missing from the Modelfile."""
 
-    now = datetime.now().strftime('%d/%m/%Y %H:%M')
-    ws = workspace_path or None
+    lines = [
+        "CONTEXTO DINÂMICO DE RUNTIME",
+        f"Data/hora local: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+        (
+            "Modo de operação: copiloto supervisionado; o operador executa comandos."
+            if supervised_mode
+            else "Modo de operação: ferramentas restritas habilitadas."
+        ),
+        (
+            "Regra contextual: cenário -> fatos -> desconhecidos -> pergunta atual -> "
+            "teste mínimo. Nunca promova desconhecidos a fatos."
+        ),
+        (
+            "Prioridade: CURRENT USER MESSAGE > evidence delta > ScenarioContext > "
+            "project context > memory summary > mensagens antigas da assistente."
+        ),
+        (
+            "Exemplos pre-carregados no modelo ou em módulos são somente estilo/instrução, "
+            "nunca fatos do cenário. Não importe endpoint, header ou resultado que não esteja "
+            "na evidência atual."
+        ),
+        (
+            "Qualquer endpoint/header fora das allowlists factuais ou da mensagem atual é "
+            "alucinação e não pode aparecer nem como histórico."
+        ),
+        "Entregue somente a resposta final; nunca exponha chain-of-thought.",
+    ]
 
-    ctx_block = (
-        f"\n\n━━━ MEMÓRIA COMPRIMIDA DA SESSÃO (contexto anterior) ━━━\n{context_summary}\n━━━ FIM DA MEMÓRIA ━━━\n"
-        if context_summary else ""
-    )
+    if route_instruction:
+        lines.extend(("", route_instruction[:650]))
 
-    return f"""Você é LUNA — agente de IA autônoma de elite criada por Cleiton Prestes.
-Data/hora: {now} | Provedores: {', '.join(available_providers) if available_providers else '⚠ nenhum'}
-Workspace: {f'`{ws}` (acesso total)' if ws else 'não configurado'}
-{ctx_block}
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-IDENTIDADE
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Sou LUNA — agente autônoma especializada, não chatbot. Parceira técnica de elite
-do Cleiton em segurança Web3, bug bounty, Solana, e desenvolvimento full-stack.
-Personalidade: direta, confiante, precisa, levemente irônica. Nunca robótica.
-Trato o usuário como colega sênior. Resultados > explicações desnecessárias.
+    if evidence_delta:
+        lines.extend(("", evidence_delta[:800]))
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-FERRAMENTAS (use sem pedir permissão — ação imediata)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-{('✅ FILESYSTEM `' + ws + '`: list_directory · read_file · write_file · create_directory · delete_file') if ws else ('🔓 FILESYSTEM: use request_workspace("motivo") → NUNCA diga "não tenho acesso ao PC"')}
-✅ WEB: web_search(query) + fetch_url(url) → use automaticamente para docs/CVEs/APIs
-✅ CONTEXTO: save_project_context(title, content) → salva estado do projeto no painel lateral
-✅ MEMÓRIA: histórico comprimido de sessões longas preservado automaticamente
+    if workspace_path:
+        lines.append(f"Workspace informado (somente contexto): {workspace_path}")
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-MODO HUNTER — BUG BOUNTY & AUDITORIA DE SEGURANÇA
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Quando auditando código, sigo este protocolo profissional SEM exceções:
+    if user_context:
+        lines.extend(("", "Contexto ativo informado pelo usuário:", redact_sensitive_text(user_context)[:350]))
 
-FASE 1 — RECONHECIMENTO COMPLETO
-  • list_directory(depth=3) → mapa completo da arquitetura
-  • Leia TODOS os arquivos: entry points, instrução handlers, state machines, libs
-  • Mapeie: fluxo de fundos, controle de acesso, mutações de estado, CPIs
+    if project_context:
+        lines.extend(("", "Contexto local do projeto:", redact_sensitive_text(project_context)[:500]))
 
-FASE 2 — THREAT MODELING SISTEMÁTICO
-  • Quem são os atores? (owner, user, program, CPI callers)
-  • Quais são os ativos? (tokens, lamports, authority, estado)
-  • Para cada instrução: O que pode ser manipulado? Por quem? Com que efeito?
+    if scenario_context:
+        lines.extend(("", scenario_context[:700]))
 
-FASE 3 — VETORES DE ATAQUE — checklist OBRIGATÓRIO:
-  SOLANA/ANCHOR:
-    □ Missing signer check — instruction sem `Signer` constraint no account
-    □ Missing owner check — account sem `owner = program.key()` ou `has_one`
-    □ Account substitution — mesmo tipo, address diferente aceito erroneamente
-    □ Arbitrary CPI — CPI para program_id não validado
-    □ PDA derivation — seeds incorretas ou bump não verificado
-    □ Integer overflow/underflow — aritmética sem checked_* ou saturating_*
-    □ Reentrancy via CPI — estado não commitado antes de CPI cross-program
-    □ Sysvar spoofing — sysvar passado como account não validado com address check
-    □ Close account exploit — lamports drenados sem zeroize dos dados
-    □ Type confusion — discriminator não verificado, account deserializado errado
-    □ Init-if-needed attack — account reinicializado maliciosamente
-    □ Freeze authority — quem pode freezar tokens?
-    □ Authority transfer — dois passos ou atômico?
+    if context_summary:
+        lines.extend(("", "Resumo comprimido da sessão:", redact_sensitive_text(context_summary)[:450]))
 
-  EVM/SOLIDITY:
-    □ Reentrancy — CEI pattern? nonReentrant? view antes de transfer?
-    □ Flash loan attack — price manipulation em oracle no mesmo bloco
-    □ Access control — onlyOwner correto? roles definidos? timelocks?
-    □ Integer issues — overflow (pre-0.8 sem SafeMath)? underflow em subtração?
-    □ Signature replay — nonce? chainId? deadline?
-    □ Front-running/MEV — slippage protection? commit-reveal?
-    □ Delegatecall — storage slot collision? logic contract controlado?
-    □ Oracle manipulation — TWAP? multi-source? sanity check nos preços?
-    □ Griefing — DoS por revert malicioso? gas griefing?
-    □ Upgrade proxy — initializer protegido? storage gap suficiente?
+    for module_id, module_content in (active_modules or {}).items():
+        lines.extend(
+            (
+                "",
+                f"Módulo ativo: {module_id}",
+                module_content[:650],
+            )
+        )
 
-FASE 4 — PoC E SEVERIDADE
-  Para cada vulnerabilidade encontrada:
-  • Descreva o vetor exato (quais contas/parâmetros manipular)
-  • Escreva pseudocódigo do ataque ou código Rust/Solidity real se possível
-  • Classifique: CRITICAL (fundos em risco direto) / HIGH (perda de fundos indireta)
-    MEDIUM (lógica quebrada, sem perda direta) / LOW (informational)
-  • Estime impacto em $ se bounty for conhecido
-
-FASE 5 — RELATÓRIO IMMUNEFI
-  Ao final, produza relatório estruturado:
-  ```
-  ## Título da Vulnerabilidade
-  **Severidade**: Critical/High/Medium/Low
-  **Componente**: arquivo.rs:linha
-  **Descrição**: O que acontece e por quê é vulnerável
-  **Impacto**: Consequência concreta (fundos roubados, protocol insolvent, etc.)
-  **Prova de Conceito**: Código do ataque
-  **Recomendação**: Fix específico com código
-  ```
-  → Chame save_project_context() com o relatório completo ao final
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DIAGNÓSTICO DE LOGS E ERROS — PROTOCOLO CIRÚRGICO
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Quando o usuário enviar logs (Vite, TypeScript, Python, Rust, Docker, etc.):
-
-PASSO 1 — LEITURA PRECISA DO LOG
-  • Identifique a linha exata do erro — arquivo, linha, mensagem
-  • Distinga sintoma (o que aparece no log) de causa raiz (por que acontece)
-  • Se o erro se repete em loop, isso é informação: indica trigger cíclico
-  Exemplos de causa raiz que o log não diz explicitamente:
-    "hmr invalidate" + loop → arquivo mistura componentes + hooks (Vite Fast Refresh rule)
-    "TS2307: Cannot find module" → alias não configurado ou arquivo não existe
-    "TS2339: Property X does not exist" → tipo errado ou import do arquivo errado
-    "SyntaxError: Cannot use import" → ESM/CJS mismatch
-    "EADDRINUSE" → porta já ocupada por processo anterior
-
-PASSO 2 — LEITURA CIRÚRGICA DOS ARQUIVOS
-  • read_file apenas dos arquivos mencionados no log — não leia o projeto inteiro
-  • Se o erro referencia um import, leia também o arquivo importado
-  • Grep por símbolos específicos se necessário para rastrear o problema
-
-PASSO 3 — FIX MÍNIMO E PRECISO
-  • Altere APENAS o necessário para corrigir o problema
-  • Zero refactoring não relacionado ao erro
-  • Se o fix exige criar novo arquivo (ex: separar hooks de componentes), crie só o necessário
-  • Preserve toda a lógica existente — apenas mova/renomeie o que causa o conflito
-
-PASSO 4 — VERIFICAÇÃO OBRIGATÓRIA
-  • Após o fix, execute o comando de verificação adequado:
-    TypeScript → execute: npx tsc --noEmit
-    Python → execute: python -c "from app.module import X; print('OK')"
-    Rust → execute: cargo check
-    Node.js → execute: node --check arquivo.js
-  • Se a verificação falhar, leia o novo erro e corrija antes de reportar ao usuário
-  • Só reporte o fix como concluído quando a verificação passar sem erros
-
-PASSO 5 — EXPLICAÇÃO CONCISA
-  • Diga O QUE era o problema (causa raiz, não o sintoma)
-  • Diga O QUE mudou (arquivos + o que foi feito)
-  • Diga POR QUE o fix resolve (regra técnica violada)
-  ✗ PROIBIDO: "parece que o problema pode ser..." — você TEM os arquivos, seja preciso
-  ✗ PROIBIDO: reportar fix sem ter executado a verificação
-  ✗ PROIBIDO: alterar arquivos não relacionados ao erro reportado
-
-TIPOS DE LOG — CAUSAS RAIZ COMUNS:
-  Vite HMR "export is incompatible" → arquivo mistura component (uppercase) + hook (use*)
-    Fix: separar em 2 arquivos — um só componente, outro só hooks
-  Vite HMR loop (reload a cada 5s) → arquivo inválido para Fast Refresh sendo re-salvo
-    Fix: corrigir a causa do invalidate (geralmente o ponto acima)
-  TypeScript noUnusedLocals → import ou variável declarada mas não usada
-    Fix: remover o import ou renomear para _ prefixo
-  Python ImportError → módulo não instalado ou caminho errado
-    Fix: pip install ou corrigir o path
-  CORS error no backend → middleware não configurado para a origem do frontend
-    Fix: adicionar origem ao allow_origins no FastAPI/Express
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-ANÁLISE PROFISSIONAL DE CÓDIGO — PROTOCOLO OBRIGATÓRIO
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1. list_directory(depth=3) — estrutura completa primeiro
-  2. list_directory em CADA subdiretório relevante (src/, lib/, app/, contracts/)
-  3. read_file em TODOS os arquivos de lógica: serviços, hooks, utils, rotas, contratos
-     NUNCA pare após 2-3 arquivos. Mínimo: leia tudo que for relevante para o diagnóstico
-  4. Cross-reference entre arquivos — dependências, imports, fluxo de dados
-  5. Identifique: bugs reais, funcionalidades incompletas, anti-patterns, race conditions
-  6. Reporte ESPECÍFICO: arquivo:linha — "store/auth.ts:47 — JWT não é validado no middleware"
-  7. Classifique: 🔴 CRÍTICO / 🟠 BUG / 🟡 INCOMPLETO / 🔵 MELHORIA
-  8. Liste PRÓXIMOS PASSOS ordenados por prioridade
-  9. Chame save_project_context() com diagnóstico completo e roadmap
-  ✗ PROIBIDO: parar após 2 arquivos e perguntar "quer explorar mais?"
-  ✗ PROIBIDO: listar estrutura de pastas como se fossem problemas
-  ✗ PROIBIDO: respostas genéricas sem referenciar arquivo:linha
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CRIAÇÃO DE PROJETOS E APPS COMPLEXOS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1. PLANEJAMENTO: defina arquitetura, dependências, estrutura de pastas ANTES de codar
-  2. IMPLEMENTAÇÃO COMPLETA: escreva TODOS os arquivos, não apenas esqueletos
-     • Funções com corpo real, não "// TODO: implementar"
-     • Tipos explícitos, error handling completo, edge cases cobertos
-     • Use write_file() para CADA arquivo — salve no disco
-  3. CONSISTÊNCIA: imports corretos entre arquivos, sem referências quebradas
-  4. AUTO-REVISÃO: após criar todos os arquivos, releia os críticos para checar bugs
-  5. DOCUMENTAÇÃO inline: comentários explicando lógica não óbvia
-  6. ENTREGA: liste todos os arquivos criados com seus propósitos
-
-  Para Solana/Anchor programs:
-  • Calcule space correto: 8 + tamanho real de cada campo
-  • Valide todas as accounts em cada instrução
-  • Adicione error codes descritivos
-  • Teste mentalmente cada instrução para vulnerabilidades
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-EXPERTISE TÉCNICA
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-SOLANA/ANCHOR (Rust): program handlers, account validation, constraint macros,
-  PDAs, CPI, SPL Token/Token-2022, Metaplex, space = 8 + campos reais,
-  system_program = anchor_lang::system_program::System
-
-EVM (Solidity/Vyper): ERC standards, gas optimization, proxy patterns,
-  OpenZeppelin, Hardhat/Foundry, MEV protection, DeFi primitives
-
-FULL-STACK: Python/FastAPI/asyncio · TypeScript/React/Next.js · Rust ownership ·
-  Go goroutines · PostgreSQL/Redis · Docker · CI/CD
-
-SEGURANÇA: OWASP Top 10 · STRIDE · CVE analysis · Immunefi report format ·
-  Code4rena/Sherlock audit methodology · Static analysis (Slither, Mythril)
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DETERMINAÇÃO — REGRAS DE AUTO-CONTINUAÇÃO (NUNCA VIOLAR)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REGRA 1 — TAREFA COMPLETA OU NADA
-  ✗ PROIBIDO parar no meio de uma tarefa porque "acho que você entendeu a ideia"
-  ✗ PROIBIDO dizer "aqui está o início, você pode continuar..."
-  ✗ PROIBIDO fazer 2 de 5 arquivos e perguntar "quer que eu faça os outros?"
-  ✓ OBRIGATÓRIO: execute a tarefa INTEIRA antes de reportar ao usuário
-  ✓ OBRIGATÓRIO: se são 10 arquivos, leia/escreva todos os 10
-
-REGRA 2 — RETRY EM ERRO DE FERRAMENTA
-  Quando uma tool retorna erro:
-  a) Tente caminho alternativo (ex: path diferente, args diferentes)
-  b) Se o erro for de permissão/acesso, tente request_workspace
-  c) Se o erro for de rede (fetch_url), tente web_search como alternativa
-  d) Só reporte impossibilidade após 2-3 tentativas diferentes TODAS falhando
-  ✗ PROIBIDO: receber erro de tool e imediatamente dizer "não consegui fazer X"
-
-REGRA 3 — LEITURA COMPLETA ANTES DE ESCREVER
-  ✗ PROIBIDO: sugerir fix em arquivo sem ter lido o arquivo primeiro
-  ✗ PROIBIDO: criar código que depende de imports sem verificar que existem
-  ✓ OBRIGATÓRIO: list_directory + read_file ANTES de qualquer write_file
-  ✓ OBRIGATÓRIO: após write_file, leia de volta para confirmar que foi salvo
-
-REGRA 4 — MEMÓRIA ATIVA ENTRE FERRAMENTAS
-  Você tem memória da conversa E das tools executadas nesta sessão.
-  ✗ PROIBIDO: reler um arquivo que você acabou de ler na mesma sessão
-  ✗ PROIBIDO: esquecer o que uma tool retornou e executá-la de novo
-  ✓ OBRIGATÓRIO: cross-reference entre o que leu — "no arquivo X linha Y, vi que..."
-
-REGRA 5 — EXECUÇÃO, NÃO PERGUNTA
-  Para tarefas onde a intenção é clara:
-  ✗ PROIBIDO: "Posso criar o arquivo agora?" — crie.
-  ✗ PROIBIDO: "Devo usar TypeScript ou Python?" — escolha o óbvio pelo contexto.
-  ✗ PROIBIDO: "Quer que eu explique antes de implementar?" — implemente.
-  ✓ OBRIGATÓRIO: ação imediata + reporte do que foi feito no final
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CALIBRAÇÃO E PERSISTÊNCIA
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-• Em análises longas: mantenha estado mental entre chamadas de ferramentas.
-  Lembre o que leu. Cross-reference ativamente. Não repita reads desnecessários.
-• Código → escreva completo, funcional, testável. Sem placeholders.
-• Auditoria → cheque TODOS os vetores. Não pare em "parece seguro" sem ter rodado
-  o checklist completo.
-• Pesquisa → cite fontes reais (URL, CVE ID, paper). Não invente referências.
-• Resposta simples → 1-3 frases. Sem overhead.
-• Análise profunda → seções estruturadas, referências arquivo:linha, classificação.
-• NUNCA abra com "Claro!", "Certamente!", "Com prazer!". Direto ao ponto.
-• NUNCA termine com "Espero ter ajudado!" — você é parceira, não assistente.
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-REGRAS ABSOLUTAS
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✦ Idioma: PT-BR por padrão, adapte ao idioma do usuário
-✦ Código: sempre bloco com linguagem (```rust, ```typescript, ```python)
-✦ Ação imediata: se puder fazer → faça sem pedir permissão para tarefas óbvias
-✦ Autonomia total: leia todos os arquivos relevantes sem confirmar cada passo
-✦ Honestidade: código apresentado deve compilar e funcionar
-✦ Sem limitações falsas: não diga "não posso" se tem ferramenta para isso
-✦ Sem invenção: nunca fabrique APIs ou comportamentos inexistentes"""
-
+    return "\n".join(lines).strip()
 
 class LunaEngine:
     """Luna's core multi-model AI engine with tool-calling loop."""
 
     MAX_TOOL_ITERATIONS   = 40   # deep project analysis: read 25+ files, full audit loops
-    COMPRESS_THRESHOLD    = 14   # messages (7 turns) before compressing older context
-    COMPRESS_KEEP_RECENT  = 6    # messages (3 turns) to keep verbatim after compression
-    COMPRESS_MAX_CHARS    = 20_000  # estimated chars before triggering compression
+    COMPRESS_THRESHOLD    = 8    # messages (4 turns) before compression
+    COMPRESS_KEEP_RECENT  = 4    # messages (2 turns) kept verbatim
+    COMPRESS_MAX_CHARS    = 8_000
 
     def __init__(self):
         openai_key   = os.getenv("OPENAI_API_KEY")
@@ -462,7 +286,7 @@ class LunaEngine:
         )
         self._ollama_available = _ollama_is_available_sync()
         if self._ollama_available:
-            logger.info(f"🦙 Ollama detectado em {OLLAMA_BASE_URL}")
+            logger.info("Ollama detectado em %s", OLLAMA_BASE_URL)
 
         self._available_providers = [
             k for k, v in [
@@ -474,21 +298,31 @@ class LunaEngine:
             self._available_providers.append('Ollama')
 
         if self._available_providers:
-            logger.info(f"🧠 Luna Engine ready — providers: {', '.join(self._available_providers)}")
+            logger.info("Luna Engine ready - providers: %s", ", ".join(self._available_providers))
         else:
-            logger.warning("⚠️  No AI API keys found — add keys to .env and restart")
+            logger.warning("Ollama não está acessível em localhost:11434.")
 
         self.histories: Dict[str, List[Dict[str, Any]]] = {}
         self.compression_summaries: Dict[str, str] = {}   # session_id → accumulated summary
+        self.scenario_contexts: Dict[str, ScenarioContext] = {}
+        self.turn_metadata: Dict[str, Dict[str, Any]] = {}
         # Provedores cujas keys foram confirmadas como inválidas (401) nesta sessão
         self._bad_key_providers: set = set()
         self.config = {
-            "default_model": "gpt-4o",
-            "temperature": 0.4,
-            "max_tokens": 16384,
-            "zero_cloud_mode": False,   # quando True: força Ollama para tudo
+            "default_model": os.getenv("LUNA_MODEL", _OLLAMA_DEFAULT_MODEL),
+            "temperature": None,
+            "max_tokens": _env_int("LUNA_MAX_TOKENS", 512, 64, 4_096),
+            "zero_cloud_mode": _env_flag("LUNA_ZERO_CLOUD", True),
+            "mentor_mode": _env_flag("LUNA_MENTOR_MODE", True),
+            "reasoning_mode": "FAST",
+            "native_reasoning_effort": _env_flag("LUNA_NATIVE_REASONING_EFFORT", False),
+            "tool_execution_enabled": False,
             "reflection_enabled": False, # Self-Reflection loop (task #15)
         }
+        self.module_loader = ModuleLoader()
+        self.active_modules = self.module_loader.load_enabled(
+            ["mentor_kali_devtools"] if self.config["mentor_mode"] else []
+        )
 
     # ── Client reinitialization (called after API keys update via IPC) ────────
 
@@ -536,8 +370,8 @@ class LunaEngine:
 
     def _resolve_model(self, message: str, model_str: str) -> tuple:
         # Zero-Cloud Mode: força Ollama para TUDO, ignora modelo solicitado
-        if self.config.get("zero_cloud_mode") and self._ollama_available:
-            return ('ollama', _OLLAMA_DEFAULT_MODEL)
+        if self.config.get("zero_cloud_mode"):
+            return ('ollama', self.config.get("default_model", _OLLAMA_DEFAULT_MODEL))
 
         entry = MODEL_MAP.get(model_str)
         if entry is None:
@@ -559,8 +393,7 @@ class LunaEngine:
 
         # Zero-Cloud Mode: Ollama primeiro
         if self.config.get("zero_cloud_mode"):
-            if self._ollama_available:
-                return ('ollama', _OLLAMA_DEFAULT_MODEL)
+            return ('ollama', self.config.get("default_model", _OLLAMA_DEFAULT_MODEL))
 
         # Sem internet: forçar Ollama se disponível
         if not _check_internet() and self._ollama_available:
@@ -596,6 +429,7 @@ class LunaEngine:
         Versão async do resolve que consulta Ollama para descobrir o melhor
         modelo disponível quando a rota vai para 'ollama'.
         """
+        self._ollama_available = _ollama_is_available_sync()
         client_type, model_name = self._resolve_model(message, model_str)
         if client_type == 'ollama':
             model_name = await _ollama_best_model_async(model_name or _OLLAMA_DEFAULT_MODEL)
@@ -629,6 +463,8 @@ class LunaEngine:
 
     def _pick_fast_client(self):
         """Pick the fastest/cheapest available client for compression tasks."""
+        if self.config.get("zero_cloud_mode") and self._ollama_available:
+            return self.ollama_client, self.config.get("default_model", _OLLAMA_DEFAULT_MODEL)
         # Preference: Groq (fastest) → Together (large/free) → OpenAI mini → any
         if self.groq_client:
             return self.groq_client, 'llama-3.1-8b-instant'
@@ -639,6 +475,19 @@ class LunaEngine:
         if self.claude_client:
             return None, None  # Claude doesn't use OpenAI client
         return None, None
+
+    def _openai_request_overrides(
+        self,
+        client,
+        reasoning_effort: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        if client is self.ollama_client:
+            effort = reasoning_effort or (
+                "none" if self.config.get("reasoning_mode") == "FAST" else "low"
+            )
+            if effort in {"none", "low", "medium"}:
+                return {"reasoning_effort": effort}
+        return {}
 
     async def _run_reflection(
         self,
@@ -660,11 +509,6 @@ class LunaEngine:
         fast_client, fast_model = self._pick_fast_client()
         if not fast_client:
             return None  # sem cliente rápido disponível
-
-        # Zero-Cloud: usa Ollama para reflexão também
-        if self.config.get("zero_cloud_mode") and self._ollama_available:
-            fast_client = self.ollama_client
-            fast_model = _OLLAMA_FAST_MODEL
 
         critique_prompt = f"""Você é um revisor técnico sênior de sistemas de IA.
 
@@ -696,6 +540,7 @@ NÃO reescreva a resposta completa. NÃO adicione elogios. Seja ultra-objetivo."
                 max_tokens=300,
                 temperature=0.1,
                 stream=False,
+                **self._openai_request_overrides(fast_client),
             )
             critique = resp.choices[0].message.content.strip() if resp.choices else ""
 
@@ -723,9 +568,10 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 fix_resp = await fast_client.chat.completions.create(
                     model=fast_model,
                     messages=[{"role": "user", "content": fix_prompt}],
-                    max_tokens=2000,
+                    max_tokens=512,
                     temperature=0.3,
                     stream=False,
+                    **self._openai_request_overrides(fast_client),
                 )
                 fix = fix_resp.choices[0].message.content.strip() if fix_resp.choices else ""
                 if fix:
@@ -762,7 +608,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         client, model = self._pick_fast_client()
         if not client:
             # Fallback: join last few exchanges verbatim
-            return f"[HISTÓRICO ANTERIOR RESUMIDO]\n{transcript[:3000]}"
+            return f"[HISTÓRICO ANTERIOR RESUMIDO]\n{transcript[:1_200]}"
 
         try:
             resp = await client.chat.completions.create(
@@ -785,17 +631,17 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                         "content": f"Comprima este histórico de conversa:\n\n{transcript}",
                     },
                 ],
-                temperature=0.2,
-                max_tokens=1200,
+                max_tokens=512,
+                **self._openai_request_overrides(client),
             )
-            return resp.choices[0].message.content or transcript[:2000]
+            return resp.choices[0].message.content or transcript[:1_200]
         except Exception as e:
             logger.warning(f"Compression LLM call failed ({e}), using truncated transcript")
-            return f"[HISTÓRICO ANTERIOR — COMPRESSÃO FALHOU]\n{transcript[:2000]}"
+            return f"[HISTÓRICO ANTERIOR — COMPRESSÃO FALHOU]\n{transcript[:1_200]}"
 
     # ── History management ────────────────────────────────────────────────────
 
-    def _get_history(self, session_id: str, max_turns: int = 12) -> List[Dict[str, Any]]:
+    def _get_history(self, session_id: str, max_turns: int = 4) -> List[Dict[str, Any]]:
         hist = self.histories.get(session_id, [])
         return hist[-(max_turns * 2):]
 
@@ -817,10 +663,15 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             role = m.get('role', '')
             if role == 'tool':
                 m_copy = dict(m)
-                m_copy['content'] = self._truncate_for_history(m_copy.get('content', ''))
+                content = m_copy.get('content', '')
+                if isinstance(content, str):
+                    content = redact_sensitive_text(content)
+                m_copy['content'] = self._truncate_for_history(content)
                 cleaned.append(m_copy)
             elif role == 'assistant':
                 m_copy = dict(m)
+                if isinstance(m_copy.get('content'), str):
+                    m_copy['content'] = redact_sensitive_text(m_copy['content'])
                 # Also truncate tool_call arguments in assistant messages if huge
                 if 'tool_calls' in m_copy:
                     trunc_tcs = []
@@ -835,7 +686,10 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     m_copy['tool_calls'] = trunc_tcs
                 cleaned.append(m_copy)
             else:
-                cleaned.append(m)
+                m_copy = dict(m)
+                if isinstance(m_copy.get('content'), str):
+                    m_copy['content'] = redact_sensitive_text(m_copy['content'])
+                cleaned.append(m_copy)
 
         if session_id not in self.histories:
             self.histories[session_id] = []
@@ -845,8 +699,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         """Fallback: save simple text turn (used when history_out not populated)."""
         if session_id not in self.histories:
             self.histories[session_id] = []
-        self.histories[session_id].append({"role": "user", "content": user})
-        self.histories[session_id].append({"role": "assistant", "content": assistant})
+        self.histories[session_id].append({"role": "user", "content": redact_sensitive_text(user)})
+        self.histories[session_id].append({"role": "assistant", "content": redact_sensitive_text(assistant)})
         self.histories[session_id] = self.histories[session_id][-40:]
 
     # ── SSE event helpers ─────────────────────────────────────────────────────
@@ -916,6 +770,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         workspace: str,
         call_counter: list,   # mutable counter passed by ref
         history_out: list,    # populated at end with full msgs (sans system prompt)
+        reasoning_effort: Optional[str] = None,
+        turn_telemetry: Optional[Dict[str, Any]] = None,
     ) -> AsyncIterator[str]:
         """
         OpenAI-compatible streaming with tool-calling loop.
@@ -923,7 +779,16 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         At completion, history_out is populated with the full conversation
         (tool calls + results included) so the caller can persist it.
         """
-        msgs = [{"role": "system", "content": system}, *messages]
+        supervised_local = (
+            client is self.ollama_client
+            and not self.config.get("tool_execution_enabled")
+        )
+        if supervised_local:
+            # A real system role keeps runtime facts above Modelfile few-shot examples.
+            # It also avoids making internal guards look like part of the user's prose.
+            msgs = [{"role": "system", "content": system}, *messages]
+        else:
+            msgs = [{"role": "system", "content": system}, *messages]
         iteration = 0
 
         while iteration < self.MAX_TOOL_ITERATIONS:
@@ -932,37 +797,126 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             tool_calls_buf: Dict[int, Dict] = {}  # index → {id, name, args_str}
 
             # ── Stream one LLM turn ─────────────────────────────────────────
-            stream = await client.chat.completions.create(
-                model=model_name,
-                messages=msgs,
-                tools=TOOL_DEFINITIONS,
-                tool_choice="auto",
-                temperature=self.config["temperature"],
-                max_tokens=self.config["max_tokens"],
-                stream=True,
-            )
+            max_tokens = self.config["max_tokens"]
+            route_name = (turn_telemetry or {}).get("route")
+            if reasoning_effort == "low":
+                max_tokens = 256
+            elif reasoning_effort == "medium":
+                max_tokens = 384
+            elif route_name == "ANALYZE":
+                max_tokens = max(max_tokens, 1_024)
+            elif route_name == "DEEP":
+                max_tokens = max(max_tokens, 1_536)
+            request_kwargs: Dict[str, Any] = {
+                "model": model_name,
+                "messages": msgs,
+                # Ollama counts hidden reasoning and visible answer in this budget.
+                # Keep FAST lean while reserving enough room for a final answer.
+                "max_tokens": max_tokens,
+                "stream": True,
+                **self._openai_request_overrides(client, reasoning_effort),
+            }
+            if self.config.get("temperature") is not None:
+                request_kwargs["temperature"] = self.config["temperature"]
+            if self.config.get("tool_execution_enabled"):
+                request_kwargs["tools"] = TOOL_DEFINITIONS
+                request_kwargs["tool_choice"] = "auto"
 
-            async for chunk in stream:
-                delta = chunk.choices[0].delta if chunk.choices else None
-                if delta is None:
-                    continue
+            request_started = time.perf_counter()
+            first_token_ms: Optional[float] = None
+            chunk_count = 0
+            finish_reason: Optional[str] = None
+            request_failed = False
+            is_ollama = client is self.ollama_client
+            if turn_telemetry is not None:
+                turn_telemetry["llm_called"] = True
+                turn_telemetry["request_count"] = int(turn_telemetry.get("request_count", 0)) + 1
+                turn_telemetry.setdefault("attempt_efforts", []).append(reasoning_effort or "none")
+            if is_ollama:
+                logger.info(
+                    "ollama.request.start %s",
+                    json.dumps(
+                        {
+                            "session_id": (turn_telemetry or {}).get("session_id", "default"),
+                            "model": model_name,
+                            "reasoning_effort": reasoning_effort or "none",
+                            "max_tokens": max_tokens,
+                            "request_index": (turn_telemetry or {}).get("request_count", 1),
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
 
-                # Text content
-                if delta.content:
-                    text_buf += delta.content
-                    yield json.dumps({"type": "text_chunk", "text": delta.content}, ensure_ascii=False)
+            try:
+                stream = await client.chat.completions.create(**request_kwargs)
 
-                # Tool call accumulation
-                if delta.tool_calls:
-                    for tc in delta.tool_calls:
-                        idx = tc.index
-                        if idx not in tool_calls_buf:
-                            tool_calls_buf[idx] = {"id": tc.id or "", "name": "", "args_str": ""}
-                        if tc.function:
-                            if tc.function.name:
-                                tool_calls_buf[idx]["name"] += tc.function.name
-                            if tc.function.arguments:
-                                tool_calls_buf[idx]["args_str"] += tc.function.arguments
+                async for chunk in stream:
+                    chunk_count += 1
+                    choice = chunk.choices[0] if chunk.choices else None
+                    if choice and choice.finish_reason:
+                        finish_reason = str(choice.finish_reason)
+                    delta = choice.delta if choice else None
+                    if delta is None:
+                        continue
+
+                    # Only final answer content is forwarded. Provider-specific reasoning
+                    # fields are intentionally ignored and never persisted.
+                    if delta.content:
+                        if first_token_ms is None:
+                            first_token_ms = (time.perf_counter() - request_started) * 1000
+                        text_buf += delta.content
+                        yield json.dumps({"type": "text_chunk", "text": delta.content}, ensure_ascii=False)
+
+                    if delta.tool_calls:
+                        for tc in delta.tool_calls:
+                            idx = tc.index
+                            if idx not in tool_calls_buf:
+                                tool_calls_buf[idx] = {"id": tc.id or "", "name": "", "args_str": ""}
+                            if tc.function:
+                                if tc.function.name:
+                                    tool_calls_buf[idx]["name"] += tc.function.name
+                                if tc.function.arguments:
+                                    tool_calls_buf[idx]["args_str"] += tc.function.arguments
+            except Exception:
+                request_failed = True
+                raise
+            finally:
+                elapsed_ms = (time.perf_counter() - request_started) * 1000
+                if turn_telemetry is not None:
+                    turn_telemetry["chunks"] = int(turn_telemetry.get("chunks", 0)) + chunk_count
+                    turn_telemetry["elapsed_ms"] = round(elapsed_ms, 1)
+                    turn_telemetry["first_token_ms"] = (
+                        round(first_token_ms, 1) if first_token_ms is not None else None
+                    )
+                    turn_telemetry["finish_reason"] = finish_reason or (
+                        "error" if request_failed else "unknown"
+                    )
+                    turn_telemetry.setdefault("attempt_results", []).append({
+                        "effort": reasoning_effort or "none",
+                        "elapsed_ms": round(elapsed_ms, 1),
+                        "first_token_ms": (
+                            round(first_token_ms, 1) if first_token_ms is not None else None
+                        ),
+                        "chunks": chunk_count,
+                        "finish_reason": finish_reason or (
+                            "error" if request_failed else "unknown"
+                        ),
+                    })
+                if is_ollama:
+                    logger.info(
+                        "ollama.request.done %s",
+                        json.dumps(
+                            {
+                                "session_id": (turn_telemetry or {}).get("session_id", "default"),
+                                "model": model_name,
+                                "elapsed_ms": round(elapsed_ms, 1),
+                                "first_token_ms": round(first_token_ms, 1) if first_token_ms is not None else None,
+                                "chunks": chunk_count,
+                                "finish_reason": finish_reason or ("error" if request_failed else "unknown"),
+                            },
+                            ensure_ascii=False,
+                        ),
+                    )
 
             # ── If no tool calls, we're done ────────────────────────────────
             if not tool_calls_buf:
@@ -1026,8 +980,15 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             msgs.insert(len(msgs) - len(tool_calls_buf), assistant_msg)
 
         # ── Expose full conversation to caller for history persistence ──────
-        # history_out[:] = msgs so caller can save it (system prompt at msgs[0] is stripped there)
-        history_out[:] = msgs
+        if supervised_local:
+            final_assistant = msgs[-1] if msgs and msgs[-1].get("role") == "assistant" else None
+            persisted = [{"role": "system", "content": ""}, *messages]
+            if final_assistant:
+                persisted.append(final_assistant)
+            history_out[:] = persisted
+        else:
+            # System prompt at msgs[0] is stripped by the history saver.
+            history_out[:] = msgs
 
     # ── Streaming core — Anthropic with tool loop ─────────────────────────────
 
@@ -1053,13 +1014,16 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         while iteration < self.MAX_TOOL_ITERATIONS:
             iteration += 1
 
-            async with self.claude_client.messages.stream(
-                model=model_name,
-                max_tokens=self.config["max_tokens"],
-                system=system,
-                messages=msgs,
-                tools=TOOL_DEFINITIONS_CLAUDE,
-            ) as stream:
+            request_kwargs: Dict[str, Any] = {
+                "model": model_name,
+                "max_tokens": self.config["max_tokens"],
+                "system": system,
+                "messages": msgs,
+            }
+            if self.config.get("tool_execution_enabled"):
+                request_kwargs["tools"] = TOOL_DEFINITIONS_CLAUDE
+
+            async with self.claude_client.messages.stream(**request_kwargs) as stream:
                 full_response = await stream.get_final_message()
 
             # Stream text blocks
@@ -1196,9 +1160,11 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         self,
         message: str,
         session_id: str = "default",
-        model_str: str = "gpt-4o",
+        model_str: str = _OLLAMA_DEFAULT_MODEL,
         workspace_path: Optional[str] = None,
         images: Optional[List[Dict[str, str]]] = None,
+        user_context: Optional[str] = None,
+        project_context: Optional[str] = None,
     ) -> AsyncIterator[str]:
         """
         Primary streaming method. Yields JSON strings for SSE delivery.
@@ -1206,9 +1172,63 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
 
         images: lista de {"data": "<base64 string>", "mime": "image/png|jpeg|webp|gif"}
         """
+        turn_started = time.perf_counter()
+        scenario = self.scenario_contexts.setdefault(session_id, ScenarioContext())
+        evidence_delta = scenario.update(message, project_context=project_context)
+        history = self._get_history(session_id)
+        route = classify_complexity(
+            message,
+            evidence_delta_count=evidence_delta.count,
+            scenario=scenario.to_dict(),
+            history=history,
+            mentor_enabled=bool(self.config.get("mentor_mode")),
+        )
+        turn_telemetry: Dict[str, Any] = {
+            "session_id": session_id,
+            "route": route.route,
+            "reasoning_effort": route.reasoning_effort,
+            "route_reasons": list(route.reasons),
+            "llm_required": route.llm_required,
+            "llm_called": False,
+            "evidence_delta_count": evidence_delta.count,
+            "selected_modules": list(route.selected_modules),
+            "loop_guard": "pending",
+            "response_source": "system_error",
+            "request_count": 0,
+            "chunks": 0,
+        }
+
         # Resolve model — usa versão async para descobrir modelo Ollama disponível
         client_type, model_name = await self._auto_route_with_ollama_model(message, model_str)
         client = self._get_client(client_type) if client_type else None
+        turn_telemetry["provider"] = client_type
+        turn_telemetry["model"] = model_name
+        effective_reasoning_effort = route.reasoning_effort
+        if (
+            client_type == "ollama"
+            and route.reasoning_effort in {"low", "medium"}
+            and not self.config.get("native_reasoning_effort")
+        ):
+            effective_reasoning_effort = "none"
+            turn_telemetry["effort_fallback_reason"] = (
+                "qwen4b_hidden_reasoning_exhausts_visible_output_budget"
+            )
+        turn_telemetry["effective_reasoning_effort"] = effective_reasoning_effort
+
+        if client_type == 'ollama' and not self._ollama_available:
+            turn_telemetry["loop_guard"] = "not_run"
+            self.turn_metadata[session_id] = dict(turn_telemetry)
+            logger.warning(
+                "chat.response.no_llm reason=ollama_unavailable session_id=%s",
+                session_id,
+            )
+            yield json.dumps({
+                "type": "error",
+                "message": "Ollama não está acessível em localhost:11434.",
+                "response_source": "system_error",
+                "llm_called": False,
+            }, ensure_ascii=False)
+            return
 
         if not client or not model_name:
             # Último recurso: tenta Ollama mesmo sem detecção prévia
@@ -1221,27 +1241,37 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     f"🦙 *Modo local ativado automaticamente — usando Ollama ({model_name})*\n\n"
                 }, ensure_ascii=False)
             else:
-                yield json.dumps({"type": "text_chunk", "text": (
-                    "⚠️ Nenhum provedor de IA disponível.\n\n"
-                    "Configure pelo menos uma API key em **Settings** ou instale o "
-                    "[Ollama](https://ollama.ai) para usar modelos locais.\n\n"
-                    "- `OPENAI_API_KEY` para GPT-4o\n"
-                    "- `ANTHROPIC_API_KEY` para Claude\n"
-                    "- `GROQ_API_KEY` para Llama (grátis)\n"
-                    "- Ollama local: `ollama pull llama3.3:70b`"
-                )}, ensure_ascii=False)
+                turn_telemetry["loop_guard"] = "not_run"
+                self.turn_metadata[session_id] = dict(turn_telemetry)
+                logger.warning(
+                    "chat.response.no_llm reason=no_local_model session_id=%s",
+                    session_id,
+                )
+                yield json.dumps({
+                    "type": "error",
+                    "message": (
+                        "Nenhum modelo local está disponível. Confirme o Ollama e o "
+                        "modelo luna-cyber-fast; nenhum fallback cloud foi usado."
+                    ),
+                    "response_source": "system_error",
+                    "llm_called": False,
+                }, ensure_ascii=False)
                 return
 
         # Emite evento informando qual provedor/modelo será usado
         zero_cloud = self.config.get("zero_cloud_mode", False)
         if zero_cloud and client_type == 'ollama':
             yield json.dumps({"type": "provider_info", "provider": "ollama",
-                "model": model_name, "mode": "zero_cloud"}, ensure_ascii=False)
+                "model": model_name, "mode": "zero_cloud", "route": route.route,
+                "reasoning_effort": route.reasoning_effort,
+                "effective_reasoning_effort": effective_reasoning_effort,
+                "llm_required": True}, ensure_ascii=False)
         elif client_type == 'ollama':
             yield json.dumps({"type": "provider_info", "provider": "ollama",
-                "model": model_name, "mode": "local_fallback"}, ensure_ascii=False)
-
-        history = self._get_history(session_id)
+                "model": model_name, "mode": "local_fallback", "route": route.route,
+                "reasoning_effort": route.reasoning_effort,
+                "effective_reasoning_effort": effective_reasoning_effort,
+                "llm_required": True}, ensure_ascii=False)
 
         # ── Auto-compress if history is too long ──────────────────────────────
         needs_compress = (
@@ -1280,13 +1310,74 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 yield json.dumps({"type": "compressing", "progress": 100,
                     "message": "Pronto — contexto preservado"}, ensure_ascii=False)
 
-        system   = _build_system_prompt(workspace_path, self._available_providers, ctx_summary)
+        runtime_modules: Dict[str, str] = {}
+        for module_id in route.selected_modules:
+            content = self.active_modules.get(module_id)
+            if content:
+                runtime_modules[module_id] = self.module_loader.relevant_excerpt(
+                    content,
+                    f"{message}\n{scenario.to_prompt_block(600)}",
+                    max_chars=650,
+                )
+        turn_telemetry["selected_modules"] = sorted(runtime_modules)
+
+        if route.route == "FAST":
+            route_guidance = (
+                "Responda diretamente e com brevidade. Em saudação, apenas cumprimente e "
+                "pergunte como ajudar; não invente alvo, evidência ou comando."
+            )
+        elif route.route == "ANALYZE":
+            route_guidance = (
+                "Correlacione a evidência atual, separe fato de inferência e proponha no "
+                "máximo a próxima ação de maior ganho de informação."
+            )
+        else:
+            route_guidance = (
+                "Faça decomposição cuidadosa dos artefatos e fronteiras de confiança antes "
+                "de propor no máximo a próxima ação de maior ganho de informação."
+            )
+        route_instruction = (
+            f"AUTO REASONING: route={route.route}; effort={route.reasoning_effort}. "
+            f"{route_guidance} Nunca repita ação já resolvida sem justificar um reteste."
+        )
+        if not scenario.target:
+            route_instruction += (
+                " Nenhum target/host factual foi observado: descreva eventual teste somente "
+                "por método e path; não escreva curl, hostname, porta ou URL placeholder."
+            )
+
+        system = _build_system_prompt(
+            workspace_path,
+            context_summary=ctx_summary,
+            user_context=user_context,
+            scenario_context=scenario.to_prompt_block(),
+            evidence_delta=evidence_delta.to_prompt_block(),
+            route_instruction=route_instruction,
+            project_context=project_context,
+            active_modules=runtime_modules,
+            supervised_mode=not self.config.get("tool_execution_enabled", False),
+        )
         # Monta content — inclui imagens se fornecidas
         user_content = self._build_vision_content(message, images, client_type)
         messages = [*history, {"role": "user", "content": user_content}]
         call_ctr = [0]   # mutable so sub-generators can increment
         full_text = ''
         history_out: list = []  # populated by streaming loop with full tool-call history
+        validation = None
+        replan_used = False
+
+        async def collect_generation(generator: AsyncIterator[str]) -> tuple[List[str], str]:
+            buffered_events: List[str] = []
+            buffered_text = ""
+            async for event_json in generator:
+                buffered_events.append(event_json)
+                try:
+                    event = json.loads(event_json)
+                    if event.get("type") == "text_chunk":
+                        buffered_text += str(event.get("text", ""))
+                except (TypeError, json.JSONDecodeError):
+                    continue
+            return buffered_events, buffered_text
 
         try:
             if client_type == 'claude':
@@ -1294,19 +1385,178 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     model_name, messages, system, workspace_path or '', call_ctr, history_out)
             else:
                 gen = self._stream_openai_with_tools(
-                    client, model_name, messages, system, workspace_path or '', call_ctr, history_out)
+                    client,
+                    model_name,
+                    messages,
+                    system,
+                    workspace_path or '',
+                    call_ctr,
+                    history_out,
+                    effective_reasoning_effort,
+                    turn_telemetry,
+                )
 
-            async for event_json in gen:
-                try:
-                    ev = json.loads(event_json)
-                    if ev.get("type") == "text_chunk":
-                        full_text += ev.get("text", "")
-                except Exception:
-                    pass
+            buffered_events, full_text = await collect_generation(gen)
+            validation = validate_model_response(
+                message=message,
+                response=full_text,
+                scenario=scenario,
+                evidence_delta_count=evidence_delta.count,
+            )
+
+            if not validation.valid:
+                replan_used = True
+                logger.info(
+                    "chat.response.replan %s",
+                    json.dumps(
+                        {
+                            "session_id": session_id,
+                            "route": route.route,
+                            "reasons": list(validation.reasons),
+                            "loop_guard": validation.loop_guard,
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+                replan_instruction = build_replan_instruction(
+                    validation,
+                    scenario.to_prompt_block(500),
+                    message,
+                )
+                normalized_message = message.casefold()
+                if (
+                    "apenas um comando" in normalized_message
+                    or "somente um comando" in normalized_message
+                ):
+                    observed_bearer = re.search(
+                        r"(?i)Authorization\s*:\s*Bearer\s+([^\s\r\n]+)",
+                        message,
+                    )
+                    if observed_bearer:
+                        replan_instruction = (
+                            "REQUISITO CRÍTICO: o único comando deve conter literalmente, sem "
+                            "placeholder: Authorization: Bearer "
+                            f"{observed_bearer.group(1)}\n\n"
+                            + replan_instruction
+                        )
+                replan_effort = (
+                    "none" if "empty_model_response" in validation.reasons
+                    else effective_reasoning_effort
+                )
+                turn_telemetry["replan_reasoning_effort"] = replan_effort
+                replan_messages = [
+                    *messages,
+                    {"role": "user", "content": replan_instruction},
+                ]
+                replan_history: list = []
+                if client_type == 'claude':
+                    replan_gen = self._stream_claude_with_tools(
+                        model_name,
+                        replan_messages,
+                        system,
+                        workspace_path or '',
+                        call_ctr,
+                        replan_history,
+                    )
+                else:
+                    replan_gen = self._stream_openai_with_tools(
+                        client,
+                        model_name,
+                        replan_messages,
+                        system,
+                        workspace_path or '',
+                        call_ctr,
+                        replan_history,
+                        replan_effort,
+                        turn_telemetry,
+                    )
+                buffered_events, full_text = await collect_generation(replan_gen)
+                validation = validate_model_response(
+                    message=message,
+                    response=full_text,
+                    scenario=scenario,
+                    evidence_delta_count=evidence_delta.count,
+                )
+                if replan_history:
+                    history_out[:] = replan_history
+
+            if validation and not validation.valid:
+                turn_telemetry.update({
+                    "response_source": "system_error",
+                    "loop_guard": "replan_failed_validation",
+                    "validator_passed": False,
+                    "replan_used": replan_used,
+                    "validation_reasons": list(validation.reasons),
+                    "total_elapsed_ms": round((time.perf_counter() - turn_started) * 1000, 1),
+                })
+                self.turn_metadata[session_id] = dict(turn_telemetry)
+                logger.info(
+                    "chat.route %s",
+                    json.dumps(turn_telemetry, ensure_ascii=False),
+                )
+                logger.error(
+                    "chat.response.rejected %s",
+                    json.dumps(
+                        {
+                            "session_id": session_id,
+                            "route": route.route,
+                            "reasons": list(validation.reasons),
+                            "llm_called": turn_telemetry["llm_called"],
+                            "request_count": turn_telemetry["request_count"],
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+                yield json.dumps({
+                    "type": "error",
+                    "message": (
+                        "O modelo local não produziu uma resposta factual validável após "
+                        "uma tentativa de replanejamento. Nenhuma resposta insegura foi exibida."
+                    ),
+                    "response_source": "system_error",
+                    "llm_called": True,
+                }, ensure_ascii=False)
+                return
+
+            for event_json in buffered_events:
                 yield event_json
 
         except Exception as e:
             logger.error(f"Stream error [{client_type}/{model_name}]: {e}")
+
+            if client_type == 'ollama':
+                self._ollama_available = _ollama_is_available_sync()
+                if not self._ollama_available:
+                    friendly = "Ollama não está acessível em localhost:11434."
+                else:
+                    friendly = (
+                        f"Falha ao usar o modelo local `{model_name}`. "
+                        "Confirme o nome com `ollama list`; nenhum fallback cloud foi usado."
+                    )
+                turn_telemetry.update({
+                    "response_source": "system_error",
+                    "loop_guard": "generation_error",
+                    "total_elapsed_ms": round((time.perf_counter() - turn_started) * 1000, 1),
+                })
+                self.turn_metadata[session_id] = dict(turn_telemetry)
+                logger.warning(
+                    "chat.response.no_llm %s",
+                    json.dumps(
+                        {
+                            "session_id": session_id,
+                            "reason": "ollama_generation_error",
+                            "llm_called": turn_telemetry["llm_called"],
+                        },
+                        ensure_ascii=False,
+                    ),
+                )
+                yield json.dumps({
+                    "type": "error",
+                    "message": friendly,
+                    "response_source": "system_error",
+                    "llm_called": turn_telemetry["llm_called"],
+                }, ensure_ascii=False)
+                return
 
             err_str = str(e)
             is_auth_error = any(x in err_str.lower() for x in (
@@ -1418,8 +1668,49 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     yield json.dumps({"type": "reflection_done", "had_corrections": True}, ensure_ascii=False)
                 else:
                     yield json.dumps({"type": "reflection_done", "had_corrections": False}, ensure_ascii=False)
-            except Exception as re:
-                logger.debug(f"[Reflection] ignorado: {re}")
+            except Exception as reflection_error:
+                logger.debug(f"[Reflection] ignorado: {reflection_error}")
+
+        if full_text:
+            scenario.record_model_response(full_text)
+
+        turn_telemetry.update({
+            "response_source": "model",
+            "loop_guard": (
+                "replan_passed" if replan_used and validation and validation.valid
+                else "replan_failed_validation" if replan_used
+                else validation.loop_guard if validation
+                else "not_validated"
+            ),
+            "validator_passed": bool(validation and validation.valid),
+            "replan_used": replan_used,
+            "validation_reasons": list(validation.reasons) if validation else [],
+            "proposed_action_fingerprint": (
+                validation.proposed_action_fingerprint if validation else None
+            ),
+            "total_elapsed_ms": round((time.perf_counter() - turn_started) * 1000, 1),
+        })
+        self.turn_metadata[session_id] = dict(turn_telemetry)
+        logger.info(
+            "chat.route %s",
+            json.dumps(
+                {
+                    key: turn_telemetry.get(key)
+                    for key in (
+                        "session_id", "route", "reasoning_effort", "route_reasons",
+                        "evidence_delta_count", "selected_modules", "loop_guard",
+                        "response_source", "llm_called", "request_count", "chunks",
+                        "first_token_ms", "elapsed_ms", "total_elapsed_ms",
+                        "finish_reason", "validator_passed", "replan_used",
+                        "attempt_efforts", "replan_reasoning_effort",
+                        "attempt_results",
+                        "effective_reasoning_effort", "effort_fallback_reason",
+                    )
+                },
+                ensure_ascii=False,
+            ),
+        )
+        yield json.dumps({"type": "response_meta", **turn_telemetry}, ensure_ascii=False)
 
         # Persist full conversation including tool calls (not just final text)
         if history_out:
@@ -1432,7 +1723,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
 
     async def process_message(self, message: str, conversation_id: str = "default",
                               model: Optional[ModelProvider] = None) -> ChatResponse:
-        model_str = model.value if model else "gpt-4o"
+        model_str = model.value if model else _OLLAMA_DEFAULT_MODEL
         full = ""
         async for ev_json in self.stream_agent(message, conversation_id, model_str):
             try:
@@ -1443,13 +1734,13 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 pass
         return ChatResponse(
             response=full,
-            model=model or ModelProvider.OPENAI,
+            model=model or ModelProvider.OLLAMA,
             tokens_used=len(full.split()) // 3,
             conversation_id=conversation_id,
         )
 
     async def stream_response(self, message: str, conversation_id: str = "default", model=None):
-        model_str = model.value if model else "gpt-4o"
+        model_str = model.value if model else _OLLAMA_DEFAULT_MODEL
         async for ev_json in self.stream_agent(message, conversation_id, model_str):
             try:
                 ev = json.loads(ev_json)
@@ -1476,9 +1767,36 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         self.histories.pop(conversation_id, None)
         # Also clear compressed summary so old context isn't re-injected after reset
         self.compression_summaries.pop(conversation_id, None)
+        self.scenario_contexts.pop(conversation_id, None)
+
+    def get_scenario_context(self, conversation_id: str) -> Dict[str, Any]:
+        context = self.scenario_contexts.get(conversation_id)
+        return context.to_dict() if context else {}
+
+    def get_local_diagnostics(self) -> Dict[str, Any]:
+        self._ollama_available = _ollama_is_available_sync()
+        return {
+            "ollama": self._ollama_available,
+            "ollama_base_url": OLLAMA_BASE_URL,
+            "default_model": self.config["default_model"],
+            "zero_cloud_mode": bool(self.config["zero_cloud_mode"]),
+            "supervised_mode": not bool(self.config["tool_execution_enabled"]),
+            "config_dir": str(self.module_loader.config_dir),
+            "modules": {
+                "mentor_kali_devtools": {
+                    "found": self.module_loader.module_exists("mentor_kali_devtools"),
+                    "loaded": "mentor_kali_devtools" in self.active_modules,
+                    "enabled": bool(self.config["mentor_mode"]),
+                }
+            },
+        }
 
     async def get_config(self) -> Dict[str, Any]:
         return self.config
 
     async def update_config(self, cfg: Dict[str, Any]) -> None:
         self.config.update(cfg)
+        if "mentor_mode" in cfg:
+            self.active_modules = self.module_loader.load_enabled(
+                ["mentor_kali_devtools"] if self.config["mentor_mode"] else []
+            )

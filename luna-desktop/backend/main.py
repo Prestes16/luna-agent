@@ -7,9 +7,17 @@ Elite Autonomous AI Agent Backend
 import os
 import sys
 import logging
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
+
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        try:
+            _stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError):
+            pass
 
 # ── Load .env BEFORE any other import that reads env vars ──────────────────────
 # Tries: backend/.env → luna-desktop/.env → luna-agent/.env (root)
@@ -28,7 +36,7 @@ import json as _json
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 # ── SSRF guard ────────────────────────────────────────────────────────────────
 import ipaddress as _ipaddress
@@ -70,6 +78,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from app.luna_engine import LunaEngine
 from app.models import ChatRequest, ChatResponse
+from app.project_store import ProjectNotFoundError, ProjectStore, ProjectValidationError
 from app.security import LunaSecurityMiddleware, audit, sanitizer
 from services.code_analyzer import CodeAnalyzer
 from services.security_scanner import SecurityScanner
@@ -87,13 +96,14 @@ luna_engine: Optional[LunaEngine] = None
 code_analyzer: Optional[CodeAnalyzer] = None
 security_scanner: Optional[SecurityScanner] = None
 blockchain_service: Optional[BlockchainService] = None
+project_store = ProjectStore()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
     global luna_engine, code_analyzer, security_scanner, blockchain_service
     
-    logger.info("🌙 Luna Desktop Backend Starting...")
+    logger.info("Luna Desktop Backend Starting...")
     
     # Initialize services
     luna_engine = LunaEngine()
@@ -101,11 +111,11 @@ async def lifespan(app: FastAPI):
     security_scanner = SecurityScanner()
     blockchain_service = BlockchainService()
     
-    logger.info("✅ All services initialized")
+    logger.info("All services initialized")
     
     yield
     
-    logger.info("🌙 Luna Desktop Backend Shutting down...")
+    logger.info("Luna Desktop Backend Shutting down...")
 
 # Create FastAPI app
 app = FastAPI(
@@ -138,12 +148,30 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    diagnostics = luna_engine.get_local_diagnostics() if luna_engine else {
+        "ollama": False,
+        "ollama_base_url": "http://localhost:11434/v1",
+        "default_model": "luna-cyber-fast",
+        "zero_cloud_mode": True,
+        "supervised_mode": True,
+        "config_dir": os.getenv("LUNA_CONFIG_DIR", r"D:\LunaCyber\config"),
+        "modules": {"mentor_kali_devtools": {"found": False, "loaded": False, "enabled": True}},
+    }
+    available_models: list[str] = []
+    if diagnostics.get("ollama"):
+        try:
+            from app.luna_engine import _ollama_list_models_async
+            available_models = await _ollama_list_models_async()
+        except Exception:
+            available_models = []
     return {
         "status": "healthy",
         "service": "Luna Desktop Backend",
         "version": "3.0.0",
-        "model": os.getenv("LUNA_MODEL", "gpt-4o"),
-        "mode": "agent",
+        "model": diagnostics["default_model"],
+        "mode": "local_copilot",
+        "available_models": available_models,
+        **diagnostics,
     }
 
 @app.get("/lessons")
@@ -168,6 +196,127 @@ async def status():
         "security_scanner": "ready" if security_scanner else "not_initialized",
         "blockchain_service": "ready" if blockchain_service else "not_initialized"
     }
+
+
+# ============================================================================
+# Local Projects — JSON UTF-8 atômico em LUNA_PROJECTS_DIR
+# ============================================================================
+
+class LocalProjectCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    path: str = ""
+    project_type: str = "other"
+    description: str = ""
+    color: str = "cyan"
+
+
+class LocalProjectUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: Optional[str] = None
+    path: Optional[str] = None
+    project_type: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+    pinned: Optional[bool] = None
+
+
+class LocalProjectMessageCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    role: str
+    content: str
+    model: str = ""
+
+
+class LocalProjectFactCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    fact: str
+
+
+def _raise_project_http_error(error: Exception) -> None:
+    if isinstance(error, ProjectNotFoundError):
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if isinstance(error, ProjectValidationError):
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    raise error
+
+
+@app.get("/api/projects")
+async def list_local_projects():
+    return {"projects": project_store.list_projects()}
+
+
+@app.post("/api/projects", status_code=201)
+async def create_local_project(body: LocalProjectCreate):
+    try:
+        return project_store.create_project(body.model_dump())
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+
+
+@app.put("/api/projects/{project_id}")
+async def update_local_project(project_id: int, body: LocalProjectUpdate):
+    try:
+        return project_store.update_project(project_id, body.model_dump(exclude_unset=True))
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+
+
+@app.delete("/api/projects/{project_id}")
+async def delete_local_project(project_id: int):
+    try:
+        project_store.delete_project(project_id)
+        return {"deleted": True, "id": project_id}
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+
+
+@app.get("/api/projects/{project_id}/messages")
+async def list_local_project_messages(project_id: int):
+    try:
+        return {"messages": project_store.list_messages(project_id)}
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+
+
+@app.post("/api/projects/{project_id}/messages", status_code=201)
+async def create_local_project_message(project_id: int, body: LocalProjectMessageCreate):
+    try:
+        return project_store.add_message(project_id, body.model_dump())
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+
+
+@app.get("/api/projects/{project_id}/facts")
+async def list_local_project_facts(project_id: int):
+    try:
+        return {"facts": project_store.list_facts(project_id)}
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+
+
+@app.post("/api/projects/{project_id}/facts", status_code=201)
+async def create_local_project_fact(project_id: int, body: LocalProjectFactCreate):
+    try:
+        return {"facts": project_store.add_fact(project_id, body.fact)}
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+
+
+@app.get("/api/projects/{project_id}/context")
+async def get_local_project_context(project_id: int):
+    try:
+        return {"context": project_store.context(project_id)}
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+
+
+@app.post("/api/projects/{project_id}/compress")
+async def compress_local_project(project_id: int):
+    try:
+        return project_store.compress(project_id)
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
 
 # ============================================================================
 # Text-to-Speech — Luna Voice
@@ -263,9 +412,17 @@ async def chat_agent_stream(request: Request):
 
     body           = await request.json()
     message        = body.get("message", "").strip()
-    session_id     = body.get("session_id", "default")
-    model_str      = body.get("model", "gpt-4o")
+    session_id     = str(body.get("session_id", "default") or "default")[:128]
+    model_str      = body.get("model", "luna-cyber-fast")
     workspace_path = body.get("workspace_path") or None  # may be null/None
+    user_context   = body.get("user_context") or None
+    project_context = None
+    project_match = re.fullmatch(r"project-(\d{1,10})", session_id)
+    if project_match:
+        try:
+            project_context = project_store.context(int(project_match.group(1)))
+        except (ProjectValidationError, ProjectNotFoundError):
+            logger.info("[chat] Projeto da sessão não foi encontrado: %s", session_id)
 
     # Imagens para visão multimodal — lista de {data: base64, mime: "image/png"}
     raw_images = body.get("images") or []
@@ -294,7 +451,13 @@ async def chat_agent_stream(request: Request):
         full_text = ""
         try:
             async for event_json in luna_engine.stream_agent(
-                message, session_id, model_str, workspace_path, images
+                message=message,
+                session_id=session_id,
+                model_str=model_str,
+                workspace_path=workspace_path,
+                images=images,
+                user_context=user_context,
+                project_context=project_context,
             ):
                 # event_json is already a JSON string like {"type":..., ...}
                 try:
@@ -659,7 +822,10 @@ async def get_config():
     
     return await luna_engine.get_config()
 
-_CONFIG_WHITELIST = {'default_model', 'temperature', 'max_tokens', 'zero_cloud_mode', 'reflection_enabled'}
+_CONFIG_WHITELIST = {
+    'default_model', 'temperature', 'max_tokens', 'zero_cloud_mode',
+    'mentor_mode', 'reflection_enabled',
+}
 
 @app.post("/api/config")
 async def update_config(config: dict):
@@ -688,14 +854,14 @@ async def ollama_status():
     Usado pelo frontend para mostrar quais modelos locais estão instalados.
     """
     import httpx as _httpx
-    from app.luna_engine import _ollama_is_available_sync, OLLAMA_BASE_URL
+    from app.luna_engine import _ollama_is_available_sync, OLLAMA_API_ROOT, OLLAMA_BASE_URL
 
     running = _ollama_is_available_sync()
     models: list = []
     if running:
         try:
             async with _httpx.AsyncClient(timeout=3.0) as client:
-                r = await client.get("http://localhost:11434/api/tags")
+                r = await client.get(f"{OLLAMA_API_ROOT}/api/tags")
                 if r.status_code == 200:
                     data = r.json()
                     models = [
@@ -713,7 +879,7 @@ async def ollama_status():
         "running": running,
         "base_url": OLLAMA_BASE_URL,
         "models": models,
-        "recommended": ["llama3.3:70b", "qwen2.5:72b", "llama3.1:8b", "phi4", "deepseek-r1"],
+        "recommended": ["luna-cyber-fast", "qwen3.5:4b"],
     }
 
 @app.post("/api/providers/ollama/pull")
@@ -810,7 +976,7 @@ async def list_api_keys():
 if __name__ == "__main__":
     import uvicorn
 
-    logger.info("🚀 Starting Luna Desktop Backend...")
+    logger.info("Starting Luna Desktop Backend...")
     uvicorn.run(
         app,
         # SECURITY: bind only to loopback — Electron connects via localhost.

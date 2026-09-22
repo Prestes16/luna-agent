@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
+import { EXECUTION_PANEL_DEFAULT_WIDTH, clampExecutionPanelWidth } from '@/config/layout'
+import { fetchRuntimeHealth } from '@/services/runtimeHealth'
 
 // ── V4: Execution Log ──────────────────────────────────────────────────────
 export type ExecCategory = 'BOUNTY' | 'SOLANA' | 'BROWSER' | 'SYSTEM' | 'CHAT'
@@ -109,6 +111,20 @@ export interface BackendStatus {
   connected: boolean
   model: string
   version: string
+  mode: string
+  ollama: boolean
+  zeroCloudMode: boolean
+  supervisedMode: boolean
+  availableModels: string[]
+  checkedAt: number | null
+  error: string
+  modules?: {
+    mentor_kali_devtools?: {
+      found?: boolean
+      loaded?: boolean
+      enabled?: boolean
+    }
+  }
 }
 
 export interface ChatSession {
@@ -129,7 +145,9 @@ export interface AppState {
 
   // ── V4: Split Intelligence ─────────────────────────────────────────────
   splitRatio: number                   // 0.0–1.0, fração da largura do chat (padrão 0.5)
+  executionPanelWidth: number          // largura persistida em px; gravada apenas ao fim do drag
   executionPanelVisible: boolean       // toggle do painel de execução
+  executionPanelAutoCollapsed: boolean // estado responsivo transitório, nunca persistido
   executionLog: ExecutionLogLine[]     // stream de logs ao vivo
   executionActiveCategory: ExecCategory | 'ALL'  // filtro ativo no painel
 
@@ -160,9 +178,8 @@ export interface AppState {
   projectMarkdown: Record<string, string>
   lessonStats: LessonStats | null
   backendStatus: BackendStatus
+  healthLoading: boolean
 
-  apiKey: string
-  apiKeys: Record<string, string>
   currentModel: string
   backendUrl: string
   temperature: number
@@ -177,8 +194,6 @@ export interface AppState {
   voiceModel: string
   isSpeaking: boolean
   lunaApiToken: string
-  userId: string
-  userEmail: string
   zeroCloudMode: boolean
 
   setSidebarCollapsed: (v: boolean) => void
@@ -188,7 +203,10 @@ export interface AppState {
 
   // ── V4 actions ────────────────────────────────────────────────────────
   setSplitRatio: (ratio: number) => void
+  setExecutionPanelWidth: (width: number) => void
   setExecutionPanelVisible: (v: boolean) => void
+  setExecutionPanelAutoCollapsed: (v: boolean) => void
+  resetLayout: () => void
   addLogLine: (line: Omit<ExecutionLogLine, 'id' | 'timestamp'>) => void
   updateLogLine: (id: string, patch: Partial<ExecutionLogLine>) => void
   clearExecutionLog: (category?: ExecCategory) => void
@@ -226,9 +244,8 @@ export interface AppState {
   setProjectMarkdown: (workspacePath: string, content: string) => void
   setLessonStats: (stats: LessonStats) => void
   setBackendStatus: (s: Partial<BackendStatus>) => void
+  refreshBackendHealth: (force?: boolean) => Promise<void>
 
-  setApiKey: (provider: string, value: string) => void
-  setApiKeys: (keys: Record<string, string>) => void
   setCurrentModel: (model: string) => void
   setBackendUrl: (url: string) => void
   setTemperature: (v: number) => void
@@ -244,8 +261,6 @@ export interface AppState {
   setIsSpeaking: (v: boolean) => void
   setLunaApiToken: (token: string) => void
   setZeroCloudMode: (v: boolean) => void
-  setUserId: (id: string) => void
-  setUserEmail: (email: string) => void
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -261,7 +276,7 @@ const _MAX_MSG_PER_SESSION = 200 // máximo de mensagens por sessão
 
 export const useStore = create<AppState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       sidebarCollapsed: false,
       rightPanelOpen: true,
       rightPanelTab: 'tools',
@@ -269,7 +284,9 @@ export const useStore = create<AppState>()(
 
       // V4 Split Intelligence
       splitRatio: 0.5,
+      executionPanelWidth: EXECUTION_PANEL_DEFAULT_WIDTH,
       executionPanelVisible: true,
+      executionPanelAutoCollapsed: false,
       executionLog: [],
       executionActiveCategory: 'ALL',
 
@@ -385,14 +402,24 @@ export const useStore = create<AppState>()(
       activeFiles: [],
       projectMarkdown: {},
       lessonStats: null,
-      backendStatus: { connected: false, model: 'gpt-4o', version: '2.2' },
+      backendStatus: {
+        connected: false,
+        model: 'luna-cyber-fast',
+        version: '4.0',
+        mode: 'local_copilot',
+        ollama: false,
+        zeroCloudMode: true,
+        supervisedMode: true,
+        availableModels: [],
+        checkedAt: null,
+        error: '',
+      },
+      healthLoading: false,
 
-      apiKey: '',
-      apiKeys: {},
-      currentModel: 'gpt-4o',
+      currentModel: 'luna-cyber-fast',
       backendUrl: 'http://localhost:8000',
-      temperature: 0.7,
-      maxTokens: 4096,
+      temperature: 0,
+      maxTokens: 512,
       solanaWalletAddress: '',
       locale: 'pt-BR',
       workspacePath: '',
@@ -403,9 +430,7 @@ export const useStore = create<AppState>()(
       voiceModel: 'tts-1-hd',
       isSpeaking: false,
       lunaApiToken: '',
-      userId: '',
-      userEmail: '',
-      zeroCloudMode: false,
+      zeroCloudMode: true,
 
       setSidebarCollapsed: (v) => set({ sidebarCollapsed: v }),
       setRightPanelOpen: (v) => set({ rightPanelOpen: v }),
@@ -479,7 +504,17 @@ export const useStore = create<AppState>()(
 
       // ── V4 actions ───────────────────────────────────────────────────────
       setSplitRatio: (ratio) => set({ splitRatio: Math.min(0.75, Math.max(0.25, ratio)) }),
+      setExecutionPanelWidth: (width) => set({ executionPanelWidth: clampExecutionPanelWidth(width) }),
       setExecutionPanelVisible: (v) => set({ executionPanelVisible: v }),
+      setExecutionPanelAutoCollapsed: (v) => set({ executionPanelAutoCollapsed: v }),
+      resetLayout: () => set({
+        sidebarCollapsed: false,
+        splitRatio: 0.5,
+        executionPanelWidth: EXECUTION_PANEL_DEFAULT_WIDTH,
+        executionPanelVisible: true,
+        executionPanelAutoCollapsed: false,
+        rightPanelTab: 'tools',
+      }),
       addLogLine: (line) => set((s) => ({
         executionLog: [...s.executionLog, { ...line, id: makeLogId(), timestamp: Date.now() }].slice(-_MAX_LOG_LINES),
       })),
@@ -524,9 +559,28 @@ export const useStore = create<AppState>()(
       setProjectMarkdown: (workspacePath, content) => set((s) => ({ projectMarkdown: { ...s.projectMarkdown, [workspacePath]: content } })),
       setLessonStats: (stats) => set({ lessonStats: stats }),
       setBackendStatus: (status) => set((s) => ({ backendStatus: { ...s.backendStatus, ...status } })),
+      refreshBackendHealth: async (force = false) => {
+        const state = get()
+        if (!force && state.backendStatus.checkedAt && Date.now() - state.backendStatus.checkedAt < 5_000) return
+        set({ healthLoading: true })
+        try {
+          const status = await fetchRuntimeHealth(state.backendUrl, state.lunaApiToken)
+          set({ backendStatus: status, healthLoading: false })
+        } catch (error) {
+          set((current) => ({
+            healthLoading: false,
+            backendStatus: {
+              ...current.backendStatus,
+              connected: false,
+              ollama: false,
+              availableModels: [],
+              checkedAt: Date.now(),
+              error: error instanceof Error ? error.message : 'Backend local indisponível',
+            },
+          }))
+        }
+      },
 
-      setApiKey: (provider, value) => set((s) => ({ apiKeys: { ...s.apiKeys, [provider]: value }, ...(provider === 'openai' ? { apiKey: value } : {}) })),
-      setApiKeys: (keys) => set({ apiKeys: keys }),
       setCurrentModel: (model) => set({ currentModel: model }),
       setBackendUrl: (url) => set({ backendUrl: url }),
       setTemperature: (v) => set({ temperature: v }),
@@ -542,16 +596,59 @@ export const useStore = create<AppState>()(
       setIsSpeaking: (v) => set({ isSpeaking: v }),
       setLunaApiToken: (token) => set({ lunaApiToken: token }),
       setZeroCloudMode: (v) => set({ zeroCloudMode: v }),
-      setUserId: (id) => set({ userId: id }),
-      setUserEmail: (email) => set({ userEmail: email }),
     }),
     {
       name: 'luna-v4-store',
+      version: 3,
+      migrate: (persistedState) => {
+        const state = { ...(persistedState as Record<string, unknown>) }
+        delete state.apiKey
+        delete state.apiKeys
+        delete state.userId
+        delete state.userEmail
+        state.zeroCloudMode = true
+        state.executionPanelWidth = clampExecutionPanelWidth(
+          typeof state.executionPanelWidth === 'number'
+            ? state.executionPanelWidth
+            : EXECUTION_PANEL_DEFAULT_WIDTH,
+        )
+        if (state.currentModel !== 'luna-cyber-fast' && state.currentModel !== 'qwen3.5:4b') {
+          state.currentModel = 'luna-cyber-fast'
+        }
+        return state as unknown as AppState
+      },
+      merge: (persistedState, currentState) => {
+        const persisted = (persistedState ?? {}) as Partial<AppState>
+        const validTab = persisted.rightPanelTab === 'tools'
+          || persisted.rightPanelTab === 'context'
+          || persisted.rightPanelTab === 'stats'
+          ? persisted.rightPanelTab
+          : currentState.rightPanelTab
+        return {
+          ...currentState,
+          ...persisted,
+          sidebarCollapsed: typeof persisted.sidebarCollapsed === 'boolean'
+            ? persisted.sidebarCollapsed
+            : currentState.sidebarCollapsed,
+          executionPanelVisible: typeof persisted.executionPanelVisible === 'boolean'
+            ? persisted.executionPanelVisible
+            : currentState.executionPanelVisible,
+          executionPanelWidth: clampExecutionPanelWidth(
+            typeof persisted.executionPanelWidth === 'number'
+              ? persisted.executionPanelWidth
+              : currentState.executionPanelWidth,
+          ),
+          rightPanelTab: validTab,
+          executionPanelAutoCollapsed: false,
+        }
+      },
       partialize: (s) => ({
         sidebarCollapsed: s.sidebarCollapsed,
         rightPanelOpen: s.rightPanelOpen,
+        rightPanelTab: s.rightPanelTab,
         // V4 split
         splitRatio: s.splitRatio,
+        executionPanelWidth: s.executionPanelWidth,
         executionPanelVisible: s.executionPanelVisible,
         userContext: s.userContext,
         currentModel: s.currentModel,
@@ -561,7 +658,6 @@ export const useStore = create<AppState>()(
         activeProjectId: s.activeProjectId,
         projectContexts: s.projectContexts,
         projectMarkdown: s.projectMarkdown,
-        apiKey: s.apiKey,
         temperature: s.temperature,
         maxTokens: s.maxTokens,
         solanaWalletAddress: s.solanaWalletAddress,
@@ -573,8 +669,6 @@ export const useStore = create<AppState>()(
         voiceSpeed: s.voiceSpeed,
         voiceModel: s.voiceModel,
         zeroCloudMode: s.zeroCloudMode,
-        userId: s.userId,
-        userEmail: s.userEmail,
         // ── Chat history persistence ──────────────────────
         chatSessions: s.chatSessions,
         currentChatSessionId: s.currentChatSessionId,

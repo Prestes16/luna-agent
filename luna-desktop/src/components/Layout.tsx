@@ -1,150 +1,185 @@
-import React, { useRef, useCallback, useEffect } from 'react'
+import React, { useCallback, useEffect, useRef } from 'react'
+import { useLocation } from 'react-router-dom'
+import { PanelRight } from 'lucide-react'
 import { useStore } from '@store/appStore'
+import {
+  EXECUTION_PANEL_AUTO_COLLAPSE_WIDTH,
+  SIDEBAR_COLLAPSED_WIDTH,
+  SIDEBAR_EXPANDED_WIDTH,
+  clampExecutionPanelWidth,
+} from '@/config/layout'
 import Sidebar from './Sidebar'
 import ExecutionPanel from './ExecutionPanel'
-import { PanelRight } from 'lucide-react'
-
-// Limites do split (frações da área útil, sem sidebar)
-const SPLIT_MIN = 0.25   // mínimo 25% para o chat
-const SPLIT_MAX = 0.75   // máximo 75% para o chat
 
 interface LayoutProps {
   children: React.ReactNode
 }
 
+interface DragState {
+  active: boolean
+  startX: number
+  startWidth: number
+  currentWidth: number
+}
+
 const Layout: React.FC<LayoutProps> = ({ children }) => {
+  const location = useLocation()
   const {
     sidebarCollapsed,
-    activePage,
-    splitRatio,
-    setSplitRatio,
+    executionPanelWidth,
+    setExecutionPanelWidth,
     executionPanelVisible,
-    setExecutionPanelVisible,
+    executionPanelAutoCollapsed,
+    setExecutionPanelAutoCollapsed,
   } = useStore()
 
-  // Painel de execução apenas na página de chat
-  const showExecPanel = activePage === 'chat' && executionPanelVisible
-
-  // ── Drag-to-resize ─────────────────────────────────────────────────────────
   const containerRef = useRef<HTMLDivElement>(null)
-  const dragging     = useRef(false)
-  const startX       = useRef(0)
-  const startRatio   = useRef(splitRatio)
+  const frameRef = useRef<number | null>(null)
+  const dragRef = useRef<DragState>({
+    active: false,
+    startX: 0,
+    startWidth: executionPanelWidth,
+    currentWidth: executionPanelWidth,
+  })
 
-  const onDragStart = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    dragging.current   = true
-    startX.current     = e.clientX
-    startRatio.current = splitRatio
-    document.body.style.cursor    = 'col-resize'
-    document.body.style.userSelect = 'none'
-  }, [splitRatio])
+  const isChatRoute = location.pathname === '/chat'
+  const showExecPanel = isChatRoute && executionPanelVisible && !executionPanelAutoCollapsed
+
+  const applyPanelWidth = useCallback((width: number) => {
+    containerRef.current?.style.setProperty('--execution-panel-width', `${width}px`)
+  }, [])
 
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      if (!dragging.current || !containerRef.current) return
-      const containerW = containerRef.current.offsetWidth
-      if (containerW === 0) return
-      const delta    = e.clientX - startX.current
-      const newRatio = startRatio.current + delta / containerW
-      setSplitRatio(Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, newRatio)))
+    dragRef.current.currentWidth = executionPanelWidth
+    applyPanelWidth(executionPanelWidth)
+  }, [applyPanelWidth, executionPanelWidth])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+
+    const updateResponsiveState = (width: number) => {
+      const shouldCollapse = isChatRoute && width < EXECUTION_PANEL_AUTO_COLLAPSE_WIDTH
+      setExecutionPanelAutoCollapsed(shouldCollapse)
+      const safeWidth = clampExecutionPanelWidth(executionPanelWidth, width)
+      dragRef.current.currentWidth = safeWidth
+      applyPanelWidth(safeWidth)
     }
-    const onUp = () => {
-      if (!dragging.current) return
-      dragging.current               = false
-      document.body.style.cursor    = ''
+
+    const observer = new ResizeObserver(([entry]) => {
+      if (entry) updateResponsiveState(entry.contentRect.width)
+    })
+    observer.observe(container)
+    updateResponsiveState(container.clientWidth)
+
+    return () => {
+      observer.disconnect()
+      setExecutionPanelAutoCollapsed(false)
+    }
+  }, [applyPanelWidth, executionPanelWidth, isChatRoute, setExecutionPanelAutoCollapsed])
+
+  useEffect(() => {
+    const finishDrag = () => {
+      if (!dragRef.current.active) return
+      dragRef.current.active = false
+      if (frameRef.current !== null) {
+        cancelAnimationFrame(frameRef.current)
+        frameRef.current = null
+      }
+      applyPanelWidth(dragRef.current.currentWidth)
+      setExecutionPanelWidth(dragRef.current.currentWidth)
+      document.body.style.cursor = ''
       document.body.style.userSelect = ''
     }
-    window.addEventListener('mousemove', onMove)
-    window.addEventListener('mouseup',   onUp)
-    return () => {
-      window.removeEventListener('mousemove', onMove)
-      window.removeEventListener('mouseup',   onUp)
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!dragRef.current.active || !containerRef.current) return
+      const delta = dragRef.current.startX - event.clientX
+      dragRef.current.currentWidth = clampExecutionPanelWidth(
+        dragRef.current.startWidth + delta,
+        containerRef.current.clientWidth,
+      )
+      if (frameRef.current !== null) return
+      frameRef.current = requestAnimationFrame(() => {
+        frameRef.current = null
+        applyPanelWidth(dragRef.current.currentWidth)
+      })
     }
-  }, [setSplitRatio])
+
+    window.addEventListener('pointermove', handlePointerMove)
+    window.addEventListener('pointerup', finishDrag)
+    window.addEventListener('pointercancel', finishDrag)
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove)
+      window.removeEventListener('pointerup', finishDrag)
+      window.removeEventListener('pointercancel', finishDrag)
+      finishDrag()
+    }
+  }, [applyPanelWidth, setExecutionPanelWidth])
+
+  const handleDragStart = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || !containerRef.current) return
+    event.preventDefault()
+    dragRef.current = {
+      active: true,
+      startX: event.clientX,
+      startWidth: dragRef.current.currentWidth,
+      currentWidth: dragRef.current.currentWidth,
+    }
+    document.body.style.cursor = 'col-resize'
+    document.body.style.userSelect = 'none'
+  }, [])
 
   return (
-    <div className="flex h-screen cyber-bg scanlines overflow-hidden">
-
-      {/* ── Sidebar (ícones) ───────────────────────────────────────────── */}
+    <div className="flex h-screen overflow-hidden cyber-bg scanlines">
       <div
-        className="flex-shrink-0 flex flex-col h-full transition-all duration-200 glass-strong border-r border-cyber-border"
-        style={{ width: sidebarCollapsed ? 56 : 220 }}
+        className="flex h-full flex-shrink-0 flex-col border-r border-cyber-border glass-strong transition-[width] duration-200"
+        style={{ width: sidebarCollapsed ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH }}
       >
         <Sidebar />
       </div>
 
-      {/* ── Área principal: split Chat | Execution ─────────────────────── */}
-      <div ref={containerRef} className="flex-1 flex min-w-0 overflow-hidden relative">
-
-        {/* Chat (children) */}
-        <div
-          className="flex flex-col h-full min-w-0 overflow-hidden"
-          style={{ width: showExecPanel ? `${splitRatio * 100}%` : '100%' }}
-        >
+      <div
+        ref={containerRef}
+        className="relative flex min-w-0 flex-1 overflow-hidden"
+        style={{ '--execution-panel-width': `${executionPanelWidth}px` } as React.CSSProperties}
+      >
+        <main className="flex h-full min-w-0 flex-1 flex-col overflow-hidden">
           {children}
-        </div>
+        </main>
 
-        {/* Split drag handle + execution panel */}
-        {showExecPanel && (
+        {showExecPanel ? (
           <>
-            {/* Drag handle — V4 */}
             <div
-              onMouseDown={onDragStart}
-              className="flex-shrink-0 w-[6px] cursor-col-resize relative group z-10 select-none"
-              style={{ background: 'transparent' }}
+              role="separator"
+              aria-label="Redimensionar painel de execução"
+              aria-orientation="vertical"
+              onPointerDown={handleDragStart}
+              className="group relative z-10 w-[7px] flex-shrink-0 cursor-col-resize touch-none select-none"
               title="Arrastar para redimensionar"
             >
-              {/* Linha de divisão base */}
-              <div
-                className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-px transition-all duration-200"
-                style={{ background: 'rgba(0,212,255,0.1)' }}
-              />
-              {/* Glow forte no hover */}
-              <div
-                className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[2px] opacity-0 group-hover:opacity-100 transition-all duration-200"
-                style={{
-                  background: 'linear-gradient(180deg, transparent, rgba(0,212,255,0.6) 20%, rgba(0,212,255,0.8) 50%, rgba(0,212,255,0.6) 80%, transparent)',
-                  boxShadow: '0 0 10px rgba(0,212,255,0.6)',
-                }}
-              />
-              {/* Grip dot center */}
-              <div
-                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[6px] h-10 flex flex-col items-center justify-center gap-[3px] opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-              >
-                {[0,1,2,3,4].map((i) => (
-                  <div key={i} className="w-[2px] h-[2px] rounded-full" style={{ background: '#00d4ff' }} />
-                ))}
-              </div>
+              <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-cyber-cyan/10 transition-colors group-hover:bg-cyber-cyan/70" />
+              <div className="absolute left-1/2 top-1/2 h-10 w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-cyber-cyan/0 shadow-none transition-all group-hover:bg-cyber-cyan/70 group-hover:shadow-[0_0_10px_rgba(0,212,255,0.6)]" />
             </div>
-
-            {/* ExecutionPanel */}
-            <div
-              className="flex-shrink-0 h-full overflow-hidden border-l"
-              style={{
-                width:       `${(1 - splitRatio) * 100}%`,
-                borderColor: 'rgba(0,212,255,0.1)',
-              }}
+            <aside
+              className="h-full flex-shrink-0 overflow-hidden border-l border-cyber-cyan/10"
+              style={{ width: 'var(--execution-panel-width)' }}
+              aria-label="Execução, contexto e estatísticas"
             >
               <ExecutionPanel />
-            </div>
+            </aside>
           </>
-        )}
+        ) : null}
 
-        {/* Botão "abrir painel" quando escondido (canto superior direito) */}
-        {activePage === 'chat' && !executionPanelVisible && (
-          <button
-            onClick={() => setExecutionPanelVisible(true)}
-            title="Abrir painel de execução"
-            className="absolute top-2 right-2 z-20 flex items-center gap-1 text-[10px] font-mono text-cyber-dim hover:text-cyber-cyan transition-colors px-2 py-1 rounded"
-            style={{ background: 'rgba(0,212,255,0.06)', border: '1px solid rgba(0,212,255,0.12)' }}
+        {isChatRoute && executionPanelVisible && executionPanelAutoCollapsed ? (
+          <div
+            className="pointer-events-none absolute right-2 top-[58px] z-20 flex items-center gap-1 rounded border border-cyber-cyan/10 bg-[#07101c]/90 px-2 py-1 font-mono text-[9px] text-cyber-dim"
+            title="O painel voltará automaticamente quando houver espaço"
           >
-            <PanelRight size={12} />
-            <span>Execução</span>
-          </button>
-        )}
+            <PanelRight size={11} /> painel recolhido pela largura
+          </div>
+        ) : null}
       </div>
-
     </div>
   )
 }

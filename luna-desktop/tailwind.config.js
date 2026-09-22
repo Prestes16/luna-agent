@@ -30,8 +30,8 @@ export default {
         'glass':   '0 4px 24px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.05)',
       },
       fontFamily: {
-        mono: ['"JetBrains Mono"', '"Fira Code"', 'monospace'],
-        sans: ['"Inter"', 'system-ui', 'sans-serif'],
+        mono: ['Consolas', '"Cascadia Code"', 'monospace'],
+        sans: ['"Segoe UI"', 'system-ui', 'sans-serif'],
       },
       animation: {
         'pulse-cyan': 'pulse-cyan 2s ease-in-out infinite',

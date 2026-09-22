@@ -1,7 +1,8 @@
+
 /**
  * Luna Voice Service
  * ─────────────────────────────────────────────────────────────────────────────
- * TTS  — POST /speak  (OpenAI TTS via backend, voz "nova" por padrão)
+ * TTS  — Web Speech API / voz instalada no sistema
  * STT  — Web Speech API (browser nativo, sem custo, sem API key)
  * ─────────────────────────────────────────────────────────────────────────────
  */
@@ -24,9 +25,7 @@ export interface SpeakResult {
 
 // ── State ─────────────────────────────────────────────────────────────────────
 
-let _audio:         HTMLAudioElement | null = null
-let _abortCtrl:     AbortController  | null = null   // cancels in-flight fetch
-let _speakSession   = 0                               // monotonic counter — prevents overlap
+let _utterance:     SpeechSynthesisUtterance | null = null
 let _isSpeaking     = false
 let _onStateChange: ((speaking: boolean) => void) | null = null
 
@@ -89,76 +88,57 @@ export function stripMarkdown(text: string): string {
 
 export async function speak(
   rawText: string,
-  backendUrl: string,
+  _backendUrl: string,
   opts: VoiceOptions = {},
 ): Promise<SpeakResult> {
   const text = stripMarkdown(rawText).slice(0, 4000)
   if (!text) return { ok: true }
+  if (!('speechSynthesis' in window) || typeof SpeechSynthesisUtterance === 'undefined') {
+    return { ok: false, error: 'Síntese de voz não disponível neste sistema.' }
+  }
 
-  // ── Cancel any previous in-flight request AND playback ──────────────────
   stop()
+  const startedAt = Date.now()
+  const utterance = new SpeechSynthesisUtterance(text)
+  const preferences: Record<VoiceId, string[]> = {
+    nova: ['Microsoft Francisca', 'Luciana', 'Google português do Brasil'],
+    shimmer: ['Microsoft Maria', 'Helena'],
+    coral: ['Microsoft Letícia', 'Camila'],
+    alloy: ['Microsoft Daniel', 'Google US English'],
+    echo: ['Microsoft Antonio', 'Ricardo'],
+    fable: ['Microsoft Duarte', 'Google UK English Male'],
+    onyx: ['Microsoft Fabio', 'Felipe'],
+  }
 
-  const session = ++_speakSession     // claim this session slot
-  _abortCtrl    = new AbortController()
-  const t0      = Date.now()
+  utterance.lang = 'pt-BR'
+  utterance.rate = Math.min(2, Math.max(0.5, opts.speed ?? 1))
+  const voices = window.speechSynthesis.getVoices()
+  const preferred = preferences[opts.voice ?? 'nova']
+  utterance.voice = voices.find((voice) =>
+    preferred.some((name) => voice.name.toLocaleLowerCase().includes(name.toLocaleLowerCase())),
+  ) ?? voices.find((voice) => voice.lang.toLocaleLowerCase().startsWith('pt-br')) ?? null
+
+  _utterance = utterance
   _setState(true)
 
-  try {
-    const res = await fetch(`${backendUrl}/speak`, {
-      method:  'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        text,
-        voice: opts.voice ?? 'nova',
-        speed: opts.speed ?? 1.0,
-        model: opts.model ?? 'tts-1',   // tts-1 = lower latency, tts-1-hd = higher quality
-      }),
-      signal: _abortCtrl.signal,
-    })
-
-    // If a newer speak() already started, silently bail
-    if (session !== _speakSession) return { ok: true }
-
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: res.statusText }))
+  return new Promise<SpeakResult>((resolve) => {
+    utterance.onend = () => {
+      if (_utterance === utterance) _utterance = null
       _setState(false)
-      return { ok: false, error: err.detail ?? `HTTP ${res.status}` }
+      resolve({ ok: true, duration: Date.now() - startedAt })
     }
-
-    // blob: URL — fast, no CPU conversion, CSP now allows it
-    const blob = await res.blob()
-    if (session !== _speakSession) return { ok: true }   // superseded
-
-    const url  = URL.createObjectURL(blob)
-    _audio     = new Audio(url)
-    _audio.volume = 1.0
-
-    await new Promise<void>((resolve, reject) => {
-      _audio!.onended = () => { URL.revokeObjectURL(url); resolve() }
-      _audio!.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Falha no áudio')) }
-      _audio!.play().catch((e) => { URL.revokeObjectURL(url); reject(e) })
-    })
-
-    if (session === _speakSession) _setState(false)
-    return { ok: true, duration: Date.now() - t0 }
-
-  } catch (err: any) {
-    if (err?.name === 'AbortError') return { ok: true }   // intentional cancel
-    if (session === _speakSession) _setState(false)
-    return { ok: false, error: err.message }
-  }
+    utterance.onerror = (event) => {
+      if (_utterance === utterance) _utterance = null
+      _setState(false)
+      resolve({ ok: false, error: event.error || 'Falha na síntese de voz local.' })
+    }
+    window.speechSynthesis.speak(utterance)
+  })
 }
 
 export function stop() {
-  // Abort any in-flight fetch first
-  _abortCtrl?.abort()
-  _abortCtrl = null
-  // Stop audio element
-  if (_audio) {
-    _audio.pause()
-    _audio.src = ''
-    _audio = null
-  }
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+  _utterance = null
   _setState(false)
 }
 

@@ -34,7 +34,7 @@ export function getBugReports(): BugReport[] {
 function saveBugReports(reports: BugReport[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(reports.slice(-MAX_STORED)))
-  } catch { /* quota exceeded — ignore */ }
+  } catch { /* local storage limit exceeded — ignore */ }
 }
 
 export function addBugReport(report: Omit<BugReport, 'id' | 'timestamp' | 'sent'>): BugReport {

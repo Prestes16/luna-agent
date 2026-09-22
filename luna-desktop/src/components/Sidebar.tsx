@@ -6,7 +6,7 @@ import type { TranslationKey } from '@i18n/translations'
 import {
   MessageSquare, LayoutDashboard, Shield, Code2,
   Zap, Settings, ChevronLeft, ChevronRight, Circle, Cpu,
-  FolderOpen, FileText, Volume2, Brain, Activity, FolderTree, Coins, FolderKanban,
+  FolderOpen, FileText, Volume2, Brain, Activity, FolderTree, FolderKanban,
 } from 'lucide-react'
 import WorkspaceSelector from './WorkspaceSelector'
 
@@ -19,7 +19,6 @@ const NAV_ITEMS: { icon: React.ElementType; key: TranslationKey; path: string; p
   { icon: Code2,           key: 'nav.codeAnalyzer', path: '/code-analyzer', page: 'code' },
   { icon: Shield,          key: 'nav.security',     path: '/security',      page: 'security' },
   { icon: Zap,             key: 'nav.blockchain',   path: '/blockchain',    page: 'blockchain' },
-  { icon: Coins,           key: 'nav.credits',      path: '/credits',       page: 'credits' },
 ]
 
 // ── Memory pressure indicator ─────────────────────────────────────────────────
@@ -76,18 +75,14 @@ const Sidebar: React.FC = () => {
   const hasContextDoc   = !!(workspacePath && projectMarkdown[workspacePath])
   const activeFileCount = activeFiles.length
 
-  // Derive model provider label
+  // The local edition exposes only the active runtime family.
   const providerOf = (m: string) => {
-    if (m === 'auto') return 'Auto'
-    if (m.startsWith('gpt'))    return 'OpenAI'
-    if (m.startsWith('claude')) return 'Anthropic'
-    if (m.startsWith('grok'))   return 'xAI'
-    if (m.startsWith('llama') || m.includes('405b')) return 'Llama'
-    return ''
+    if (m === 'luna-cyber-fast') return 'Luna'
+    if (m === 'qwen3.5:4b') return 'Qwen'
+    return 'Local'
   }
   const providerColor: Record<string, string> = {
-    Auto: '#00d4ff', OpenAI: '#10b981', Anthropic: '#e040fb',
-    xAI: '#7c3aed', Llama: '#f97316',
+    Luna: '#14f195', Qwen: '#00d4ff', Local: '#94a3b8',
   }
   const provider = providerOf(currentModel)
 
@@ -107,7 +102,7 @@ const Sidebar: React.FC = () => {
             <p className="text-sm font-bold text-cyber-cyan leading-none" style={{ textShadow: '0 0 10px rgba(0,212,255,0.7)' }}>
               LUNA
             </p>
-            <p className="text-[10px] text-cyber-muted font-mono mt-0.5 tracking-widest">ELITE AGENT v4</p>
+            <p className="text-[10px] text-cyber-muted font-mono mt-0.5 tracking-[0.12em]">LOCAL AI COPILOT</p>
           </div>
         )}
         {/* Running tools pulse — visible even when collapsed */}

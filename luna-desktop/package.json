@@ -1,7 +1,7 @@
 {
   "name": "luna-desktop",
   "version": "4.0.0",
-  "description": "Luna - Elite Autonomous AI Agent Desktop Application",
+  "description": "Luna Cyber - Local AI Copilot for security and development",
   "main": "dist/main.js",
   "homepage": "./",
   "author": "Luna Team",
@@ -23,11 +23,12 @@
     "prestart": "npm run react-build",
     "start": "electron .",
     "test": "vitest",
+    "test:run": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {
     "@solana/web3.js": "^1.87.6",
-    "@supabase/supabase-js": "^2.104.1",
     "axios": "^1.6.0",
     "crypto-js": "^4.2.0",
     "framer-motion": "^10.16.4",
