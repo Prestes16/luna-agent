@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import reasoning_pipeline as _rp
-from .command_policy import assess_command_policy
+from .command_ast import assess_nmap_strategy\nfrom .command_policy import assess_command_policy, parse_effective_command
 from .operational_transform import transform_response_commands
 from .reasoning_runtime_patch_v8 import (
     build_replan_instruction as _previous_build_replan,
@@ -20,6 +20,7 @@ from .reasoning_runtime_patch_v8 import (
 )
 
 _FIXABLE_POLICY_REASONS = {
+    "nmap_initial_scan_mode_implicit",
     "nmap_privileged_mode_missing_sudo",
     "nmap_scan_artifact_missing",
 }
@@ -51,6 +52,12 @@ def _can_repair_operationally(message: str, response: str) -> bool:
                 return False
             if assessment.expected_targets and not assessment.target_verified:
                 return False
+
+            ast = parse_effective_command(command)
+            if ast:
+                strategy = assess_nmap_strategy(message, ast)
+                if "nmap_initial_scan_mode_implicit" in strategy.reasons:
+                    return False
     return True
 
 
