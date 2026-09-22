@@ -25,6 +25,7 @@
     "start": "electron .",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:backend": "node scripts/test-backend.cjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src --ext .ts,.tsx"
   },
