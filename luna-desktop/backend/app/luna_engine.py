@@ -19,6 +19,7 @@ from anthropic import AsyncAnthropic
 
 from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
+from .kali_tool_guidance import guidance_for_message
 from .reasoning_pipeline import (
     build_replan_instruction,
     classify_complexity,
@@ -1362,6 +1363,10 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 " Nenhum target/host factual foi observado: descreva eventual teste somente "
                 "por método e path; não escreva curl, hostname, porta ou URL placeholder."
             )
+
+        tool_guidance = guidance_for_message(message)
+        if tool_guidance:
+            route_instruction += " " + tool_guidance
 
         system = _build_system_prompt(
             workspace_path,
