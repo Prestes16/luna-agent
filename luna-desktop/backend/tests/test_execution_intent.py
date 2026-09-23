@@ -10,6 +10,7 @@ from app.execution_intent import (
     L3_HIGH_IMPACT,
     ON_DEMAND,
     build_execution_intent,
+    operator_requested_execution,
 )
 
 
@@ -101,6 +102,31 @@ class ExecutionIntentTests(unittest.TestCase):
         self.assertEqual(intent.authority_level, L3_HIGH_IMPACT)
         self.assertEqual(intent.authority, APPROVAL_REQUIRED)
         self.assertIn("high_impact_semantic", intent.reasons)
+
+    def test_operator_execution_request_detection_is_current_turn_explicit(self) -> None:
+        self.assertTrue(operator_requested_execution("Luna, rode nmap -sV no alvo autorizado."))
+        self.assertTrue(operator_requested_execution("vamos executar esse teste"))
+        self.assertFalse(operator_requested_execution("Explique como o nmap funciona."))
+
+    def test_operator_requested_probe_without_scope_is_blocked(self) -> None:
+        intent = build_execution_intent(
+            "nmap -sV 10.10.10.5",
+            operator_requested_execution=True,
+            scope_confirmed=False,
+        )
+        self.assertEqual(intent.authority, BLOCKED)
+        self.assertIn("scope_not_confirmed", intent.reasons)
+
+    def test_operator_requested_target_mismatch_is_blocked(self) -> None:
+        intent = build_execution_intent(
+            "nmap -sV 10.10.10.6",
+            context="CTF autorizado",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+            scope_target="10.10.10.5",
+        )
+        self.assertEqual(intent.authority, BLOCKED)
+        self.assertIn("target_scope_mismatch", intent.reasons)
 
     def test_readiness_improves_when_scope_and_operator_are_bound(self) -> None:
         pending = build_execution_intent("nmap -sV 10.10.10.5")
