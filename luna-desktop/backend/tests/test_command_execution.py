@@ -35,6 +35,18 @@ class CommandExecutionPolicyTests(unittest.TestCase):
         self.assertFalse(item.execution_ready)
         self.assertLess(item.utility, 0.2)
 
+    def test_apt_install_is_persistent_and_privileged(self) -> None:
+        item = assess_command_execution("sudo apt install tor")
+        self.assertTrue(item.mutates_state)
+        self.assertTrue(item.persistent_change)
+        self.assertTrue(item.privilege_required)
+        self.assertTrue(item.explicit_confirmation_required)
+
+    def test_apt_simulation_is_read_only_preflight(self) -> None:
+        item = assess_command_execution("apt-get -s install tor")
+        self.assertFalse(item.persistent_change)
+        self.assertFalse(item.privilege_required)
+        self.assertFalse(item.mutates_state)
     def test_execution_disabled_keeps_safe_command_operator_only(self) -> None:
         item = assess_command_execution(
             "curl https://example.test",
