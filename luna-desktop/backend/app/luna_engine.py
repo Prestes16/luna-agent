@@ -15,7 +15,11 @@ from typing import Optional, List, Dict, Any, AsyncIterator
 from datetime import datetime
 
 from openai import AsyncOpenAI
-from anthropic import AsyncAnthropic
+
+try:
+    from anthropic import AsyncAnthropic
+except ImportError:  # Optional cloud SDK; local/Ollama runtime must not depend on it.
+    AsyncAnthropic = None  # type: ignore[assignment]
 
 from .agent_harness import AgentHarness
 from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
@@ -315,8 +319,17 @@ class LunaEngine:
         xai_key      = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
         together_key = os.getenv("TOGETHER_API_KEY")
 
-        self.openai_client  = AsyncOpenAI(api_key=openai_key)     if openai_key   else None
-        self.claude_client  = AsyncAnthropic(api_key=claude_key)  if claude_key   else None
+        self.openai_client = AsyncOpenAI(api_key=openai_key) if openai_key else None
+        self.claude_client = (
+            AsyncAnthropic(api_key=claude_key)
+            if claude_key and AsyncAnthropic is not None
+            else None
+        )
+        if claude_key and AsyncAnthropic is None:
+            logger.warning(
+                "Claude key configured but anthropic SDK is not installed; "
+                "local/Ollama operation remains available."
+            )
         self.groq_client    = (
             AsyncOpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1")
             if groq_key else None
@@ -341,7 +354,8 @@ class LunaEngine:
 
         self._available_providers = [
             k for k, v in [
-                ('OpenAI', openai_key), ('Claude', claude_key),
+                ('OpenAI', openai_key),
+                ('Claude', claude_key if AsyncAnthropic is not None else None),
                 ('Groq', groq_key), ('xAI', xai_key), ('Together', together_key),
             ] if v
         ]
@@ -396,8 +410,17 @@ class LunaEngine:
         xai_key      = os.getenv("XAI_API_KEY") or os.getenv("GROK_API_KEY")
         together_key = os.getenv("TOGETHER_API_KEY")
 
-        self.openai_client   = AsyncOpenAI(api_key=openai_key)     if openai_key   else None
-        self.claude_client   = AsyncAnthropic(api_key=claude_key)  if claude_key   else None
+        self.openai_client = AsyncOpenAI(api_key=openai_key) if openai_key else None
+        self.claude_client = (
+            AsyncAnthropic(api_key=claude_key)
+            if claude_key and AsyncAnthropic is not None
+            else None
+        )
+        if claude_key and AsyncAnthropic is None:
+            logger.warning(
+                "Claude key configured but anthropic SDK is not installed; "
+                "Claude remains disabled."
+            )
         self.groq_client     = (
             AsyncOpenAI(api_key=groq_key, base_url="https://api.groq.com/openai/v1")
             if groq_key else None
@@ -416,7 +439,8 @@ class LunaEngine:
 
         self._available_providers = [
             k for k, v in [
-                ('OpenAI', openai_key), ('Claude', claude_key),
+                ('OpenAI', openai_key),
+                ('Claude', claude_key if AsyncAnthropic is not None else None),
                 ('Groq', groq_key), ('xAI', xai_key), ('Together', together_key),
             ] if v
         ]
