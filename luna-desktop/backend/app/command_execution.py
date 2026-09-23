@@ -140,10 +140,28 @@ def assess_command_execution(
     has_sudo, effective = _effective_tokens(tokens)
     tool = effective[0].casefold() if effective else ""
     lowered = command.casefold()
+    package_tokens = {token.casefold() for token in effective[1:]}
+    package_action = bool(
+        tool in _PACKAGE_MANAGERS
+        and any(
+            token in {
+                "install", "remove", "purge", "upgrade", "full-upgrade",
+                "dist-upgrade", "autoremove",
+            }
+            for token in package_tokens
+        )
+    )
+    package_simulation = bool(
+        package_action
+        and package_tokens.intersection({"-s", "--simulate", "--dry-run"})
+    )
 
     read_only = (
-        tool in _READ_ONLY_TOOLS
-        and not any(pattern.search(command) for pattern in _PERSISTENCE_PATTERNS)
+        (
+            tool in _READ_ONLY_TOOLS
+            and not any(pattern.search(command) for pattern in _PERSISTENCE_PATTERNS)
+        )
+        or package_simulation
     )
     if tool == "systemctl":
         read_only = _systemctl_is_read_only(effective)
@@ -153,18 +171,7 @@ def assess_command_execution(
     destructive = tool in _DESTRUCTIVE_TOOLS or any(
         pattern.search(command) for pattern in _HIGH_RISK_PATTERNS
     )
-    package_tokens = {token.casefold() for token in effective[1:]}
-    package_mutation = bool(
-        tool in _PACKAGE_MANAGERS
-        and any(
-            token in {
-                "install", "remove", "purge", "upgrade", "full-upgrade",
-                "dist-upgrade", "autoremove",
-            }
-            for token in package_tokens
-        )
-        and not package_tokens.intersection({"-s", "--simulate", "--dry-run"})
-    )
+    package_mutation = bool(package_action and not package_simulation)
     persistent = bool(
         (tool in _PERSISTENT_MUTATORS and any(
             pattern.search(command) for pattern in _PERSISTENCE_PATTERNS
