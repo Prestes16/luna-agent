@@ -156,6 +156,41 @@ KALI_TOOL_DICTIONARY: dict[str, KaliToolSpec] = {
         ("preserve host and port", "do not invent SNI names"),
         ("target",),
     ),
+    "smbclient": KaliToolSpec(
+        "smbclient", "windows", "host/share", "SMB share inspection",
+        ("share and credential inputs must be factual", "do not invent domain names"),
+        ("host", "share"),
+    ),
+    "enum4linux-ng": KaliToolSpec(
+        "enum4linux-ng", "windows", "host/IP", "SMB and directory-service enumeration",
+        ("do not invent credentials or domain names",),
+        ("target",),
+    ),
+    "rpcclient": KaliToolSpec(
+        "rpcclient", "windows", "host/IP", "RPC service inspection",
+        ("identity and domain inputs must come from evidence or operator input",),
+        ("target",),
+    ),
+    "ldapsearch": KaliToolSpec(
+        "ldapsearch", "directory", "LDAP URI/host", "LDAP directory queries",
+        ("base DN, bind identity and filters must be factual or operator-provided",),
+        ("target", "base DN"),
+    ),
+    "medusa": KaliToolSpec(
+        "medusa", "authentication", "service target", "authentication validation",
+        ("module and credential sources must be explicit and factual",),
+        ("target", "service/module", "identity source", "secret source"),
+    ),
+    "wpscan": KaliToolSpec(
+        "wpscan", "web", "WordPress URL", "WordPress-focused assessment",
+        ("use only when WordPress is observed or explicitly requested", "preserve target"),
+        ("target URL", "WordPress evidence"),
+    ),
+    "testssl": KaliToolSpec(
+        "testssl", "tls", "host/URL", "TLS configuration assessment",
+        ("preserve target", "do not invent certificates or SNI overrides"),
+        ("target",),
+    ),
 }
 
 
