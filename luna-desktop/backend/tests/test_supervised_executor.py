@@ -5,6 +5,7 @@ import unittest
 from app.execution_intent import L1_PROBE, L2_MUTATE, L3_HIGH_IMPACT
 from app.supervised_executor import (
     ExecutionApproval,
+    ExecutionApprovalStore,
     RunnerResult,
     SupervisedExecutionPolicy,
     SupervisedExecutor,
@@ -25,6 +26,35 @@ class FakeRunner:
             stdout=self.stdout,
             stderr=self.stderr,
         )
+
+
+class ExecutionApprovalStoreTests(unittest.TestCase):
+    def test_one_shot_token_is_consumed_once(self) -> None:
+        approval = ExecutionApproval.issue(
+            command="sudo nmap -sS 10.10.10.5",
+            target="10.10.10.5",
+            authority_level=L1_PROBE,
+            now=1000.0,
+        )
+        store = ExecutionApprovalStore()
+        token = store.issue(approval)
+        self.assertEqual(store.count(), 1)
+        self.assertIsNotNone(store.consume(token, now=1001.0))
+        self.assertIsNone(store.consume(token, now=1001.0))
+        self.assertEqual(store.count(), 0)
+
+    def test_expired_token_is_not_returned(self) -> None:
+        approval = ExecutionApproval.issue(
+            command="sudo nmap -sS 10.10.10.5",
+            target="10.10.10.5",
+            authority_level=L1_PROBE,
+            ttl_seconds=5,
+            now=1000.0,
+        )
+        store = ExecutionApprovalStore()
+        token = store.issue(approval)
+        self.assertIsNone(store.consume(token, now=1006.0))
+        self.assertEqual(store.count(), 0)
 
 
 class SupervisedExecutorTests(unittest.IsolatedAsyncioTestCase):
