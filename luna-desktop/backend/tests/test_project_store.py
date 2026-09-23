@@ -106,6 +106,7 @@ class ProjectStoreTests(unittest.TestCase):
         self.assertEqual(len(fact_records), 1)
         self.assertEqual(len(model_records), 1)
         self.assertEqual(model_records[0].kind, "episode")
+        self.assertTrue(model_records[0].secret_redacted)
 
         context = self.store.retrieval_context(1, "admin RCE")
         semantic = context.split("EPISODIC RECENT/RELEVANT:", 1)[0]
