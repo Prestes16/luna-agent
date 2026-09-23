@@ -106,7 +106,7 @@ class ModelFirstPipelineTests(unittest.IsolatedAsyncioTestCase):
             action_fingerprint(text),
             action_fingerprint("curl -i http://127.0.0.1:8080/"),
         )
-        self.assertNotIn("TEST_TOKEN_123", json.dumps(self.engine.histories["complex"]))
+        self.assertIn("TEST_TOKEN_123", json.dumps(self.engine.histories["complex"]))
 
     async def test_anti_loop_rejects_resolved_root_action(self) -> None:
         scenario = ScenarioContext()
@@ -146,7 +146,7 @@ class ModelFirstPipelineTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ScenarioAndRouterTests(unittest.TestCase):
-    def test_complex_delta_preserves_new_evidence_and_redacts_token(self) -> None:
+    def test_complex_delta_preserves_new_evidence_and_exact_token(self) -> None:
         context = ScenarioContext()
         context.update(OLD_CONTEXT)
         delta = context.update(COMPLEX_FIXTURE)
@@ -154,8 +154,8 @@ class ScenarioAndRouterTests(unittest.TestCase):
 
         self.assertGreaterEqual(delta.count, 9)
         self.assertIn("/api/admin/users", prompt)
-        self.assertIn("[REDACTED]", "\n".join(context.observed_facts))
-        self.assertNotIn("TEST_TOKEN_123", "\n".join(context.observed_facts))
+        self.assertIn("Authorization Bearer observado: TEST_TOKEN_123", "\n".join(context.observed_facts))
+        self.assertIn("TEST_TOKEN_123", "\n".join(context.observed_facts))
 
     def test_router_covers_none_low_medium(self) -> None:
         fast = classify_complexity("olá", evidence_delta_count=0)
