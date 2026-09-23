@@ -124,9 +124,11 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("success predicate", prompt)
         self.assertIn("captura de logs/prints/evidência", prompt)
 
-    def test_runtime_prompt_states_operator_executes_commands(self) -> None:
+    def test_runtime_prompt_states_operator_controls_execution(self) -> None:
         prompt = _build_system_prompt(None, supervised_mode=True)
-        self.assertIn("o operador executa comandos", prompt)
+        self.assertIn("o operador controla alvo/escopo/autoridade", prompt)
+        self.assertIn("executor supervisionado sob demanda", prompt)
+        self.assertIn("loop de ferramentas do modelo permanece bloqueado", prompt)
 
     async def test_ollama_unavailable_never_falls_back_to_cloud(self) -> None:
         with (
