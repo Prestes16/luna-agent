@@ -50,7 +50,7 @@ def _fingerprint(value: str) -> str:
 
 
 def _append_unique(values: list[str], value: str, *, limit: int = 24) -> bool:
-    compact = _compact(redact_sensitive_text(value))
+    compact = _compact(value)
     if not compact or compact.casefold() in {item.casefold() for item in values}:
         return False
     values.append(compact)
@@ -74,18 +74,6 @@ def _extract_json_values(message: str) -> list[Any]:
             values.append(value)
             consumed_until = index + consumed
     return values
-
-
-def _redact_json_secrets(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {
-            key: "[REDACTED]" if key.casefold() in {"token", "access_token", "refresh_token"}
-            else _redact_json_secrets(item)
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [_redact_json_secrets(item) for item in value]
-    return value
 
 
 def _extract_goal(message: str) -> Optional[str]:
@@ -239,12 +227,14 @@ class ScenarioContext:
             self._add_fact(f"WWW-Authenticate observado: {_compact(match.group(1), 120)}", delta)
         for match in _CONTENT_TYPE_RE.finditer(message):
             self._add_fact(f"Content-Type observado: {_compact(match.group(1), 120)}", delta)
-        if _AUTHORIZATION_RE.search(message):
-            self._add_fact("Authorization Bearer foi usado com valor redigido", delta)
+        for auth_match in _AUTHORIZATION_RE.finditer(message):
+            self._add_fact(
+                f"Authorization Bearer observado: {auth_match.group(1)}",
+                delta,
+            )
 
         for json_value in _extract_json_values(message):
-            safe_json = _redact_json_secrets(json_value)
-            compact_json = json.dumps(safe_json, ensure_ascii=False, separators=(",", ":"))
+            compact_json = json.dumps(json_value, ensure_ascii=False, separators=(",", ":"))
             self._add_fact(f"Corpo JSON observado: {compact_json}", delta)
             self.last_result = "Resposta HTTP com corpo JSON observado"
             self.no_evidence_declared = False
@@ -384,4 +374,4 @@ class ScenarioContext:
         if self.explained_concepts:
             lines.append(f"already_explained: {', '.join(sorted(self.explained_concepts))}")
         lines.append("Rules: unknown is not fact; do not repeat resolved actions without a new reason.")
-        return redact_sensitive_text("\n".join(lines))[:max_chars]
+        return "\n".join(lines)[:max_chars]
