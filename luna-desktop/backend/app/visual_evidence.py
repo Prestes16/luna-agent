@@ -30,6 +30,17 @@ class VisualEvidenceArtifact:
         return asdict(self)
 
 
+def model_supports_visual_reasoning(capabilities: Iterable[str] | None) -> bool:
+    """True only when the runtime explicitly reports a vision capability."""
+    if capabilities is None:
+        return False
+    return "vision" in {
+        str(item).strip().casefold()
+        for item in capabilities
+        if str(item).strip()
+    }
+
+
 def build_visual_evidence_manifest(
     images: Iterable[dict[str, str]] | None,
 ) -> tuple[VisualEvidenceArtifact, ...]:
