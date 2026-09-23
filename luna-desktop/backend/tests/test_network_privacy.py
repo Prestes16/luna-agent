@@ -20,6 +20,11 @@ class NetworkPrivacyTests(unittest.TestCase):
         scenario.update("Ambiente Kali local e CTF autorizado.")
         return scenario
 
+    def test_authorized_ctf_text_does_not_false_trigger_tor_privacy(self) -> None:
+        self.assertFalse(
+            privacy_intent("Estou em um CTF autorizado e quero executar um scan Nmap.")
+        )
+
     def test_privacy_intent_detects_proxychains_tor_and_vpn(self) -> None:
         self.assertTrue(privacy_intent("Configure proxychains com Tor."))
         self.assertTrue(privacy_intent("Quero usar uma VPN WireGuard."))
