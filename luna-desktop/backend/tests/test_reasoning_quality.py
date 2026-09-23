@@ -14,6 +14,12 @@ PROMPT = (
 
 
 class ReasoningQualityTests(unittest.TestCase):
+    def test_contract_recognizes_yara_before_sentence_punctuation(self) -> None:
+        contract = build_operator_contract("Quero usar yara. Me dê o comando para eu executar.")
+        self.assertEqual(contract.requested_tool, "yara")
+        self.assertTrue(contract.wants_command)
+        self.assertTrue(contract.operator_executes)
+
     def test_contract_extracts_tool_target_and_delivery(self) -> None:
         contract = build_operator_contract(PROMPT)
         self.assertEqual(contract.requested_tool, "nmap")
