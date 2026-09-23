@@ -1,13 +1,14 @@
 # Luna Cyber — Supervised Copilot Execution V1
 
-This document freezes the operator-control model before real tool execution is enabled.
+This document freezes the operator-control model for the implemented supervised executor.
+The executor exists as a separate gate and is disabled by default; the LLM tool loop remains hard-locked.
 
 ## Role
 
 Luna is a **copilot**, not an autonomous auditor. The operator owns the car:
 target, objective, scope changes and authority escalation remain operator decisions.
-Luna may later execute selected capabilities on demand, but execution authority is
-granted per capability and per intent, never by one global switch.
+Luna may execute selected capabilities on demand through the separate supervised executor,
+but execution authority is granted per capability and per intent, never by one global switch.
 
 ```text
 OPERATOR OBJECTIVE / EVIDENCE
@@ -37,14 +38,19 @@ CAPABILITY AUTHORITY
   L3 HIGH IMPACT -> APPROVAL_REQUIRED or BLOCKED
           |
           v
-FUTURE EXECUTOR
+SUPERVISED EXECUTOR (default disabled)
           |
           v
 RAW RESULT -> EVIDENCE PLANE -> LUNA RECALCULATES
 ```
 
-The current build remains instruction-only. The V1 intent model is implemented
-before an executor so policy can be regression-tested independently.
+The model-facing tool loop remains instruction-only (`INSTRUCTION_ONLY_BUILD=True`).
+Separately, `SupervisedExecutor` recomputes the execution intent before every process start.
+Its default policy is disabled; L0/L1 can be enabled independently, while L2/L3 stay
+disabled unless the operator deliberately enables those levels. Approval-required
+actions must carry an exact, expiring grant bound to command SHA-256, authority level
+and target. Shell control operators are rejected and execution uses argv, never
+`shell=True`.
 
 ## L0–L3 authority semantics
 
@@ -55,7 +61,8 @@ reads without intended mutation.
 
 Default authority: `AUTO`.
 
-Future automatic execution is still bounded to configured workspace/host scope.
+Automatic L0 execution is still bounded to configured host/workspace scope and to a
+known read-only tool semantic. Unknown tools fail closed instead of being guessed safe.
 
 ### L1 PROBE
 
@@ -198,6 +205,29 @@ margin = z * sqrt((p(1-p) + z^2/(4n))/n) / (1 + z^2/n)
 This interval describes uncertainty in the tested repetitions; it is not a probability that an
 exploit works on untested hosts, versions or environments. Exact artifact hashes and tested
 conditions remain the evidentiary authority.
+
+## Immutable evidence vault
+
+Report artifacts are also persisted in a local content-addressed vault. Exact bytes are
+stored under SHA-256, while SQLite keeps project-scoped metadata:
+
+```text
+project id
+kind / media type / source
+original name / description
+SHA-256
+exact byte length
+observed timestamp
+sensitivity
+```
+
+Repeated identical bytes share the same immutable blob while preserving separate
+observation records. Reads re-check byte length and SHA-256; tampering therefore
+fails integrity verification. Deleting a project removes its references and garbage
+collects blobs only when no remaining project references the digest.
+
+Project chat screenshots are persisted into this vault before semantic interpretation,
+so a later report can attach the original image rather than a reconstructed rendering.
 
 ## Visual evidence
 
