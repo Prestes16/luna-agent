@@ -69,6 +69,42 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(diagnostics["harness"]["max_tool_calls"], 0)
         self.assertFalse(diagnostics["harness"]["semantic_response_cache_enabled"])
 
+    def test_supervised_executor_defaults_disabled_but_l0_l1_policy_present(self) -> None:
+        engine = LunaEngine()
+        policy = engine.supervised_executor.public_policy()
+        self.assertFalse(policy["enabled"])
+        self.assertTrue(policy["allow_l0"])
+        self.assertTrue(policy["allow_l1"])
+        self.assertFalse(policy["allow_l2"])
+        self.assertFalse(policy["allow_l3"])
+
+        diagnostics = engine.get_local_diagnostics()
+        self.assertIn("supervised_executor", diagnostics)
+        self.assertFalse(diagnostics["supervised_executor"]["enabled"])
+
+    async def test_supervised_executor_config_refresh_is_independent_of_model_tool_loop(self) -> None:
+        engine = LunaEngine()
+        await engine.update_config({
+            "supervised_executor_enabled": True,
+            "supervised_allow_l0": True,
+            "supervised_allow_l1": True,
+        })
+        self.assertTrue(engine.supervised_executor.public_policy()["enabled"])
+        self.assertFalse(engine._tool_execution_allowed())
+
+    def test_preview_supervised_command_uses_scenario_scope_and_target(self) -> None:
+        engine = LunaEngine()
+        scenario = ScenarioContext()
+        scenario.update("CTF autorizado em http://10.10.10.5")
+        engine.scenario_contexts["exec"] = scenario
+        preview = engine.preview_supervised_command(
+            "nmap -sV 10.10.10.5",
+            conversation_id="exec",
+            operator_request_text="Luna, rode esse nmap no alvo autorizado.",
+        )
+        self.assertEqual(preview["authority"], "ON_DEMAND")
+        self.assertEqual(preview["target"], "10.10.10.5")
+
     def test_instruction_only_build_cannot_be_enabled_by_runtime_config(self) -> None:
         engine = LunaEngine()
         self.assertTrue(engine.config["instruction_only_mode"])
