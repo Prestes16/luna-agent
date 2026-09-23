@@ -11,6 +11,7 @@ from typing import Any
 
 from . import reasoning_pipeline as _rp
 from .command_ast import assess_nmap_strategy, parse_command
+from .offensive_strategy import assess_nmap_port_strategy, recommended_web_port_argument
 from .reasoning_runtime_patch_v6 import (
     build_replan_instruction as _previous_build_replan,
     extract_commands,
@@ -20,16 +21,24 @@ from .reasoning_runtime_patch_v6 import (
 _INITIAL_NMAP_UTILITY_THRESHOLD = 0.38
 
 
-def _strategy_reasons(message: str, response: str) -> list[str]:
+def _strategy_reasons(message: str, response: str, scenario: Any = None) -> list[str]:
     reasons: list[str] = []
     commands = extract_commands(response)
+    context_parts = [message]
+    for attr in ("target", "current_goal", "environment"):
+        value = getattr(scenario, attr, None) if scenario is not None else None
+        if value:
+            context_parts.append(str(value))
+    context_text = "\n".join(context_parts)
 
     for command in commands:
         ast = parse_command(command)
         if not ast or ast.tool != "nmap":
             continue
-        assessment = assess_nmap_strategy(message, ast)
+        assessment = assess_nmap_strategy(context_text, ast)
         reasons.extend(assessment.reasons)
+        port_assessment = assess_nmap_port_strategy(context_text, ast)
+        reasons.extend(port_assessment.reasons)
         if assessment.intent == "initial" and assessment.utility < _INITIAL_NMAP_UTILITY_THRESHOLD:
             reasons.append("nmap_strategy_utility_below_threshold")
 
@@ -50,7 +59,7 @@ def validate_model_response(
         evidence_delta_count=evidence_delta_count,
     )
     reasons = list(result.reasons)
-    reasons.extend(_strategy_reasons(message, response))
+    reasons.extend(_strategy_reasons(message, response, scenario))
     reasons = list(dict.fromkeys(reasons))
 
     loop_guard = result.loop_guard
@@ -92,6 +101,21 @@ def build_replan_instruction(validation, scenario_prompt: str, current_message: 
     if "nmap_strategy_utility_below_threshold" in reasons:
         additions.append(
             "a utilidade estratégica U=IG*K*exp(-(lambda_n*N+lambda_c*C)) ficou abaixo do limiar; maximize informação útil e controle explícito por custo/ruído"
+        )
+    if "nmap_top_ports_generic_for_web_context" in reasons:
+        additions.append(
+            "o contexto é uma otimização de superfície web: --top-ports usa frequência global e não contexto da aplicação; prefira -p "
+            + recommended_web_port_argument()
+            + " como priorização heurística, sem afirmar que esses serviços estão abertos antes do scan"
+        )
+    if "nmap_web_optimization_ports_not_explicit" in reasons:
+        additions.append(
+            "o operador pediu portas de maior valor no contexto web; torne o vetor -p explícito usando "
+            + recommended_web_port_argument()
+        )
+    if "nmap_web_port_profile_low_coverage" in reasons:
+        additions.append(
+            "a lista explícita cobre pouco do perfil web de alto valor; reavalie cobertura ponderada sem transformar portas candidatas em fatos"
         )
 
     if not additions:
