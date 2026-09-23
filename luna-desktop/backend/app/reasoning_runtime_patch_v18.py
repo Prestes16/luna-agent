@@ -6,6 +6,7 @@ import re
 from typing import Any
 
 from . import reasoning_pipeline as _rp
+from .quantitative_reasoning import quantitative_fact_sheet
 from .reasoning_runtime_patch_v17 import (
     build_replan_instruction as _previous_build_replan,
     validate_model_response as _previous_validate,
@@ -21,6 +22,9 @@ _CURRENCY_TOLERANCE_RE = re.compile(
 _UNBOUNDED_ROUNDING_RE = re.compile(
     r"(?is)(?:rounding|arredondamento|truncamento).{0,100}"
     r"(?:erro|perda|desvio).{0,80}(?:significativ|grande|large)"
+)
+_WRONG_I128_BOUND_RE = re.compile(
+    r"(?is)i128.{0,120}(?:2\s*\^\s*63|9223372036854775807)"
 )
 
 
@@ -49,6 +53,9 @@ def _exact_arithmetic_reasons(message: str, response: str, scenario: Any) -> lis
         )
         if not has_bound:
             reasons.append("rounding_loss_not_bounded")
+
+    if quantitative_fact_sheet(message) and _WRONG_I128_BOUND_RE.search(response):
+        reasons.append("wrong_i128_bound")
 
     return reasons
 
@@ -83,6 +90,8 @@ def build_replan_instruction(validation, scenario_prompt: str, current_message: 
         additions.append("não invente moeda ou tolerância monetária; use somente escala/base unit observadas")
     if "rounding_loss_not_bounded" in reasons:
         additions.append("quantifique truncamento pelo resto e dê um limite antes de chamar a perda significativa")
+    if "wrong_i128_bound" in reasons:
+        additions.append("2^63-1 é i64::MAX; i128::MAX é 2^127-1 e não pode ser inventado como intermediário")
     if not additions:
         return base
     return base + "\n\nEXACT ARITHMETIC:\n" + "\n".join(f"- {item}." for item in additions)
