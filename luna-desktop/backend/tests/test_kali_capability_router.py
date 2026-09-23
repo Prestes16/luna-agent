@@ -12,6 +12,16 @@ class KaliCapabilityRouterTests(unittest.TestCase):
         scenario.update("CTF autorizado no alvo https://wifhoodie.com.")
         return scenario
 
+    def test_authorized_ctf_does_not_promote_privacy_family_by_substring(self) -> None:
+        scenario = self._scenario()
+        ranked = rank_capabilities(
+            "CTF autorizado: quero analisar uma superfície web HTTP.",
+            scenario=scenario,
+            history=[],
+            limit=4,
+        )
+        self.assertTrue(all(item.family != "privacy" for item in ranked))
+
     def test_router_returns_small_ranked_subset_for_web_context(self) -> None:
         scenario = self._scenario()
         ranked = rank_capabilities(
