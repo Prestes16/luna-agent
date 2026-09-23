@@ -6,6 +6,8 @@ from app.quantitative_reasoning import (
     conservation_residual,
     integer_bounds,
     integer_margin,
+    max_unsigned_input_before_mul_overflow,
+    floor_rounding_loss_numerator,
     mul_div_floor,
     quantitative_guidance,
     scale_decimal_exact,
@@ -27,6 +29,17 @@ class QuantitativeReasoningTests(unittest.TestCase):
         self.assertEqual(integer_bounds(8, True), (-128, 127))
         self.assertEqual(integer_margin(250, 8, False), 5)
         self.assertLess(integer_margin(256, 8, False), 0)
+
+    def test_u64_fee_multiplier_threshold_is_exact(self) -> None:
+        threshold = max_unsigned_input_before_mul_overflow(64, 125)
+        self.assertEqual(threshold, 147_573_952_589_676_412)
+        self.assertLessEqual(threshold * 125, (1 << 64) - 1)
+        self.assertGreater((threshold + 1) * 125, (1 << 64) - 1)
+
+    def test_floor_rounding_loss_is_bounded_by_one_base_unit(self) -> None:
+        remainder = floor_rounding_loss_numerator(79, 125, 10_000)
+        self.assertEqual(remainder, 9_875)
+        self.assertLess(remainder, 10_000)
 
     def test_mul_div_exposes_discarded_remainder(self) -> None:
         quotient, remainder = mul_div_floor(100, 1, 3)
