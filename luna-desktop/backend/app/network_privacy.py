@@ -8,15 +8,16 @@ transport, compatibility and fallback constraints.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
-from typing import Iterable
 
 
-_PRIVACY_MARKERS = (
-    "proxychains", "proxychains4", "tor", "torsocks", "vpn", "wireguard",
-    "openvpn", "tunel", "túnel", "privacidade", "anonim", "rastre",
+_PRIVACY_SUBSTRING_MARKERS = (
+    "proxychains", "proxychains4", "torsocks", "wireguard", "openvpn",
+    "tunel", "túnel", "privacidade", "anonim", "rastre",
     "dns leak", "vazamento dns", "kill switch", "killswitch", "socks5",
 )
+_PRIVACY_WORD_MARKERS = ("tor", "vpn")
 
 _TCP_WEB_MARKERS = (
     "http", "https", "web", "browser", "navegador", "curl", "ffuf", "gobuster",
@@ -78,9 +79,16 @@ PROFILES: tuple[PrivacyRouteProfile, ...] = (
 )
 
 
+def _has_word(value: str, word: str) -> bool:
+    return bool(re.search(rf"(?<!\\w){re.escape(word)}(?!\\w)", value, re.IGNORECASE))
+
+
 def privacy_intent(value: str) -> bool:
     normalized = value.casefold()
-    return any(marker in normalized for marker in _PRIVACY_MARKERS)
+    return (
+        any(marker in normalized for marker in _PRIVACY_SUBSTRING_MARKERS)
+        or any(_has_word(normalized, marker) for marker in _PRIVACY_WORD_MARKERS)
+    )
 
 
 def _mismatch_penalty(context: str, profile: PrivacyRouteProfile) -> tuple[float, list[str]]:
@@ -110,10 +118,13 @@ def _mismatch_penalty(context: str, profile: PrivacyRouteProfile) -> tuple[float
         family
         for family, markers in {
             "proxychains": ("proxychains", "proxychains4"),
-            "tor": (" tor ", "torsocks"),
-            "vpn": (" vpn ", "openvpn", "wireguard", "wg-quick"),
+            "tor": ("tor", "torsocks"),
+            "vpn": ("vpn", "openvpn", "wireguard", "wg-quick"),
         }.items()
-        if any(marker in f" {normalized} " for marker in markers)
+        if any(
+            (_has_word(normalized, marker) if marker in {"tor", "vpn"} else marker in normalized)
+            for marker in markers
+        )
     }
     if len(named_families) == 1:
         requested = next(iter(named_families))
@@ -208,7 +219,7 @@ def privacy_configuration_guidance(context: str) -> str:
             "PROXYCHAINS: detect whether proxychains4 or proxychains is installed and locate its active config rather than assuming a fixed path",
             "PROXYCHAINS: verify chain mode, proxy_dns behavior and factual SOCKS endpoint; use only compatible TCP applications",
         ))
-    if "tor" in normalized or "torsocks" in normalized:
+    if _has_word(normalized, "tor") or "torsocks" in normalized:
         rules.extend((
             "TOR: verify daemon/listener and local SOCKS endpoint; do not hardcode 9050 or 9150 without evidence",
             "TOR: do not route UDP/raw-socket operations through Tor wrappers; choose a compatible TCP workflow instead",
@@ -219,11 +230,15 @@ def privacy_configuration_guidance(context: str) -> str:
             "VPN: verify default route, DNS, IPv4/IPv6 and reconnect/failure behavior before calling the tunnel ready",
             "VPN: kill-switch/firewall changes must be explicit, reversible and scoped to the intended interface/profile",
         ))
-    if "tor" in normalized and "vpn" in normalized:
+    if _has_word(normalized, "tor") and _has_word(normalized, "vpn"):
         rules.append(
             "LAYER ORDER: VPN->Tor and Tor->VPN are not equivalent trust models; state the requested order explicitly and do not configure Tor->VPN unless the VPN/profile actually supports that transport"
         )
-    if "nmap" in normalized and any(marker in normalized for marker in ("proxychains", "tor", "torsocks")):
+    if "nmap" in normalized and (
+        "proxychains" in normalized
+        or "torsocks" in normalized
+        or _has_word(normalized, "tor")
+    ):
         rules.append(
             "NMAP: SOCKS/proxy wrappers are incompatible with -sS/-sU/raw discovery; if proxying is required, use only connect-style semantics that are actually supported and verify target/DNS handling"
         )
