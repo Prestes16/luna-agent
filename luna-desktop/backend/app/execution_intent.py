@@ -64,6 +64,11 @@ _HTTP_MUTATION_PATTERNS = (
     re.compile(r"(?i)\bcurl\b.*(?:\s(?:-T|--upload-file)\b)"),
 )
 
+_OPERATOR_EXECUTION_PATTERNS = (
+    re.compile(r"(?i)\b(?:execute|executa|execute-a|rode|roda|rodar|use|usar|teste|testa|explore|explorar)\b"),
+    re.compile(r"(?i)\b(?:vamos|pode|quero)\s+(?:executar|rodar|usar|testar|explorar)\b"),
+)
+
 _TOOL_HIGH_IMPACT_PATTERNS = (
     re.compile(r"(?i)\bnmap\b.*--script(?:=|\s+)[^\n]*(?:exploit|dos|intrusive)"),
     re.compile(r"(?i)\bsqlmap\b.*--(?:os-shell|os-pwn|sql-shell|file-write|file-dest)\b"),
@@ -102,6 +107,11 @@ def _tokens(command: str) -> list[str]:
         return command.split()
 
 
+def operator_requested_execution(text: str) -> bool:
+    """Conservative current-turn execution intent detector."""
+    return any(pattern.search(text or "") for pattern in _OPERATOR_EXECUTION_PATTERNS)
+
+
 def _target_from_command(command: str) -> str | None:
     url = re.search(r"(?i)\bhttps?://[^\s'\"<>]+", command)
     if url:
@@ -122,6 +132,18 @@ def _target_from_command(command: str) -> str | None:
     if domain:
         return domain.group(0)
     return None
+
+
+def _normalize_scope_target(value: str | None) -> str | None:
+    if not value:
+        return None
+    text = value.strip()
+    if text.casefold().startswith(("http://", "https://")):
+        try:
+            return urlsplit(text).hostname
+        except ValueError:
+            return None
+    return _target_from_command(text) or text.casefold().strip("[]")
 
 
 def _effective_tool(command: str) -> str:
@@ -221,6 +243,7 @@ def build_execution_intent(
     scope_confirmed: bool = False,
     rollback_ready: bool = False,
     verification_ready: bool = True,
+    scope_target: str | None = None,
 ) -> ExecutionIntent:
     lifecycle = assess_command_execution(
         command,
@@ -233,6 +256,11 @@ def build_execution_intent(
     active_probe = tool in _ACTIVE_PROBE_TOOLS
     semantic_mutation = _semantic_remote_mutation(command)
     high_impact_semantic = _is_high_impact_command(command, tool)
+    normalized_scope_target = _normalize_scope_target(scope_target)
+    target_bound = bool(target) and (
+        normalized_scope_target is None
+        or target.casefold() == normalized_scope_target.casefold()
+    )
 
     if lifecycle.destructive or host.host_impact in {"blocked", "critical"} or high_impact_semantic:
         level = L3_HIGH_IMPACT
@@ -244,6 +272,12 @@ def build_execution_intent(
         level = L0_OBSERVE
 
     if host.host_impact == "blocked":
+        authority = BLOCKED
+    elif (
+        operator_requested_execution
+        and level != L0_OBSERVE
+        and (not scope_confirmed or not target_bound)
+    ):
         authority = BLOCKED
     elif level == L3_HIGH_IMPACT:
         authority = APPROVAL_REQUIRED
@@ -285,7 +319,7 @@ def build_execution_intent(
         scope_confirmed=scope_confirmed or level == L0_OBSERVE,
         operator_requested=operator_requested_execution or level == L0_OBSERVE,
         rollback_ready=rollback_ready or not host.rollback_required,
-        target_bound=bool(target) or level == L0_OBSERVE,
+        target_bound=target_bound or level == L0_OBSERVE,
         verification_ready=verification_ready,
         authority_level=level,
     )
@@ -305,6 +339,15 @@ def build_execution_intent(
         reasons.append("high_impact_semantic")
     if level != L0_OBSERVE and not scope_confirmed:
         reasons.append("scope_not_confirmed")
+    if level != L0_OBSERVE and not target:
+        reasons.append("target_not_bound")
+    elif (
+        level != L0_OBSERVE
+        and normalized_scope_target is not None
+        and target
+        and target.casefold() != normalized_scope_target.casefold()
+    ):
+        reasons.append("target_scope_mismatch")
     if authority in {APPROVAL_REQUIRED, BLOCKED} and not operator_requested_execution:
         reasons.append("operator_request_required")
 
