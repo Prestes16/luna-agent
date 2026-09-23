@@ -29,7 +29,8 @@ _KNOWN_TOOLS = (
     "sqlmap", "wpscan", "dig", "nslookup", "dnsenum", "dnsrecon", "amass",
     "subfinder", "traceroute", "ping", "enum4linux", "enum4linux-ng",
     "smbclient", "netexec", "crackmapexec", "hydra", "medusa", "john",
-    "hashcat", "searchsploit", "msfconsole",
+    "hashcat", "searchsploit", "msfconsole", "sslscan", "testssl", "tcpdump",
+    "tshark", "rpcclient", "ldapsearch",
 )
 _URL_RE = re.compile(r"https?://[^\s<>\]\)]+", re.IGNORECASE)
 
