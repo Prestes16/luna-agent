@@ -19,6 +19,27 @@ from .reasoning_runtime_patch_v14 import (
 from .reasoning_runtime_patch_v8 import extract_commands
 
 
+_FENCE_RE = re.compile(
+    r"```(?:bash|sh|shell|zsh|powershell|pwsh)?(?:[ \t]*\r?\n|[ \t]+)(.*?)```",
+    re.IGNORECASE | re.DOTALL,
+)
+
+
+def _candidate_commands(response: str) -> list[str]:
+    """Collect commands even when the generic parser does not know shell built-ins."""
+    commands = list(extract_commands(response))
+    for block in _FENCE_RE.findall(response):
+        for line in block.splitlines():
+            compact = line.strip()
+            if compact.startswith("$ "):
+                compact = compact[2:].lstrip()
+            if compact.startswith("PS> "):
+                compact = compact[4:].lstrip()
+            if compact and not compact.startswith("#"):
+                commands.append(compact)
+    return list(dict.fromkeys(commands))
+
+
 _REMOTE_TARGET_PREREQ_RE = re.compile(
     r"(?is)(?:preciso\s+d[ao]\s+(?:base\s+)?url|forne[cç]a\s+(?:a\s+)?url|"
     r"host\s+completo\s+com\s+porta|com\s+o\s+alvo\s+definido|"
@@ -46,7 +67,7 @@ def _privacy_preflight_reasons(message: str, response: str) -> list[str]:
         return []
 
     reasons: list[str] = []
-    commands = extract_commands(response)
+    commands = _candidate_commands(response)
     command_text = "\n".join(commands)
     response_lower = response.casefold()
 
