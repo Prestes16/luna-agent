@@ -188,3 +188,14 @@ Tool execution must not weaken the evidence, provenance, math, host-safety or hu
 The local/Ollama baseline uses `requirements-local.txt`. Cloud SDKs are optional and must
 not be import-time requirements for the local agent. In particular, absence of the Anthropic
 SDK cannot prevent local reasoning, memory, tests or Ollama operation.
+
+
+## Supervised copilot execution baseline
+
+The detailed L0-L3 authority model, nonlinear execution-risk math, exploit/PoC
+proof contract, visual-evidence integrity contract and future Kali knowledge
+ingestion design are frozen in `docs/LUNA_SUPERVISED_COPILOT_V1.md`.
+
+The execution-intent model is implemented and testable while real host/tool
+execution remains disabled. This separation is deliberate: policy is proven
+before the executor is granted authority.
