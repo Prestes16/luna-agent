@@ -75,6 +75,8 @@ _EXPLICIT_HIGH_IMPACT_MARKERS = (
     "formatar", "format", "particionar", "partition", "bootloader", "grub",
     "bcd", "wipe", "apagar disco", "limpar firewall", "flush firewall",
     "alterar rota", "mudar rota", "editar /etc", "alterar /etc",
+    "instalar", "install", "remover pacote", "remove package", "upgrade",
+    "atualizar pacotes",
 )
 
 _ENVIRONMENT_MARKERS = (
@@ -144,11 +146,14 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
     if critical_storage and not device_targets:
         device_target_confirmed = False
 
+    persistent_change = bool(
+        lifecycle.persistent_change or system_config_change or persistence_change
+    )
     high_impact = any((
         critical_storage, boot_change, system_tree_change, network_control_change,
         remote_pipe_execution, system_config_change, persistence_change,
+        persistent_change,
     ))
-    persistent_change = bool(lifecycle.persistent_change or system_config_change or persistence_change)
     backup_or_snapshot_required = bool(
         critical_storage or boot_change or system_tree_change or system_config_change
     )
