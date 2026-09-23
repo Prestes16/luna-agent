@@ -39,12 +39,17 @@ _ANALYZE_MARKERS = (
     "outras possibilidades", "mais algum", "mais alguma", "melhor app", "qual ferramenta",
     "proxychains", "torsocks", "wireguard", "openvpn", "vpn", "privacidade",
     "anonim", "rastre", "túnel", "tunel", "dns leak", "vazamento dns",
-    "kill switch", "killswitch",
+    "kill switch", "killswitch", "malware", "ransomware", "trojan", "rootkit",
+    "bootkit", "loader", "dropper", "stealer", "webshell", "yara", "volatility",
+    "ghidra", "rizin", "radare", "reverse engineering", "deobfuscat", "desofusc",
+    "packer", "memory dump",
 )
 _DEEP_MARKERS = (
     "cadeia de vulnerabilidades", "exploit chain", "threat model", "modelo de ameaça",
     "prova matemática", "prova matematica", "demonstre formalmente", "complexidade assintótica",
     "complexidade assintotica", "race condition", "reentrancy", "reentrância",
+    "ransomware", "rootkit", "bootkit", "reverse engineering", "malware analysis",
+    "análise de malware", "analise de malware", "memory forensics", "forense de memória",
 )
 _RETEST_MARKERS = (
     "reteste", "retestar", "repita", "repetir", "novamente", "reprodut",
@@ -56,7 +61,9 @@ _MENTOR_MARKERS = (
     "response", "curl", "nmap", "hydra", "ffuf", "gobuster", "sqlmap", "nuclei",
     "burp", "burpsuite", "mitmproxy", "zaproxy", "wireshark", "proxy",
     "chrome", "firefox", "proxychains", "tor", "torsocks", "wireguard",
-    "openvpn", "vpn", "ctf", "autoriz",
+    "openvpn", "vpn", "ctf", "autoriz", "malware", "ransomware", "trojan",
+    "rootkit", "bootkit", "loader", "dropper", "stealer", "yara", "volatility",
+    "ghidra", "rizin", "radare", "capa", "floss", "reverse engineering",
     "evidência", "evidencia", "http/", "json", "endpoint", "api/", "fato:",
 )
 
