@@ -32,7 +32,7 @@ _TRANSIENT_MUTATORS = {
     "systemctl", "ip", "route", "resolvectl",
 }
 
-_PACKAGE_MANAGERS = {"apt", "apt-get", "dnf", "yum", "pacman"}
+_PACKAGE_MANAGERS = {"apt", "apt-get"}
 
 _PERSISTENT_MUTATORS = {
     "apt", "apt-get", "dnf", "yum", "pacman", "systemctl", "nft", "iptables",
@@ -153,17 +153,17 @@ def assess_command_execution(
     destructive = tool in _DESTRUCTIVE_TOOLS or any(
         pattern.search(command) for pattern in _HIGH_RISK_PATTERNS
     )
+    package_tokens = {token.casefold() for token in effective[1:]}
     package_mutation = bool(
         tool in _PACKAGE_MANAGERS
         and any(
-            token.casefold() in {
+            token in {
                 "install", "remove", "purge", "upgrade", "full-upgrade",
-                "dist-upgrade", "autoremove", "-s", "-u",
+                "dist-upgrade", "autoremove",
             }
-            for token in effective[1:]
+            for token in package_tokens
         )
-        and "--simulate" not in {token.casefold() for token in effective[1:]}
-        and "--dry-run" not in {token.casefold() for token in effective[1:]}
+        and not package_tokens.intersection({"-s", "--simulate", "--dry-run"})
     )
     persistent = bool(
         (tool in _PERSISTENT_MUTATORS and any(
