@@ -49,7 +49,11 @@ _FIREWALL_ROUTE_PATTERNS = (
 )
 
 _CONNECTIVITY_PATTERNS = (
-    re.compile(r"(?i)\bip\s+link\s+set\b[^\n]*\bdown\b"),
+    re.compile(r"(?i)\bip\s+link\s+set\b[^\n]*\b(?:up|down)\b"),
+    re.compile(r"(?i)\bip\s+(?:route|addr)\s+(?:add|replace|del|delete|flush)\b"),
+    re.compile(r"(?i)\bresolvectl\s+(?:dns|domain|default-route)\b"),
+    re.compile(r"(?i)\bwg-quick\s+(?:up|down)\b"),
+    re.compile(r"(?i)\bopenvpn\b"),
     re.compile(r"(?i)\bnmcli\s+networking\s+off\b"),
     re.compile(r"(?i)\bsystemctl\s+(?:stop|restart)\s+(?:networkmanager|networking|systemd-resolved|ssh|sshd)\b"),
     re.compile(r"(?i)\bdisable-netadapter\b"),
