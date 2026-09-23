@@ -34,16 +34,16 @@ class HostIntegrityValidatorTests(unittest.TestCase):
 
     def test_persistent_service_change_requires_rollback_plan(self) -> None:
         validation = self._validate(
-            "Estou no Kali Linux e quero habilitar o Tor no boot.",
-            "```bash\nsudo systemctl enable tor\n```",
+            "Estou no Kali Linux e quero habilitar o serviço ssh no boot.",
+            "```bash\nsudo systemctl enable ssh\n```",
         )
         self.assertFalse(validation.valid)
         self.assertIn("host_rollback_plan_missing", validation.reasons)
 
     def test_documented_service_rollback_satisfies_v14_rollback_guard(self) -> None:
         validation = self._validate(
-            "Estou no Kali Linux e quero habilitar o Tor no boot.",
-            "```bash\nsudo systemctl enable tor\n```\nRollback: `sudo systemctl disable tor`.",
+            "Estou no Kali Linux e quero habilitar o serviço ssh no boot.",
+            "```bash\nsudo systemctl enable ssh\n```\nRollback: `sudo systemctl disable ssh`.",
         )
         self.assertNotIn("host_rollback_plan_missing", validation.reasons)
 
