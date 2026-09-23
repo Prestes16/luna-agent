@@ -13,7 +13,7 @@ from typing import Any
 from .command_ast import assess_nmap_strategy
 from .command_execution import assess_command_execution
 from .command_policy import parse_effective_command
-from .execution_intent import build_execution_intent
+from .execution_intent import build_execution_intent, operator_requested_execution
 from .host_safety import assess_host_safety
 from .kali_tool_readiness import assess_tool_readiness
 from .network_privacy import privacy_intent, score_privacy_routes
@@ -163,18 +163,11 @@ def install_response_attestation(engine_cls: type) -> None:
                 reasons = event.get("validation_reasons") or ()
                 score = score_response_quality(message, visible_text, reasons)
                 attestations = command_attestations(message, visible_text)
-                operator_requested_execution = any(
-                    marker in message.casefold()
-                    for marker in (
-                        "execute", "executar", "rode", "rodar", "aplique",
-                        "configure", "configurar", "instale", "inicie", "teste",
-                        "testar", "valide", "validar", "explore", "explorar",
-                    )
-                )
+                operator_requested = operator_requested_execution(message)
                 scenario = self.scenario_contexts.get(sid)
                 intent_context_parts = [message]
                 if scenario is not None:
-                    for attr in ("target", "current_goal", "environment"):
+                    for attr in ("target", "current_goal", "environment", "scope"):
                         value = getattr(scenario, attr, None)
                         if value:
                             intent_context_parts.append(str(value))
@@ -190,7 +183,7 @@ def install_response_attestation(engine_cls: type) -> None:
                 execution_attestations = [
                     assess_command_execution(
                         command,
-                        operator_requested_execution=operator_requested_execution,
+                        operator_requested_execution=operator_requested,
                         tool_execution_enabled=bool(
                             self.config.get("tool_execution_enabled", False)
                         ),
@@ -205,6 +198,10 @@ def install_response_attestation(engine_cls: type) -> None:
                         scope_confirmed=scope_confirmed,
                         rollback_ready=False,
                         verification_ready=True,
+                        scope_target=(
+                            str(getattr(scenario, "target", "") or "") or None
+                            if scenario is not None else None
+                        ),
                     ).to_dict()
                     for command in response_commands
                 ]
@@ -243,6 +240,7 @@ def install_response_attestation(engine_cls: type) -> None:
                         }
                         for item in execution_attestations
                     ],
+                    "execution_policy_version": "supervised-execution-v1",
                     "execution_intents": [
                         {
                             key: value
