@@ -108,14 +108,16 @@ CAPABILITIES: tuple[TechnicalCapability, ...] = (
     TechnicalCapability(
         "programming_automation",
         (
-            "python", "bash", "powershell", "rust", "golang", " go ", "c", "c++",
-            "c#", "dotnet", "java", "kotlin", "assembly", "typescript", "javascript",
+            "python", "bash", "powershell", "rust", "golang", " go ", " c ", "c++",
+            "c#", "dotnet", "java", "kotlin", "assembly", "mips", "riscv",
+            "delphi", "pascal", "nim", "zig", "typescript", "javascript",
             "vbscript", "vba", "script", "programar", "codigo", "código",
         ),
         (
             "Python/Bash/PowerShell", "Rust/C/C++/Go", "C#/.NET IL",
             "Java/Kotlin/JVM/DEX", "x86/x64/ARM assembly", "JavaScript/TypeScript",
-            "VBScript/VBA and binary-data processing", "testing and CLI design",
+            "VBScript/VBA/HTA/AutoIt and binary-data processing",
+            "Delphi/Pascal/Nim/Zig and embedded architectures", "testing and CLI design",
         ),
         ("scripts", "CLI tools", "parsers", "test harnesses", "automation", "reports and reusable modules"),
     ),
