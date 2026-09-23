@@ -337,6 +337,7 @@ HIPÓTESE: O servidor pode negar o usuário atual.
         context.update(OLD_CONTEXT)
         prompt = _build_system_prompt(None, scenario_context=context.to_prompt_block())
         self.assertIn("Exemplos pre-carregados", prompt)
+        self.assertIn("BUILD-TO-BREAK", prompt)
         self.assertLess(len(prompt), 3_000)
 
     def test_replan_preserves_the_full_current_turn_contract(self) -> None:
