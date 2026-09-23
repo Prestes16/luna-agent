@@ -27,6 +27,7 @@ from .module_loader import ModuleLoader
 from .construction_reasoning import construction_guidance
 from .decision_intelligence import decision_guidance
 from .exploit_proof import exploit_proof_guidance
+from .execution_intent import build_execution_intent, operator_requested_execution
 from .host_safety import host_safety_guidance
 from .kali_tool_guidance import guidance_for_context
 from .malware_analysis import malware_guidance, malware_tooling_summary
@@ -41,6 +42,7 @@ from .visual_evidence import (
 from .reasoning_pipeline import (
     build_replan_instruction,
     classify_complexity,
+    extract_commands,
     redact_sensitive_text,
     validate_model_response,
 )
@@ -2107,6 +2109,31 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         if full_text:
             scenario.record_model_response(full_text)
 
+        # Compile proposed commands into deterministic execution intents. The current
+        # build still does not execute them; this metadata is the future executor contract.
+        proposed_execution_intents = []
+        if full_text and validation and validation.valid:
+            operator_execution = operator_requested_execution(message)
+            scope_confirmed = bool(scenario.scope)
+            rollback_ready = bool(
+                re.search(r"(?i)\b(?:rollback|reverter|restaurar|desfazer|cleanup|limpeza)\b", full_text)
+            )
+            verification_ready = bool(
+                re.search(r"(?i)\b(?:verify|verificar|validar|confirmar|post-state|p[oó]s-estado|evid[eê]ncia)\b", full_text)
+            )
+            for command in extract_commands(full_text):
+                intent = build_execution_intent(
+                    command,
+                    context=f"{message}\n{scenario.to_prompt_block(900)}",
+                    operator_requested_execution=operator_execution,
+                    scope_confirmed=scope_confirmed,
+                    rollback_ready=rollback_ready,
+                    verification_ready=verification_ready,
+                    scope_target=scenario.target,
+                )
+                proposed_execution_intents.append(intent.to_dict())
+        turn_telemetry["execution_intents"] = proposed_execution_intents
+
         if validation:
             self.harness.record_output_guardrails(
                 harness_trace,
@@ -2155,6 +2182,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                         "attempt_efforts", "replan_reasoning_effort",
                         "attempt_results", "harness",
                         "effective_reasoning_effort", "effort_fallback_reason",
+                        "execution_intents", "visual_evidence_count",
                     )
                 },
                 ensure_ascii=False,
