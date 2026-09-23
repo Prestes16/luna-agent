@@ -9,6 +9,7 @@ from app.quantitative_reasoning import (
     max_unsigned_input_before_mul_overflow,
     floor_rounding_loss_numerator,
     mul_div_floor,
+    quantitative_claim_violations,
     quantitative_fact_sheet,
     quantitative_guidance,
     scale_decimal_exact,
@@ -78,6 +79,46 @@ class QuantitativeReasoningTests(unittest.TestCase):
             quantitative_fact_sheet("let fee = amount * 125 / 10_000; tipo desconhecido."),
             "",
         )
+    def test_exact_arithmetic_guard_rejects_wrong_u64_threshold(self) -> None:
+        context = "let fee = amount * 125 / 10_000; amount: u64"
+        correct = (
+            "u64::MAX = 18446744073709551615. "
+            "O limite seguro é 147573952589676412; a razão reduzida é 1/80."
+        )
+        wrong = (
+            "u64::MAX = 18446744073709551615. "
+            "O limite seguro é 999999999999999999; a razão reduzida é 1/80."
+        )
+        self.assertEqual(quantitative_claim_violations(context, correct), ())
+        self.assertIn(
+            "exact_arithmetic_u64_threshold_mismatch",
+            quantitative_claim_violations(context, wrong),
+        )
+
+    def test_exact_arithmetic_guard_rejects_unobserved_i128_domain(self) -> None:
+        violations = quantitative_claim_violations(
+            "let fee = amount * 125 / 10_000; amount: u64",
+            "O domínio da operação é i128 e o overflow deve ser calculado por i128::MAX.",
+        )
+        self.assertIn("unobserved_numeric_domain_i128", violations)
+
+    def test_physical_claim_guard_requires_mechanism_and_measurement(self) -> None:
+        violations = quantitative_claim_violations(
+            "Wi-Fi RF com RSSI, SNR e frequência de 2.4 GHz.",
+            "Isso prova um vazamento explorável.",
+        )
+        self.assertIn("physical_claim_missing_mechanism", violations)
+        self.assertIn("physical_claim_missing_measurement_bound", violations)
+
+        grounded = quantitative_claim_violations(
+            "Wi-Fi RF com RSSI, SNR e frequência de 2.4 GHz.",
+            (
+                "A hipótese de vazamento exige mecanismo de acoplamento mensurável, "
+                "medição repetida de SNR e limite de ruído/resolução antes de confirmar."
+            ),
+        )
+        self.assertEqual(grounded, ())
+
     def test_anchor_context_selects_blockchain_financial_math(self) -> None:
         profile = select_quantitative_profile(
             "Auditoria Anchor Solana: USDC SPL, fee, u64, rounding e randomness VRF."
