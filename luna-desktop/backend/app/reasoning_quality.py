@@ -76,13 +76,30 @@ class QualityScore:
     contract: OperatorContract
 
 
+def _contains_tool_name(value: str, tool: str) -> bool:
+    haystack = value.casefold()
+    needle = tool.casefold()
+    start = 0
+    while True:
+        index = haystack.find(needle, start)
+        if index < 0:
+            return False
+        before = haystack[index - 1] if index > 0 else ""
+        after_index = index + len(needle)
+        after = haystack[after_index] if after_index < len(haystack) else ""
+        before_blocked = bool(before) and (before.isalnum() or before in "_.-")
+        after_blocked = bool(after) and (after.isalnum() or after in "_-")
+        if not before_blocked and not after_blocked:
+            return True
+        start = index + 1
+
+
 def _requested_tool(message: str) -> str | None:
     normalized = message.casefold()
-    for tool in _KNOWN_TOOLS:
-        if re.search(rf"(?<![\w.-]){re.escape(tool)}(?![\w.-])", normalized):
+    for tool in sorted(_KNOWN_TOOLS, key=len, reverse=True):
+        if _contains_tool_name(normalized, tool):
             return tool
     return None
-
 
 def _target_hosts(message: str) -> tuple[str, ...]:
     hosts: list[str] = []
