@@ -89,7 +89,10 @@ class ValidationResult:
 
 
 def redact_sensitive_text(value: str) -> str:
-    """Redact credentials before context/history/telemetry persistence."""
+    """Redact only non-evidentiary telemetry/fingerprint copies.
+
+    Exact authorized artifacts remain available in local project/scenario memory.
+    """
     redacted = re.sub(
         r"(?im)(Authorization\s*:\s*Bearer\s+)([^\s\r\n]+)",
         r"\1[REDACTED]",
@@ -642,5 +645,5 @@ def build_replan_instruction(
         "Não importe exemplos, não repita ação resolvida e não exponha raciocínio interno.\n\n"
         "REQUISITOS OBRIGATÓRIOS:\n"
         f"{correction_lines or '- satisfaça todos os guards factuais.'}\n\n"
-        f"ESTADO FACTUAL:\n{redact_sensitive_text(scenario_prompt)[:320]}"
+        f"ESTADO FACTUAL:\n{scenario_prompt[:320]}"
     )
