@@ -7,7 +7,8 @@
 # validation; stage 8 defines operational policy; stage 9 deterministically
 # repairs mechanically fixable operator-readiness gaps before display; stage 10
 # handles factual tool prerequisites; stage 11 adds privacy-routing truthfulness
-# and transport-compatibility guards.
+# and transport-compatibility guards; stage 12 enforces command lifecycle
+# sequencing and explicit destructive intent.
 from . import reasoning_pipeline as _reasoning_pipeline
 from . import reasoning_quality as _reasoning_quality
 from . import reasoning_runtime_patch as _stage1
@@ -19,11 +20,12 @@ from . import reasoning_runtime_patch_v8 as _stage8
 from . import reasoning_runtime_patch_v9 as _stage9
 from . import reasoning_runtime_patch_v10 as _stage10
 from . import reasoning_runtime_patch_v11 as _stage11
+from . import reasoning_runtime_patch_v12 as _stage12
 from .command_policy import effective_tool as _effective_tool
 from .command_policy import parse_effective_command as _parse_effective_command
 from .reasoning_runtime_patch_v6 import action_fingerprint as _patched_action_fingerprint
 from .reasoning_runtime_patch_v8 import extract_commands as _patched_extract_commands
-from .reasoning_runtime_patch_v11 import (
+from .reasoning_runtime_patch_v12 import (
     build_replan_instruction as _patched_build_replan_instruction,
     validate_model_response as _patched_validate_model_response,
 )
