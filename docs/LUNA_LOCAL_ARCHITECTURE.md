@@ -158,11 +158,16 @@ Do not add these without a measured need:
 - production canary/rollout machinery;
 - cloud-cost accounting.
 
-## Future tool execution plane
+## Operator-controlled tool execution plane
 
-The current build remains instruction-only until a separate supervised execution gate is introduced.
+The current build remains instruction-only until the supervised execution gate is
+implemented and tested. The target architecture is not autonomous auditing: Luna is a
+copilot that may execute tools on demand inside operator-defined scope, while the operator
+retains control over target, objective and escalation of authority.
 
-Future policy:
+Execution freedom is granted per capability/policy rather than globally.
+
+Target policy:
 
 ```text
 READ-ONLY / LOCAL DISCOVERY
@@ -176,3 +181,10 @@ MUTATION / PRIVESC / PERSISTENCE / DESTRUCTIVE ACTION
 ```
 
 Tool execution must not weaken the evidence, provenance, math, host-safety or human-approval invariants.
+
+
+## Local dependency profile
+
+The local/Ollama baseline uses `requirements-local.txt`. Cloud SDKs are optional and must
+not be import-time requirements for the local agent. In particular, absence of the Anthropic
+SDK cannot prevent local reasoning, memory, tests or Ollama operation.
