@@ -267,7 +267,11 @@ def _build_system_prompt(
     lines = [
         "RUNTIME HARNESS — PREFIXO ESTÁVEL",
         (
-            "Modo: copiloto supervisionado; o operador executa comandos."
+            (
+                "Modo: copiloto supervisionado; o operador controla alvo/escopo/autoridade. "
+                "Execução real só ocorre pelo executor supervisionado sob demanda; "
+                "o loop de ferramentas do modelo permanece bloqueado."
+            )
             if supervised_mode
             else "Modo: ferramentas restritas habilitadas."
         ),
