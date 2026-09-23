@@ -282,6 +282,21 @@ class ProjectStore:
             for item in self.evidence_vault.list_project(project_id, limit=limit)
         ]
 
+    def get_evidence_artifact_metadata(
+        self,
+        project_id: int,
+        record_id: int,
+    ) -> dict[str, Any]:
+        with self._lock:
+            data_index = self._load_index()
+            self._find(data_index, project_id)
+        record = self.evidence_vault.get(record_id, project_id=project_id)
+        if record is None:
+            raise ProjectNotFoundError(
+                f"Evidência {record_id} não encontrada no projeto {project_id}"
+            )
+        return record.to_dict()
+
     def read_evidence_artifact(self, project_id: int, record_id: int) -> tuple[dict[str, Any], bytes]:
         with self._lock:
             data_index = self._load_index()
