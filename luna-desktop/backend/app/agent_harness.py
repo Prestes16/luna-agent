@@ -172,7 +172,8 @@ class AgentHarness:
         )
         trace.guardrails_in.extend((
             "current_turn_factual_context",
-            "secret_redaction",
+            "exact_sensitive_evidence_retention",
+            "sensitive_artifact_classification",
             "instruction_only_tool_lock",
         ))
         return trace
