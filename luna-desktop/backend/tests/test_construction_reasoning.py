@@ -2,10 +2,14 @@ import unittest
 
 from app.construction_reasoning import (
     ConstructionModel,
+    MechanismChain,
     break_readiness,
     construction_coverage,
     construction_gaps,
     construction_guidance,
+    mechanism_chain_score,
+    select_construction_profile,
+    structural_discovery_priority,
 )
 
 
@@ -37,6 +41,48 @@ class ConstructionReasoningTests(unittest.TestCase):
             uncertainty=0.75, noise=0.55,
         )
         self.assertGreater(grounded, speculative)
+
+    def test_web_api_profile_focuses_auth_state_and_server_boundary(self) -> None:
+        profile = select_construction_profile(
+            "Auditoria web API REST com JWT, cookie e autorização backend."
+        )
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile.name, "web_api")
+        joined = " ".join(profile.structural_questions)
+        self.assertIn("authorization", joined)
+        self.assertIn("state transition", joined)
+
+    def test_blockchain_profile_focuses_authority_and_asset_flow(self) -> None:
+        profile = select_construction_profile(
+            "Auditoria Solana Anchor com PDA, SPL e instruções on-chain."
+        )
+        self.assertIsNotNone(profile)
+        self.assertEqual(profile.name, "blockchain_web3")
+        joined = " ".join(profile.structural_questions)
+        self.assertIn("authority", joined)
+        self.assertIn("asset flow", joined)
+
+    def test_mechanism_chain_penalizes_missing_invariant(self) -> None:
+        complete = MechanismChain(
+            component=0.95, interface=0.95, trust_boundary=0.95,
+            state_transition=0.95, invariant=0.95, evidence=0.95,
+            expected_observation=0.95,
+        )
+        weak = MechanismChain(
+            component=0.95, interface=0.95, trust_boundary=0.95,
+            state_transition=0.95, invariant=0.05, evidence=0.95,
+            expected_observation=0.95,
+        )
+        self.assertGreater(mechanism_chain_score(complete), mechanism_chain_score(weak))
+
+    def test_structural_discovery_prioritizes_weighted_critical_gap(self) -> None:
+        model = ConstructionModel(
+            topology=0.90, interfaces=0.90, data_flow=0.90, state_model=0.90,
+            trust_boundaries=0.90, invariants=0.10, dependencies=0.20, controls=0.90,
+        )
+        ranked = structural_discovery_priority(model)
+        self.assertEqual(ranked[0][0], "invariants")
+        self.assertGreater(ranked[0][1], ranked[1][1])
 
     def test_security_context_activates_build_to_break_guidance(self) -> None:
         guidance = construction_guidance(
