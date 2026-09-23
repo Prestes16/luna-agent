@@ -7,15 +7,42 @@ are displayed.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from . import reasoning_pipeline as _rp
+from .command_execution import assess_command_execution
 from .host_safety import assess_host_safety
 from .reasoning_runtime_patch_v13 import (
     build_replan_instruction as _previous_build_replan,
     validate_model_response as _previous_validate,
 )
 from .reasoning_runtime_patch_v8 import extract_commands
+
+
+_FENCE_RE = re.compile(
+    r"```(?:bash|sh|shell|zsh|powershell|pwsh)?(?:[ \t]*\r?\n|[ \t]+)(.*?)```",
+    re.IGNORECASE | re.DOTALL,
+)
+
+_ROLLBACK_MARKERS = (
+    "rollback", "reverter", "reversão", "reversao", "desfazer", "restaurar",
+    "restore", "backup", "snapshot", "disable novamente", "down novamente",
+)
+
+
+def _candidate_commands(response: str) -> list[str]:
+    commands = list(extract_commands(response))
+    for block in _FENCE_RE.findall(response):
+        for line in block.splitlines():
+            compact = line.strip()
+            if compact.startswith("$ "):
+                compact = compact[2:].lstrip()
+            if compact.startswith("PS> "):
+                compact = compact[4:].lstrip()
+            if compact and not compact.startswith("#"):
+                commands.append(compact)
+    return list(dict.fromkeys(commands))
 
 
 def _context_text(message: str, scenario: Any) -> str:
@@ -31,9 +58,12 @@ def _context_text(message: str, scenario: Any) -> str:
 def _host_safety_reasons(message: str, response: str, scenario: Any) -> list[str]:
     context = _context_text(message, scenario)
     reasons: list[str] = []
+    response_lower = response.casefold()
+    rollback_documented = any(marker in response_lower for marker in _ROLLBACK_MARKERS)
 
-    for command in extract_commands(response):
+    for command in _candidate_commands(response):
         assessment = assess_host_safety(command, context=context)
+        lifecycle = assess_command_execution(command)
 
         if assessment.remote_pipe_execution:
             reasons.append("host_remote_pipe_to_shell")
@@ -43,8 +73,19 @@ def _host_safety_reasons(message: str, response: str, scenario: Any) -> list[str
             reasons.append("host_critical_storage_preflight_required")
         if assessment.boot_change and not assessment.safe_to_recommend_now:
             reasons.append("host_boot_change_preflight_required")
-        if "execution_environment_not_confirmed" in assessment.reasons:
+        if lifecycle.mutates_state and lifecycle.privilege_required and not assessment.environment_confirmed:
             reasons.append("host_execution_environment_not_confirmed")
+        if (
+            assessment.rollback_required
+            and (
+                assessment.network_control_change
+                or assessment.persistent_change
+                or assessment.critical_storage
+                or assessment.boot_change
+            )
+            and not rollback_documented
+        ):
+            reasons.append("host_rollback_plan_missing")
 
     return list(dict.fromkeys(reasons))
 
@@ -108,8 +149,14 @@ def build_replan_instruction(validation, scenario_prompt: str, current_message: 
         )
     if "host_execution_environment_not_confirmed" in reasons:
         additions.append(
-            "não proponha mudança de alto impacto sem saber se o comando será executado no Kali/VM, "
+            "não proponha mudança privilegiada sem saber se o comando será executado no Kali/VM, "
             "Windows host ou outro ambiente; peça/confirme o ambiente primeiro"
+        )
+    if "host_rollback_plan_missing" in reasons:
+        additions.append(
+            "para mudança persistente, firewall/rota, disco ou boot, inclua o rollback factual "
+            "e a verificação pós-estado; se o operador pediu um passo por vez, entregue primeiro "
+            "o precheck/backup e espere o resultado antes da mutação"
         )
 
     if not additions:
