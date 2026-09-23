@@ -18,6 +18,17 @@ class KaliToolGuidanceTests(unittest.TestCase):
         self.assertIn("-sT", guidance)
         self.assertIn("Não crie arquivo de saída sem pedido explícito", guidance)
 
+    def test_generic_web_nmap_guidance_includes_high_value_profile(self) -> None:
+        message = (
+            "CTF autorizado: use nmap no alvo https://wifhoodie.com e me dê "
+            "o comando bash para Kali."
+        )
+        guidance = guidance_for_message(message)
+        self.assertIn("WEB HIGH-VALUE PORT PROFILE", guidance)
+        self.assertIn("80,443", guidance)
+        self.assertIn("3306", guidance)
+        self.assertIn("6379", guidance)
+
     def test_ffuf_guidance_requires_factual_wordlist(self) -> None:
         message = "Quero usar ffuf nesse CTF autorizado."
         guidance = guidance_for_message(message)
