@@ -727,8 +727,6 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 cleaned.append(m_copy)
             elif role == 'assistant':
                 m_copy = dict(m)
-                if isinstance(m_copy.get('content'), str):
-                    m_copy['content'] = m_copy['content']
                 # Also truncate tool_call arguments in assistant messages if huge
                 if 'tool_calls' in m_copy:
                     trunc_tcs = []
