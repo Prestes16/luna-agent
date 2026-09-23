@@ -45,6 +45,22 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(engine.config["tool_execution_enabled"])
         self.assertEqual(engine._resolve_model("ola", "gpt-4o"), ("ollama", "luna-cyber-fast"))
 
+    def test_local_runtime_does_not_require_anthropic_sdk(self) -> None:
+        with (
+            patch("app.luna_engine.AsyncAnthropic", None),
+            patch.dict(
+                os.environ,
+                {
+                    "ANTHROPIC_API_KEY": "configured-but-sdk-optional",
+                    "LUNA_ZERO_CLOUD": "true",
+                },
+            ),
+        ):
+            engine = LunaEngine()
+        self.assertIsNone(engine.claude_client)
+        self.assertTrue(engine.config["zero_cloud_mode"])
+        self.assertNotIn("Claude", engine._available_providers)
+
     def test_local_diagnostics_exposes_harness_policy(self) -> None:
         engine = LunaEngine()
         diagnostics = engine.get_local_diagnostics()
