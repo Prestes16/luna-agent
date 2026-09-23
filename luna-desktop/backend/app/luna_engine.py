@@ -28,13 +28,18 @@ from .construction_reasoning import construction_guidance
 from .decision_intelligence import decision_guidance
 from .evidence_bundle import evidence_bundle_guidance
 from .exploit_proof import exploit_proof_guidance
-from .execution_intent import build_execution_intent, operator_requested_execution
+from .execution_intent import (
+    APPROVAL_REQUIRED,
+    build_execution_intent,
+    operator_requested_execution,
+)
 from .host_safety import host_safety_guidance
 from .kali_tool_guidance import guidance_for_context
 from .malware_analysis import malware_guidance, malware_tooling_summary
 from .quantitative_reasoning import quantitative_fact_sheet, quantitative_guidance
 from .supervised_executor import (
     ExecutionApproval,
+    ExecutionApprovalStore,
     SupervisedExecutionPolicy,
     SupervisedExecutor,
 )
@@ -478,6 +483,7 @@ class LunaEngine:
         self.supervised_executor = SupervisedExecutor(
             self._build_supervised_execution_policy()
         )
+        self.execution_approval_store = ExecutionApprovalStore()
 
     def _build_supervised_execution_policy(self) -> SupervisedExecutionPolicy:
         return SupervisedExecutionPolicy(
@@ -2331,6 +2337,54 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         )
         return intent.to_dict()
 
+    def issue_supervised_execution_approval(
+        self,
+        command: str,
+        *,
+        conversation_id: str = "default",
+        operator_request_text: str,
+        operator_confirmed: bool,
+        ttl_seconds: int = 120,
+        allow_destructive: bool = False,
+        allow_persistent_change: bool = False,
+        rollback_ready: bool = False,
+        verification_ready: bool = True,
+    ) -> Dict[str, Any]:
+        if not operator_confirmed:
+            raise ValueError("operator confirmation is required")
+
+        preview = self.preview_supervised_command(
+            command,
+            conversation_id=conversation_id,
+            operator_request_text=operator_request_text,
+            rollback_ready=rollback_ready,
+            verification_ready=verification_ready,
+        )
+        if preview.get("authority") != APPROVAL_REQUIRED:
+            raise ValueError(
+                "this execution intent does not require an approval grant"
+            )
+
+        approval = ExecutionApproval.issue(
+            command=command,
+            target=preview.get("target"),
+            authority_level=str(preview.get("authority_level")),
+            ttl_seconds=ttl_seconds,
+            allow_destructive=allow_destructive,
+            allow_persistent_change=allow_persistent_change,
+        )
+        token = self.execution_approval_store.issue(approval)
+        return {
+            "approval_token": token,
+            "command_sha256": approval.command_sha256,
+            "target": approval.target,
+            "authority_level": approval.authority_level,
+            "issued_at": approval.issued_at,
+            "expires_at": approval.expires_at,
+            "allow_destructive": approval.allow_destructive,
+            "allow_persistent_change": approval.allow_persistent_change,
+        }
+
     async def execute_supervised_command(
         self,
         command: str,
@@ -2338,6 +2392,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         conversation_id: str = "default",
         operator_request_text: str,
         approval: ExecutionApproval | None = None,
+        approval_token: str | None = None,
         rollback_ready: bool = False,
         verification_ready: bool = True,
     ) -> Dict[str, Any]:
@@ -2350,6 +2405,11 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         context = operator_request_text
         if scenario is not None:
             context = f"{operator_request_text}\n{scenario.to_prompt_block(1400)}"
+        invalid_approval_token = False
+        if approval is None and approval_token:
+            approval = self.execution_approval_store.consume(approval_token)
+            invalid_approval_token = approval is None
+
         result = await self.supervised_executor.execute(
             command,
             context=context,
@@ -2365,7 +2425,13 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             ),
             approval=approval,
         )
-        return result.to_dict()
+        output = result.to_dict()
+        if invalid_approval_token and output.get("status") == "denied":
+            output["denial_reasons"] = list(dict.fromkeys([
+                *output.get("denial_reasons", []),
+                "approval_token_invalid_or_expired",
+            ]))
+        return output
 
     def get_local_diagnostics(self) -> Dict[str, Any]:
         self._ollama_available = _ollama_is_available_sync()
@@ -2378,6 +2444,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             "supervised_mode": not self._tool_execution_allowed(),
             "tool_execution_allowed": self._tool_execution_allowed(),
             "supervised_executor": self.supervised_executor.public_policy(),
+            "supervised_approvals_pending": self.execution_approval_store.count(),
             "harness": self.harness.public_policy(),
             "harness_retrieval_cache_entries": self.harness.retrieval_cache.size(),
             "config_dir": str(self.module_loader.config_dir),
