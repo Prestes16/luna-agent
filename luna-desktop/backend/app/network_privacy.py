@@ -104,6 +104,28 @@ def _mismatch_penalty(context: str, profile: PrivacyRouteProfile) -> tuple[float
         if profile.name in {"tor", "proxychains_tor", "vpn_then_tor"}:
             penalty = max(0.0, penalty - 0.08)
 
+    # Respect an explicitly requested route when the operator named one family.
+    # If several families are mentioned, treat the turn as a comparison instead.
+    named_families = {
+        family
+        for family, markers in {
+            "proxychains": ("proxychains", "proxychains4"),
+            "tor": (" tor ", "torsocks"),
+            "vpn": (" vpn ", "openvpn", "wireguard", "wg-quick"),
+        }.items()
+        if any(marker in f" {normalized} " for marker in markers)
+    }
+    if len(named_families) == 1:
+        requested = next(iter(named_families))
+        compatible_profiles = {
+            "proxychains": {"proxychains_tor"},
+            "tor": {"tor", "proxychains_tor", "vpn_then_tor"},
+            "vpn": {"vpn", "vpn_then_tor"},
+        }[requested]
+        if profile.name not in compatible_profiles:
+            penalty += 0.45
+            reasons.append("explicit_route_family_mismatch")
+
     return min(1.0, penalty), reasons
 
 
