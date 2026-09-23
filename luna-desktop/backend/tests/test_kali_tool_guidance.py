@@ -75,6 +75,34 @@ class KaliToolGuidanceTests(unittest.TestCase):
         )
         self.assertIn("KALI CAPABILITY ROUTER", guidance)
         self.assertIn("candidatos, não ações automáticas", guidance)
+    def test_interception_recommendation_does_not_inherit_previous_gobuster(self) -> None:
+        scenario = ScenarioContext()
+        scenario.update("CTF autorizado no alvo https://wifhoodie.com.")
+        history = [
+            {"role": "user", "content": "Agora em relação ao gobuster me oriente."},
+            {"role": "assistant", "content": "Gobuster requer modo e wordlist factual."},
+        ]
+        guidance = guidance_for_context(
+            "Agora me oriente: qual é o melhor app para interceptar requisições no Kali?",
+            scenario=scenario,
+            history=history,
+        )
+        self.assertIn("KALI CAPABILITY ROUTER", guidance)
+        self.assertNotIn("TOOL CONTRACT [gobuster]", guidance)
+        self.assertIn("web_proxy", guidance)
+
+    def test_gobuster_missing_wordlist_avoids_invented_filename(self) -> None:
+        scenario = ScenarioContext()
+        scenario.update("CTF autorizado no alvo https://wifhoodie.com.")
+        guidance = guidance_for_context(
+            "Agora em relação ao gobuster me oriente sobre como agir.",
+            scenario=scenario,
+            history=[],
+        )
+        self.assertIn("WORDLIST READINESS", guidance)
+        self.assertIn("não invente filename", guidance)
+        self.assertIn("localizar/confirmar wordlists", guidance)
+
     def test_hydra_guidance_requests_missing_facts_instead_of_inventing(self) -> None:
         scenario = ScenarioContext()
         scenario.update("CTF autorizado no alvo https://wifhoodie.com.")
