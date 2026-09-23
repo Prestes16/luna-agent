@@ -14,6 +14,7 @@ from app.luna_engine import (
 from app.module_loader import ModuleLoader
 from app.reasoning_pipeline import classify_complexity, validate_model_response
 from app.scenario_context import ScenarioContext
+from app.supervised_executor import RunnerResult
 from app import security
 from main import app
 
@@ -104,6 +105,45 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(preview["authority"], "ON_DEMAND")
         self.assertEqual(preview["target"], "10.10.10.5")
+
+    async def test_engine_supervised_executor_runs_bound_l1_only_through_separate_gate(self) -> None:
+        engine = LunaEngine()
+        scenario = ScenarioContext()
+        scenario.update("CTF autorizado em http://10.10.10.5")
+        engine.scenario_contexts["exec-run"] = scenario
+
+        calls = []
+
+        async def fake_runner(argv, timeout_seconds, max_output_bytes):
+            calls.append((argv, timeout_seconds, max_output_bytes))
+            return RunnerResult(
+                exit_code=0,
+                stdout=b"80/tcp open http\n",
+                stderr=b"",
+            )
+
+        engine.supervised_executor._runner = fake_runner
+        denied = await engine.execute_supervised_command(
+            "nmap -sV 10.10.10.5",
+            conversation_id="exec-run",
+            operator_request_text="Luna, rode esse nmap no alvo autorizado.",
+        )
+        self.assertEqual(denied["status"], "denied")
+        self.assertIn("supervised_executor_disabled", denied["denial_reasons"])
+        self.assertEqual(calls, [])
+
+        await engine.update_config({"supervised_executor_enabled": True})
+        allowed = await engine.execute_supervised_command(
+            "nmap -sV 10.10.10.5",
+            conversation_id="exec-run",
+            operator_request_text="Luna, rode esse nmap no alvo autorizado.",
+        )
+        self.assertEqual(allowed["status"], "executed")
+        self.assertEqual(allowed["intent"]["authority"], "ON_DEMAND")
+        self.assertEqual(allowed["stdout"], "80/tcp open http\n")
+        self.assertEqual(len(allowed["evidence"]), 1)
+        self.assertFalse(engine._tool_execution_allowed())
+        self.assertEqual(len(calls), 1)
 
     def test_instruction_only_build_cannot_be_enabled_by_runtime_config(self) -> None:
         engine = LunaEngine()
