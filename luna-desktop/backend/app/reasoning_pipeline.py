@@ -37,6 +37,9 @@ _ANALYZE_MARKERS = (
     "otimize", "otimizar", "prioriz", "maior valor", "hydra", "brute force", "credencial",
     "interceptar", "interceptação", "interceptacao", "proxy", "outras ferramentas",
     "outras possibilidades", "mais algum", "mais alguma", "melhor app", "qual ferramenta",
+    "proxychains", "torsocks", "wireguard", "openvpn", "vpn", "privacidade",
+    "anonim", "rastre", "túnel", "tunel", "dns leak", "vazamento dns",
+    "kill switch", "killswitch",
 )
 _DEEP_MARKERS = (
     "cadeia de vulnerabilidades", "exploit chain", "threat model", "modelo de ameaça",
@@ -52,7 +55,8 @@ _MENTOR_MARKERS = (
     "kali", "linux", "devtools", "network", "initiator", "header", "payload",
     "response", "curl", "nmap", "hydra", "ffuf", "gobuster", "sqlmap", "nuclei",
     "burp", "burpsuite", "mitmproxy", "zaproxy", "wireshark", "proxy",
-    "chrome", "firefox", "ctf", "autoriz",
+    "chrome", "firefox", "proxychains", "tor", "torsocks", "wireguard",
+    "openvpn", "vpn", "ctf", "autoriz",
     "evidência", "evidencia", "http/", "json", "endpoint", "api/", "fato:",
 )
 
