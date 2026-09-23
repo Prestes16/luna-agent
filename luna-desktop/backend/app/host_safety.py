@@ -9,6 +9,7 @@ bootability, networking, or data.
 from __future__ import annotations
 
 import re
+import shlex
 from dataclasses import asdict, dataclass
 
 from .command_execution import assess_command_execution
@@ -121,6 +122,7 @@ class HostSafetyAssessment:
     environment_confirmed: bool
     protected_lab_confirmed: bool
     device_target_confirmed: bool
+    destructive_target_confirmed: bool
     backup_or_snapshot_required: bool
     rollback_required: bool
     safe_to_recommend_now: bool
@@ -147,6 +149,57 @@ def _device_targets(command: str) -> tuple[str, ...]:
         command,
     )
     return tuple(dict.fromkeys(value.casefold() for value in values))
+
+
+def _effective_tokens(command: str) -> list[str]:
+    try:
+        tokens = shlex.split(command, posix=True)
+    except ValueError:
+        tokens = command.split()
+    if not tokens:
+        return []
+    if tokens[0].casefold() == "sudo":
+        index = 1
+        while index < len(tokens) and tokens[index].startswith("-"):
+            index += 1
+        return tokens[index:]
+    return tokens
+
+
+def _destructive_targets(command: str) -> tuple[str, ...]:
+    tokens = _effective_tokens(command)
+    if not tokens:
+        return ()
+    tool = tokens[0].casefold()
+    if tool in {"rm", "rmdir", "shred", "kill", "pkill"}:
+        targets = [
+            token for token in tokens[1:]
+            if token and not token.startswith("-")
+        ]
+        return tuple(dict.fromkeys(target.casefold() for target in targets))
+    return ()
+
+
+def _destructive_target_confirmed(command: str, context: str, lifecycle) -> bool:
+    if not lifecycle.destructive:
+        return True
+
+    normalized = context.casefold()
+    targets = _destructive_targets(command)
+    if targets:
+        return all(target in normalized for target in targets)
+
+    tool_tokens = _effective_tokens(command)
+    tool = tool_tokens[0].casefold() if tool_tokens else ""
+    if tool.startswith("mkfs") or tool in {"wipefs", "fdisk", "cfdisk", "sfdisk", "parted"}:
+        devices = _device_targets(command)
+        return bool(devices and all(device in normalized for device in devices))
+    if tool in {"reboot", "shutdown", "poweroff", "halt"}:
+        return any(
+            marker in normalized
+            for marker in ("reboot", "reiniciar", "shutdown", "desligar", "poweroff", "halt")
+        )
+    return False
 
 
 def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessment:
@@ -176,6 +229,9 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
     )
     if critical_storage and not device_targets:
         device_target_confirmed = False
+    destructive_target_confirmed = _destructive_target_confirmed(
+        command, context, lifecycle
+    )
 
     persistent_change = bool(
         lifecycle.persistent_change or system_config_change or persistence_change
@@ -217,10 +273,16 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
         reasons.append("snapshot_or_backup_not_confirmed")
     if critical_storage and not device_target_confirmed:
         reasons.append("storage_device_target_not_confirmed")
+    if lifecycle.destructive and not destructive_target_confirmed:
+        reasons.append("destructive_target_not_confirmed")
     if high_impact and not explicit_high_impact and not protected_lab_confirmed:
         reasons.append("high_impact_intent_not_explicit")
 
-    hard_block = remote_pipe_execution or system_tree_change
+    hard_block = (
+        remote_pipe_execution
+        or system_tree_change
+        or (lifecycle.destructive and not destructive_target_confirmed)
+    )
     gated_block = (critical_storage or boot_change) and not (
         environment_confirmed
         and protected_lab_confirmed
@@ -283,6 +345,7 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
         environment_confirmed=environment_confirmed,
         protected_lab_confirmed=protected_lab_confirmed,
         device_target_confirmed=device_target_confirmed,
+        destructive_target_confirmed=destructive_target_confirmed,
         backup_or_snapshot_required=backup_or_snapshot_required,
         rollback_required=rollback_required,
         safe_to_recommend_now=safe_to_recommend_now,
