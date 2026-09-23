@@ -293,6 +293,92 @@ KALI_TOOL_DICTIONARY: dict[str, KaliToolSpec] = {
         ),
         ("WireGuard interface",),
     ),
+    "yara": KaliToolSpec(
+        "yara", "malware", "specimen/file/directory", "signature-based malware triage",
+        (
+            "rule path and specimen path must be factual",
+            "a YARA hit is evidence of a rule match, not proof of family attribution by itself",
+        ),
+        ("specimen", "rule set"),
+    ),
+    "capa": KaliToolSpec(
+        "capa", "malware", "binary specimen", "static capability identification",
+        (
+            "analyze a preserved specimen copy",
+            "treat capabilities as analysis evidence, not proof of execution",
+        ),
+        ("specimen",),
+    ),
+    "floss": KaliToolSpec(
+        "floss", "malware", "binary specimen", "decoded and obfuscated string recovery",
+        (
+            "preserve the original specimen",
+            "recovered strings require contextual validation",
+        ),
+        ("specimen",),
+    ),
+    "rizin": KaliToolSpec(
+        "rizin", "reverse_engineering", "binary specimen", "static/dynamic reverse engineering",
+        (
+            "prefer static analysis on the preserved sample before execution",
+            "addresses and architecture must come from the artifact",
+        ),
+        ("specimen",),
+    ),
+    "radare2": KaliToolSpec(
+        "radare2", "reverse_engineering", "binary specimen", "binary reverse engineering",
+        (
+            "prefer static analysis first",
+            "do not invent architecture, base address or symbols",
+        ),
+        ("specimen",),
+    ),
+    "objdump": KaliToolSpec(
+        "objdump", "reverse_engineering", "binary/object file", "disassembly and object metadata inspection",
+        ("architecture and file format must come from the artifact",),
+        ("specimen",),
+    ),
+    "readelf": KaliToolSpec(
+        "readelf", "reverse_engineering", "ELF file", "ELF header, section, symbol and relocation inspection",
+        ("use only for ELF artifacts",),
+        ("ELF specimen",),
+    ),
+    "binwalk": KaliToolSpec(
+        "binwalk", "malware", "file/firmware/blob", "embedded-content and signature inspection",
+        ("extraction paths are opt-in and must not overwrite the original specimen",),
+        ("specimen",),
+    ),
+    "volatility3": KaliToolSpec(
+        "volatility3", "forensics", "memory image", "memory forensics and process/artifact reconstruction",
+        (
+            "memory-image path must be factual",
+            "profile/symbol assumptions must be validated against the image",
+        ),
+        ("memory image",),
+    ),
+    "vol": KaliToolSpec(
+        "vol", "forensics", "memory image", "Volatility 3 memory analysis",
+        (
+            "memory-image path must be factual",
+            "plugin choice must match the investigative question",
+        ),
+        ("memory image",),
+    ),
+    "olevba": KaliToolSpec(
+        "olevba", "malware", "Office document", "VBA macro extraction and static triage",
+        ("use only on supported Office/OLE/OOXML artifacts", "do not execute extracted macros"),
+        ("document",),
+    ),
+    "apktool": KaliToolSpec(
+        "apktool", "reverse_engineering", "APK", "Android package resource and smali analysis",
+        ("preserve the original APK", "do not sign or reinstall unless explicitly requested"),
+        ("APK specimen",),
+    ),
+    "jadx": KaliToolSpec(
+        "jadx", "reverse_engineering", "APK/DEX", "Android Java/Kotlin decompilation",
+        ("decompiled source is an approximation and must be checked against bytecode/smali when critical",),
+        ("APK/DEX specimen",),
+    ),
 }
 
 
