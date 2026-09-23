@@ -6,21 +6,25 @@ The reference diagrams organize the agent as `LLM + Harness`: a bounded agent lo
 input/output guardrails, human approval for sensitive actions, retries, tool/action
 discipline, cache, durable memory, traces/evals and CI gates.
 
-This implementation adapts that architecture to Luna's current **instruction-only,
-local-first** contract. It does not add autonomous host execution.
+This implementation adapts that architecture to Luna's **local-first supervised-copilot**
+contract. The model-facing tool loop remains instruction-only, while a separate
+operator-gated executor can be enabled independently. It does not add autonomous auditing.
 
 ## Runtime / Harness
 
 - `AgentHarness` owns the bounded model-attempt policy.
 - Current limit: one initial generation plus at most one replan (`max_model_attempts=2`).
-- Current tool-call budget: zero. The operator executes commands manually.
+- Model tool-call budget remains zero.
+- A separate `SupervisedExecutor` is disabled by default and is not callable by the LLM tool loop.
+- Operator-gated L0/L1 execution and exact approval-bound L2/L3 execution are separate policies.
 - Guardrail provenance is emitted in turn telemetry.
 - Sensitive state-changing actions remain human-in-the-loop through the existing
   command lifecycle / host-safety policies.
 - Future write actions, if ever enabled by a deliberate redesign, must use
   idempotency keys before retrying side effects.
-- Retry policy contract is exponential backoff + jitter; it is metadata/policy only
-  for tool actions while tool execution remains hard-locked.
+- Retry policy contract is exponential backoff + jitter for model transport.
+  Side-effecting executor retries are not implicit; a state-changing action must be
+  re-evaluated against its intent/approval lifecycle.
 
 ## Cache
 
@@ -37,13 +41,14 @@ local-first** contract. It does not add autonomous host execution.
 
 1. **Ephemeral** — current evidence delta + `ScenarioContext`.
 2. **Procedural** — local mentor/module instructions (`module_mentor_kali_devtools.md`).
-3. **Semantic durable** — project facts selected for the current query.
-4. **Episodic** — recent/relevant project messages and compressed conversation history.
+3. **Semantic durable** — typed facts/evidence from local SQLite/FTS5.
+4. **Episodic** — typed recent/relevant project messages and compressed conversation history.
+5. **Binary evidence** — immutable content-addressed report artifacts (screenshots/logs/PCAP/etc.).
 
-`ProjectStore.retrieval_context()` currently implements semantic/episodic retrieval
-with deterministic lexical relevance + recency over the existing atomic JSON store.
-It explicitly reports `vector_backend=not_enabled`; V1 does not pretend that JSON
-retrieval is a vector database or SQL episodic store.
+`ProjectStore.retrieval_context()` uses the typed local memory plane. FTS5 provides
+deterministic lexical retrieval with a recency fallback; `vector_backend=not_enabled`
+remains explicit. Raw binary evidence is stored separately so retrieval text cannot mutate
+or replace exact report artifacts.
 
 ## Guardrails
 
