@@ -38,6 +38,13 @@ class TechnicalCapabilityTests(unittest.TestCase):
         self.assertIn("PowerShell/VBScript/VBA", guidance)
         self.assertIn("x86/x64/ARM", guidance)
 
+    def test_programming_capability_covers_advanced_reverse_engineering_languages(self) -> None:
+        guidance = technical_guidance(
+            "Preciso programar análise para malware Delphi Pascal Nim Zig MIPS.",
+        )
+        self.assertIn("programming_automation", guidance)
+        self.assertIn("Delphi/Pascal/Nim/Zig", guidance)
+        self.assertIn("embedded architectures", guidance)
     def test_irrelevant_greeting_does_not_inject_capability_context(self) -> None:
         self.assertEqual(technical_guidance("Olá, bom dia!"), "")
 
