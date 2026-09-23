@@ -42,6 +42,24 @@ class DecisionIntelligenceTests(unittest.TestCase):
         self.assertEqual(ranked[0].name, "safe_discriminator")
         self.assertGreater(ranked[0].utility, ranked[1].utility)
 
+    def test_structurally_grounded_candidate_beats_speculative_candidate(self) -> None:
+        grounded = DecisionCandidate(
+            name="grounded", evidence_support=0.75, information_gain=0.82,
+            discriminative_power=0.86, scope_fit=0.95, reversibility=0.95,
+            safety=0.95, cost=0.20, noise=0.15, novelty=0.70,
+            downstream_leverage=0.90, construction_coverage=0.92,
+            mechanism_linkage=0.94,
+        )
+        speculative = DecisionCandidate(
+            name="speculative", evidence_support=0.75, information_gain=0.82,
+            discriminative_power=0.86, scope_fit=0.95, reversibility=0.95,
+            safety=0.95, cost=0.20, noise=0.15, novelty=0.70,
+            downstream_leverage=0.90, construction_coverage=0.25,
+            mechanism_linkage=0.20,
+        )
+        ranked = rank_candidates((speculative, grounded))
+        self.assertEqual(ranked[0].name, "grounded")
+        self.assertGreater(ranked[0].utility, ranked[1].utility)
     def test_weak_evidence_reduces_confidence_even_if_information_gain_is_high(self) -> None:
         candidate = DecisionCandidate(
             name="uncertain_probe",
