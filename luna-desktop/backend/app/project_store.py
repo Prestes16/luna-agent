@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
-from .memory_plane import MemoryPlane, redact_memory_text
+from .memory_plane import MemoryPlane
 
 
 DEFAULT_PROJECTS_DIR = Path(r"D:\LunaCyber\projects")
@@ -249,8 +249,7 @@ class ProjectStore:
         role = payload.get("role")
         if role not in MESSAGE_ROLES:
             raise ProjectValidationError("role inválido")
-        raw_content = self._validate_text(payload.get("content"), "content", 50_000, required=True)
-        content = redact_memory_text(raw_content)
+        content = self._validate_text(payload.get("content"), "content", 50_000, required=True)
         model = self._validate_text(payload.get("model", ""), "model", 100)
         with self._lock:
             data = self._load_index()
@@ -278,7 +277,7 @@ class ProjectStore:
             self.memory_plane.add_record(
                 project_id=project_id,
                 kind="episode",
-                content=raw_content,
+                content=content,
                 provenance="project_store:messages.json",
                 source=f"conversation:{role}",
                 evidence_level="model_output" if role == "luna" else "episode",
@@ -298,8 +297,7 @@ class ProjectStore:
             return facts
 
     def add_fact(self, project_id: int, value: Any) -> list[str]:
-        raw_fact = self._validate_text(value, "fact", 1_000, required=True)
-        fact = redact_memory_text(raw_fact)
+        fact = self._validate_text(value, "fact", 1_000, required=True)
         with self._lock:
             facts = self.list_facts(project_id)
             if fact.casefold() not in {existing.casefold() for existing in facts}:
@@ -310,7 +308,7 @@ class ProjectStore:
             self.memory_plane.add_record(
                 project_id=project_id,
                 kind="operator_fact",
-                content=raw_fact,
+                content=fact,
                 provenance="project_store:facts.json",
                 source="project_fact",
                 evidence_level="declared",
@@ -326,24 +324,8 @@ class ProjectStore:
         messages: list[dict[str, Any]],
     ) -> None:
         """Lazily migrate legacy JSON into typed memory without changing API contracts."""
-        safe_facts = [redact_memory_text(str(fact)) for fact in facts]
-        if safe_facts != facts:
-            self._write_json(self._data_dir(project_id) / "facts.json", safe_facts)
-            facts[:] = safe_facts
-
-        safe_messages: list[dict[str, Any]] = []
-        messages_changed = False
-        for item in messages:
-            safe_item = dict(item)
-            original_content = str(safe_item.get("content", ""))
-            safe_content = redact_memory_text(original_content)
-            if safe_content != original_content:
-                safe_item["content"] = safe_content
-                messages_changed = True
-            safe_messages.append(safe_item)
-        if messages_changed:
-            self._write_json(self._data_dir(project_id) / "messages.json", safe_messages)
-            messages[:] = safe_messages
+        # Legacy JSON remains exact evidence. Migration only dual-writes into SQLite;
+        # it never rewrites credentials, cookies, tokens or classified artifacts.
 
         for fact in facts:
             self.memory_plane.add_record(
