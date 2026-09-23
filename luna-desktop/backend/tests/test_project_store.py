@@ -194,6 +194,51 @@ class ProjectApiTests(unittest.TestCase):
         self.assertEqual(self.client.delete(f"/api/projects/{project_id}").status_code, 200)
         self.assertEqual(self.client.get(f"/api/projects/{project_id}/messages").status_code, 404)
 
+    def test_project_evidence_api_preserves_exact_attachment(self) -> None:
+        created = self.client.post("/api/projects", json={
+            "name": "Evidence API",
+            "project_type": "bounty",
+            "color": "red",
+        })
+        self.assertEqual(created.status_code, 201)
+        project_id = created.json()["id"]
+
+        raw = b"\x89PNG\r\n\x1a\nreport-proof"
+        uploaded = self.client.post(
+            f"/api/projects/{project_id}/evidence",
+            params={
+                "kind": "screenshot",
+                "sensitivity": "classified",
+                "description": "proof screen",
+            },
+            files={"file": ("proof.png", raw, "image/png")},
+        )
+        self.assertEqual(uploaded.status_code, 201)
+        metadata = uploaded.json()
+        self.assertEqual(metadata["byte_length"], len(raw))
+        self.assertEqual(metadata["kind"], "screenshot")
+        self.assertEqual(metadata["sensitivity"], "classified")
+
+        listed = self.client.get(f"/api/projects/{project_id}/evidence")
+        self.assertEqual(listed.status_code, 200)
+        self.assertEqual(len(listed.json()["evidence"]), 1)
+
+        downloaded = self.client.get(
+            f"/api/projects/{project_id}/evidence/{metadata['id']}"
+        )
+        self.assertEqual(downloaded.status_code, 200)
+        self.assertEqual(downloaded.content, raw)
+        self.assertEqual(
+            downloaded.headers["x-evidence-sha256"],
+            metadata["sha256"],
+        )
+
+        verified = self.client.get(
+            f"/api/projects/{project_id}/evidence/{metadata['id']}/verify"
+        )
+        self.assertEqual(verified.status_code, 200)
+        self.assertTrue(verified.json()["valid"])
+
     def test_api_rejects_traversal_and_extra_fields(self) -> None:
         traversal = self.client.post("/api/projects", json={
             "name": "../escape", "project_type": "other", "color": "cyan",
