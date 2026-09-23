@@ -47,8 +47,9 @@ retrieval is a vector database or SQL episodic store.
 
 ## Guardrails
 
-Input-side runtime invariants include current-turn factual precedence, secret
-redaction and the instruction-only tool lock. Output-side validation continues
+Input-side runtime invariants include current-turn factual precedence, exact
+authorized evidence retention, telemetry-only secret redaction where appropriate,
+and the instruction-only tool lock. Output-side validation continues
 through the existing validator chain (construction grounding, quantitative integrity,
 exact arithmetic, command policy and host safety) before operator-visible output.
 
