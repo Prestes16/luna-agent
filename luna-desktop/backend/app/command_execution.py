@@ -32,6 +32,8 @@ _TRANSIENT_MUTATORS = {
     "systemctl", "ip", "route", "resolvectl",
 }
 
+_PACKAGE_MANAGERS = {"apt", "apt-get", "dnf", "yum", "pacman"}
+
 _PERSISTENT_MUTATORS = {
     "apt", "apt-get", "dnf", "yum", "pacman", "systemctl", "nft", "iptables",
     "ufw", "firewall-cmd", "tee", "sed", "cp", "mv", "chmod", "chown",
@@ -151,8 +153,23 @@ def assess_command_execution(
     destructive = tool in _DESTRUCTIVE_TOOLS or any(
         pattern.search(command) for pattern in _HIGH_RISK_PATTERNS
     )
-    persistent = tool in _PERSISTENT_MUTATORS and any(
-        pattern.search(command) for pattern in _PERSISTENCE_PATTERNS
+    package_mutation = bool(
+        tool in _PACKAGE_MANAGERS
+        and any(
+            token.casefold() in {
+                "install", "remove", "purge", "upgrade", "full-upgrade",
+                "dist-upgrade", "autoremove", "-s", "-u",
+            }
+            for token in effective[1:]
+        )
+        and "--simulate" not in {token.casefold() for token in effective[1:]}
+        and "--dry-run" not in {token.casefold() for token in effective[1:]}
+    )
+    persistent = bool(
+        (tool in _PERSISTENT_MUTATORS and any(
+            pattern.search(command) for pattern in _PERSISTENCE_PATTERNS
+        ))
+        or package_mutation
     )
     mutates_state = not read_only and (
         tool in _TRANSIENT_MUTATORS
@@ -163,7 +180,7 @@ def assess_command_execution(
     interactive = tool in _INTERACTIVE_TOOLS
     privilege_required = has_sudo or tool in {
         "nft", "iptables", "ufw", "firewall-cmd", "wg-quick", "openvpn",
-    }
+    } or package_mutation
 
     reversible = not destructive
     if persistent and tool in {"tee", "sed", "rm", "shred"}:
