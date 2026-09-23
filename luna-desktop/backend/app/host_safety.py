@@ -1,1 +1,237 @@
-"""Fail-closed host-safety policy for operator-run commands.\n\nThe current Luna build is instruction-only: it never executes these commands.\nThis module protects the operator by classifying host-impact and requiring a\nstaged preflight for commands that could damage availability, configuration,\nbootability, networking, or data.\n"""\n\nfrom __future__ import annotations\n\nimport math\nimport re\nimport shlex\nfrom dataclasses import asdict, dataclass\n\nfrom .command_execution import assess_command_execution\n\n\n_REMOTE_PIPE_EXEC_PATTERNS = (\n    re.compile(r"(?is)\bcurl\b[^\n|;]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh)\b"),\n    re.compile(r"(?is)\bwget\b[^\n|;]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh)\b"),\n    re.compile(r"(?is)\b(?:irm|iwr|invoke-restmethod|invoke-webrequest)\b[^\n|;]*\|\s*(?:iex|invoke-expression)\b"),\n)\n\n_CRITICAL_STORAGE_PATTERNS = (\n    re.compile(r"(?i)\b(?:mkfs(?:\.[a-z0-9]+)?|wipefs|fdisk|cfdisk|sfdisk|parted)\b"),\n    re.compile(r"(?i)\bdd\b[^\n]*\bof=/dev/(?:sd|nvme|vd|xvd|mmcblk)[^\s]*"),\n    re.compile(r"(?i)\b(?:diskpart|format(?:\.com)?)\b"),\n)\n\n_BOOT_PATTERNS = (\n    re.compile(r"(?i)\b(?:grub-install|grub-mkconfig|update-grub|efibootmgr)\b"),\n    re.compile(r"(?i)\b(?:bcdedit|bootrec|bootsect)\b"),\n)\n\n_SYSTEM_TREE_PATTERNS = (\n    re.compile(r"(?i)\brm\b[^\n]*(?:-r|-rf|-fr)[^\n]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),\n    re.compile(r"(?i)\b(?:chmod|chown)\b[^\n]*-R[^\n]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),\n    re.compile(r"(?i)\bfind\s+/(?:\s|[^\n]*)-delete\b"),\n)\n\n_FIREWALL_ROUTE_PATTERNS = (\n    re.compile(r"(?i)\biptables\b.*\s-F\b"),\n    re.compile(r"(?i)\bnft\b.*\bflush\s+ruleset\b"),\n    re.compile(r"(?i)\bufw\s+(?:reset|disable)\b"),\n    re.compile(r"(?i)\bip\s+(?:route|addr)\s+flush\b"),\n    re.compile(r"(?i)\broute\s+(?:del|delete)\b"),\n)\n\n_SYSTEM_CONFIG_PATTERNS = (\n    re.compile(r"(?i)(?:^|\s)/(?:etc|boot|usr/lib/systemd|lib/systemd)/"),\n    re.compile(r"(?i)\b(?:reg(?:\.exe)?\s+(?:add|delete)|set-itemproperty|new-itemproperty)\b.*\bHKLM[:\\]"),\n)\n\n_PERSISTENCE_PATTERNS = (\n    re.compile(r"(?i)\bsystemctl\s+(?:enable|disable|mask|unmask)\b"),\n    re.compile(r"(?i)\b(?:schtasks|sc(?:\.exe)?)\b.*\b(?:/create|create|config)\b"),\n    re.compile(r"(?i)\bcrontab\b"),\n)\n\n_LAB_MARKERS = (\n    "vm descartável", "vm descartavel", "disposable vm", "snapshot criado",\n    "snapshot confirmado", "snapshot ready", "backup confirmado", "backup feito",\n    "laboratório descartável", "laboratorio descartavel",\n)\n\n_EXPLICIT_HIGH_IMPACT_MARKERS = (\n    "formatar", "format", "particionar", "partition", "bootloader", "grub",\n    "bcd", "wipe", "apagar disco", "limpar firewall", "flush firewall",\n    "alterar rota", "mudar rota", "editar /etc", "alterar /etc",\n)\n\n_ENVIRONMENT_MARKERS = (\n    "kali", "linux", "windows", "powershell", "wsl", "vm", "virtual machine",\n)\n\n\n@dataclass(frozen=True)\nclass HostSafetyAssessment:\n    command: str\n    host_impact: str\n    critical_storage: bool\n    boot_change: bool\n    system_tree_change: bool\n    network_control_change: bool\n    remote_pipe_execution: bool\n    persistent_change: bool\n    environment_confirmed: bool\n    protected_lab_confirmed: bool\n    backup_or_snapshot_required: bool\n    rollback_required: bool\n    safe_to_recommend_now: bool\n    risk: float\n    utility: float\n    reasons: tuple[str, ...]\n\n    def to_dict(self) -> dict:\n        return asdict(self)\n\n\ndef _matches_any(command: str, patterns: tuple[re.Pattern[str], ...]) -> bool:\n    return any(pattern.search(command) for pattern in patterns)\n\n\ndef _context_flag(context: str, markers: tuple[str, ...]) -> bool:\n    normalized = context.casefold()\n    return any(marker in normalized for marker in markers)\n\n\ndef assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessment:\n    lifecycle = assess_command_execution(command)\n    critical_storage = _matches_any(command, _CRITICAL_STORAGE_PATTERNS)\n    boot_change = _matches_any(command, _BOOT_PATTERNS)\n    system_tree_change = _matches_any(command, _SYSTEM_TREE_PATTERNS)\n    network_control_change = _matches_any(command, _FIREWALL_ROUTE_PATTERNS)\n    remote_pipe_execution = _matches_any(command, _REMOTE_PIPE_EXEC_PATTERNS)\n    system_config_change = _matches_any(command, _SYSTEM_CONFIG_PATTERNS)\n    persistence_change = _matches_any(command, _PERSISTENCE_PATTERNS)\n\n    environment_confirmed = _context_flag(context, _ENVIRONMENT_MARKERS)\n    protected_lab_confirmed = _context_flag(context, _LAB_MARKERS)\n    explicit_high_impact = _context_flag(context, _EXPLICIT_HIGH_IMPACT_MARKERS)\n\n    high_impact = any((\n        critical_storage, boot_change, system_tree_change, network_control_change,\n        remote_pipe_execution, system_config_change, persistence_change,\n    ))\n    persistent_change = bool(lifecycle.persistent_change or system_config_change or persistence_change)\n    backup_or_snapshot_required = bool(\n        critical_storage or boot_change or system_tree_change or system_config_change\n    )\n    rollback_required = bool(\n        lifecycle.mutates_state or network_control_change or persistent_change or high_impact\n    )\n\n    reasons: list[str] = []\n    if remote_pipe_execution:\n        reasons.append("remote_content_piped_to_shell")\n    if critical_storage:\n        reasons.append("critical_storage_mutation")\n    if boot_change:\n        reasons.append("boot_configuration_mutation")\n    if system_tree_change:\n        reasons.append("system_tree_recursive_mutation")\n    if network_control_change:\n        reasons.append("network_control_plane_mutation")\n    if system_config_change:\n        reasons.append("system_configuration_mutation")\n    if persistence_change:\n        reasons.append("persistence_configuration_mutation")\n    if high_impact and not environment_confirmed:\n        reasons.append("execution_environment_not_confirmed")\n    if (critical_storage or boot_change) and not protected_lab_confirmed:\n        reasons.append("snapshot_or_backup_not_confirmed")\n    if high_impact and not explicit_high_impact and not protected_lab_confirmed:\n        reasons.append("high_impact_intent_not_explicit")\n\n    # Remote pipe-to-shell is never operator-ready because the downloaded body\n    # has not been reviewed. Storage/boot changes require a protected lab plus\n    # explicit environment and intent before the command can even be proposed.\n    hard_block = remote_pipe_execution or system_tree_change\n    gated_block = (critical_storage or boot_change) and not (\n        environment_confirmed and protected_lab_confirmed and explicit_high_impact\n    )\n    environmental_block = high_impact and not environment_confirmed\n    safe_to_recommend_now = not (hard_block or gated_block or environmental_block)\n\n    base_risk = 0.08\n    base_risk += 0.92 if remote_pipe_execution else 0.0\n    base_risk += 0.88 if critical_storage else 0.0\n    base_risk += 0.82 if boot_change else 0.0\n    base_risk += 0.90 if system_tree_change else 0.0\n    base_risk += 0.55 if network_control_change else 0.0\n    base_risk += 0.42 if persistent_change else 0.0\n    base_risk += 0.22 if lifecycle.privilege_required else 0.0\n    risk = min(1.0, base_risk)\n\n    reversibility = 1.0 if lifecycle.reversible else 0.18\n    environment_factor = 1.0 if environment_confirmed else (0.35 if high_impact else 0.85)\n    lab_factor = 1.0 if protected_lab_confirmed else (0.30 if critical_storage or boot_change else 0.90)\n    review_factor = 0.05 if remote_pipe_execution else 1.0\n    utility = (\n        (1.0 - risk) ** 1.55\n        * reversibility ** 1.25\n        * environment_factor ** 1.10\n        * lab_factor ** 1.15\n        * review_factor ** 1.80\n    )\n\n    if remote_pipe_execution or system_tree_change:\n        host_impact = "blocked"\n    elif critical_storage or boot_change:\n        host_impact = "critical"\n    elif network_control_change or persistent_change:\n        host_impact = "high"\n    elif lifecycle.mutates_state:\n        host_impact = "moderate"\n    else:\n        host_impact = "low"\n\n    return HostSafetyAssessment(\n        command=command,\n        host_impact=host_impact,\n        critical_storage=critical_storage,\n        boot_change=boot_change,\n        system_tree_change=system_tree_change,\n        network_control_change=network_control_change,\n        remote_pipe_execution=remote_pipe_execution,\n        persistent_change=persistent_change,\n        environment_confirmed=environment_confirmed,\n        protected_lab_confirmed=protected_lab_confirmed,\n        backup_or_snapshot_required=backup_or_snapshot_required,\n        rollback_required=rollback_required,\n        safe_to_recommend_now=safe_to_recommend_now,\n        risk=round(risk, 4),\n        utility=round(utility, 4),\n        reasons=tuple(dict.fromkeys(reasons)),\n    )\n\n\ndef host_safety_guidance(context: str) -> str:\n    return (\n        "HOST SAFETY: the operator executes every command. For any privileged or state-changing "\n        "action use PRECHECK -> ONE CHANGE -> VERIFY -> ROLLBACK/CONTINUE. Never pipe remote "\n        "downloads directly into a shell. Never use recursive deletion/permission changes on "\n        "system trees. Disk/partition/boot operations require an explicitly identified environment, "\n        "a confirmed snapshot/backup and explicit operator intent before the command is proposed. "\n        "System config/firewall/route/persistence changes require factual current state, reversible "\n        "rollback instructions and post-change verification. Prefer read-only discovery first."\n    )\n
+"""Fail-closed host-safety policy for operator-run commands.
+
+The current Luna build is instruction-only: it never executes these commands.
+This module protects the operator by classifying host-impact and requiring a
+staged preflight for commands that could damage availability, configuration,
+bootability, networking, or data.
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import asdict, dataclass
+
+from .command_execution import assess_command_execution
+
+
+_REMOTE_PIPE_EXEC_PATTERNS = (
+    re.compile(r"(?is)\bcurl\b[^
+|;]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh)\b"),
+    re.compile(r"(?is)\bwget\b[^
+|;]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh)\b"),
+    re.compile(r"(?is)\b(?:irm|iwr|invoke-restmethod|invoke-webrequest)\b[^
+|;]*\|\s*(?:iex|invoke-expression)\b"),
+)
+
+_CRITICAL_STORAGE_PATTERNS = (
+    re.compile(r"(?i)\b(?:mkfs(?:\.[a-z0-9]+)?|wipefs|fdisk|cfdisk|sfdisk|parted)\b"),
+    re.compile(r"(?i)\bdd\b[^
+]*\bof=/dev/(?:sd|nvme|vd|xvd|mmcblk)[^\s]*"),
+    re.compile(r"(?i)\b(?:diskpart|format(?:\.com)?)\b"),
+)
+
+_BOOT_PATTERNS = (
+    re.compile(r"(?i)\b(?:grub-install|grub-mkconfig|update-grub|efibootmgr)\b"),
+    re.compile(r"(?i)\b(?:bcdedit|bootrec|bootsect)\b"),
+)
+
+_SYSTEM_TREE_PATTERNS = (
+    re.compile(r"(?i)\brm\b[^
+]*(?:-r|-rf|-fr)[^
+]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),
+    re.compile(r"(?i)\b(?:chmod|chown)\b[^
+]*-R[^
+]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),
+    re.compile(r"(?i)\bfind\s+/(?:\s|[^
+]*)-delete\b"),
+)
+
+_FIREWALL_ROUTE_PATTERNS = (
+    re.compile(r"(?i)\biptables\b.*\s-F\b"),
+    re.compile(r"(?i)\bnft\b.*\bflush\s+ruleset\b"),
+    re.compile(r"(?i)\bufw\s+(?:reset|disable)\b"),
+    re.compile(r"(?i)\bip\s+(?:route|addr)\s+flush\b"),
+    re.compile(r"(?i)\broute\s+(?:del|delete)\b"),
+)
+
+_SYSTEM_CONFIG_PATTERNS = (
+    re.compile(r"(?i)(?:^|\s)/(?:etc|boot|usr/lib/systemd|lib/systemd)/"),
+    re.compile(r"(?i)\b(?:reg(?:\.exe)?\s+(?:add|delete)|set-itemproperty|new-itemproperty)\b.*\bHKLM[:\\]"),
+)
+
+_PERSISTENCE_PATTERNS = (
+    re.compile(r"(?i)\bsystemctl\s+(?:enable|disable|mask|unmask)\b"),
+    re.compile(r"(?i)\b(?:schtasks|sc(?:\.exe)?)\b.*\b(?:/create|create|config)\b"),
+    re.compile(r"(?i)\bcrontab\b"),
+)
+
+_LAB_MARKERS = (
+    "vm descartável", "vm descartavel", "disposable vm", "snapshot criado",
+    "snapshot confirmado", "snapshot ready", "backup confirmado", "backup feito",
+    "laboratório descartável", "laboratorio descartavel",
+)
+
+_EXPLICIT_HIGH_IMPACT_MARKERS = (
+    "formatar", "format", "particionar", "partition", "bootloader", "grub",
+    "bcd", "wipe", "apagar disco", "limpar firewall", "flush firewall",
+    "alterar rota", "mudar rota", "editar /etc", "alterar /etc",
+)
+
+_ENVIRONMENT_MARKERS = (
+    "kali", "linux", "windows", "powershell", "wsl", "vm", "virtual machine",
+)
+
+
+@dataclass(frozen=True)
+class HostSafetyAssessment:
+    command: str
+    host_impact: str
+    critical_storage: bool
+    boot_change: bool
+    system_tree_change: bool
+    network_control_change: bool
+    remote_pipe_execution: bool
+    persistent_change: bool
+    environment_confirmed: bool
+    protected_lab_confirmed: bool
+    backup_or_snapshot_required: bool
+    rollback_required: bool
+    safe_to_recommend_now: bool
+    risk: float
+    utility: float
+    reasons: tuple[str, ...]
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+def _matches_any(command: str, patterns: tuple[re.Pattern[str], ...]) -> bool:
+    return any(pattern.search(command) for pattern in patterns)
+
+
+def _context_flag(context: str, markers: tuple[str, ...]) -> bool:
+    normalized = context.casefold()
+    return any(marker in normalized for marker in markers)
+
+
+def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessment:
+    lifecycle = assess_command_execution(command)
+    critical_storage = _matches_any(command, _CRITICAL_STORAGE_PATTERNS)
+    boot_change = _matches_any(command, _BOOT_PATTERNS)
+    system_tree_change = _matches_any(command, _SYSTEM_TREE_PATTERNS)
+    network_control_change = _matches_any(command, _FIREWALL_ROUTE_PATTERNS)
+    remote_pipe_execution = _matches_any(command, _REMOTE_PIPE_EXEC_PATTERNS)
+    system_config_change = _matches_any(command, _SYSTEM_CONFIG_PATTERNS)
+    persistence_change = _matches_any(command, _PERSISTENCE_PATTERNS)
+
+    environment_confirmed = _context_flag(context, _ENVIRONMENT_MARKERS)
+    protected_lab_confirmed = _context_flag(context, _LAB_MARKERS)
+    explicit_high_impact = _context_flag(context, _EXPLICIT_HIGH_IMPACT_MARKERS)
+
+    high_impact = any((
+        critical_storage, boot_change, system_tree_change, network_control_change,
+        remote_pipe_execution, system_config_change, persistence_change,
+    ))
+    persistent_change = bool(lifecycle.persistent_change or system_config_change or persistence_change)
+    backup_or_snapshot_required = bool(
+        critical_storage or boot_change or system_tree_change or system_config_change
+    )
+    rollback_required = bool(
+        lifecycle.mutates_state or network_control_change or persistent_change or high_impact
+    )
+
+    reasons: list[str] = []
+    if remote_pipe_execution:
+        reasons.append("remote_content_piped_to_shell")
+    if critical_storage:
+        reasons.append("critical_storage_mutation")
+    if boot_change:
+        reasons.append("boot_configuration_mutation")
+    if system_tree_change:
+        reasons.append("system_tree_recursive_mutation")
+    if network_control_change:
+        reasons.append("network_control_plane_mutation")
+    if system_config_change:
+        reasons.append("system_configuration_mutation")
+    if persistence_change:
+        reasons.append("persistence_configuration_mutation")
+    if high_impact and not environment_confirmed:
+        reasons.append("execution_environment_not_confirmed")
+    if (critical_storage or boot_change) and not protected_lab_confirmed:
+        reasons.append("snapshot_or_backup_not_confirmed")
+    if high_impact and not explicit_high_impact and not protected_lab_confirmed:
+        reasons.append("high_impact_intent_not_explicit")
+
+    # Remote pipe-to-shell is never operator-ready because the downloaded body
+    # has not been reviewed. Storage/boot changes require a protected lab plus
+    # explicit environment and intent before the command can even be proposed.
+    hard_block = remote_pipe_execution or system_tree_change
+    gated_block = (critical_storage or boot_change) and not (
+        environment_confirmed and protected_lab_confirmed and explicit_high_impact
+    )
+    environmental_block = high_impact and not environment_confirmed
+    safe_to_recommend_now = not (hard_block or gated_block or environmental_block)
+
+    base_risk = 0.08
+    base_risk += 0.92 if remote_pipe_execution else 0.0
+    base_risk += 0.88 if critical_storage else 0.0
+    base_risk += 0.82 if boot_change else 0.0
+    base_risk += 0.90 if system_tree_change else 0.0
+    base_risk += 0.55 if network_control_change else 0.0
+    base_risk += 0.42 if persistent_change else 0.0
+    base_risk += 0.22 if lifecycle.privilege_required else 0.0
+    risk = min(1.0, base_risk)
+
+    reversibility = 1.0 if lifecycle.reversible else 0.18
+    environment_factor = 1.0 if environment_confirmed else (0.35 if high_impact else 0.85)
+    lab_factor = 1.0 if protected_lab_confirmed else (0.30 if critical_storage or boot_change else 0.90)
+    review_factor = 0.05 if remote_pipe_execution else 1.0
+    utility = (
+        (1.0 - risk) ** 1.55
+        * reversibility ** 1.25
+        * environment_factor ** 1.10
+        * lab_factor ** 1.15
+        * review_factor ** 1.80
+    )
+
+    if remote_pipe_execution or system_tree_change:
+        host_impact = "blocked"
+    elif critical_storage or boot_change:
+        host_impact = "critical"
+    elif network_control_change or persistent_change:
+        host_impact = "high"
+    elif lifecycle.mutates_state:
+        host_impact = "moderate"
+    else:
+        host_impact = "low"
+
+    return HostSafetyAssessment(
+        command=command,
+        host_impact=host_impact,
+        critical_storage=critical_storage,
+        boot_change=boot_change,
+        system_tree_change=system_tree_change,
+        network_control_change=network_control_change,
+        remote_pipe_execution=remote_pipe_execution,
+        persistent_change=persistent_change,
+        environment_confirmed=environment_confirmed,
+        protected_lab_confirmed=protected_lab_confirmed,
+        backup_or_snapshot_required=backup_or_snapshot_required,
+        rollback_required=rollback_required,
+        safe_to_recommend_now=safe_to_recommend_now,
+        risk=round(risk, 4),
+        utility=round(utility, 4),
+        reasons=tuple(dict.fromkeys(reasons)),
+    )
+
+
+def host_safety_guidance(context: str) -> str:
+    return (
+        "HOST SAFETY: the operator executes every command. For any privileged or state-changing "
+        "action use PRECHECK -> ONE CHANGE -> VERIFY -> ROLLBACK/CONTINUE. Never pipe remote "
+        "downloads directly into a shell. Never use recursive deletion/permission changes on "
+        "system trees. Disk/partition/boot operations require an explicitly identified environment, "
+        "a confirmed snapshot/backup and explicit operator intent before the command is proposed. "
+        "System config/firewall/route/persistence changes require factual current state, reversible "
+        "rollback instructions and post-change verification. Prefer read-only discovery first."
+    )
