@@ -19,6 +19,7 @@ from anthropic import AsyncAnthropic
 
 from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
+from .decision_intelligence import decision_guidance
 from .host_safety import host_safety_guidance
 from .kali_tool_guidance import guidance_for_context
 from .malware_analysis import malware_guidance, malware_tooling_summary
@@ -1417,6 +1418,12 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         capability_context = technical_guidance(message)
         if capability_context:
             route_instruction += " " + capability_context
+
+        decision_context = decision_guidance(
+            f"{message}\n{scenario.to_prompt_block(700)}"
+        )
+        if decision_context:
+            route_instruction += " " + decision_context
 
         if any(
             marker in message.casefold()
