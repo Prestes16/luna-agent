@@ -20,6 +20,15 @@ class TechnicalCapabilityTests(unittest.TestCase):
         )
         self.assertIn("exploit_dev", {item.name for item in selected})
 
+    def test_exploit_capability_covers_report_grade_web_validation(self) -> None:
+        guidance = technical_guidance(
+            "Precisamos comprovar achado HTTP auth bypass com PoC para relatório.",
+        )
+        self.assertIn("exploit_dev", guidance)
+        self.assertIn("minimal reproducible proof construction", guidance)
+        self.assertIn("evidence capture", guidance)
+        self.assertIn("explicit success predicate", guidance)
+
     def test_guidance_requires_complete_operator_reviewable_artifacts(self) -> None:
         guidance = technical_guidance(
             "Crie um script PowerShell para auditar configuração Windows.",
