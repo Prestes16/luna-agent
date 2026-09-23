@@ -122,6 +122,29 @@ CAPABILITIES: tuple[TechnicalCapability, ...] = (
         ("scripts", "CLI tools", "parsers", "test harnesses", "automation", "reports and reusable modules"),
     ),
     TechnicalCapability(
+        "math_physics",
+        (
+            "matemática", "matematica", "math", "física", "fisica", "physics",
+            "overflow", "underflow", "rounding", "precision", "probability",
+            "probabilidade", "entropy", "entropia", "modular", "fixed point",
+            "fixed-point", "rf", "rssi", "snr", "timing", "side-channel",
+        ),
+        (
+            "integer/modular arithmetic and finite fields",
+            "fixed-point/decimal arithmetic, bounds, rounding and conservation",
+            "probability, combinatorics, entropy and statistical inference",
+            "dimensional analysis, timing, signals, RF and measurement uncertainty",
+            "bit-level arithmetic, signedness, endianness and numerical error propagation",
+        ),
+        (
+            "exact derivations with units and bounds",
+            "numeric invariant checks",
+            "overflow/rounding/conservation test cases",
+            "probability/randomness analysis",
+            "signal/timing measurement models",
+        ),
+    ),
+    TechnicalCapability(
         "secure_engineering",
         ("arquitetura", "secure coding", "code review", "auditoria", "security review", "threat model"),
         ("threat modeling", "secure design", "code review", "test strategy"),
