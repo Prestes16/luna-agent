@@ -8,6 +8,8 @@ from dataclasses import dataclass
 from typing import Any, Literal, Mapping, Sequence
 from urllib.parse import parse_qsl, urlencode, urlsplit
 
+from .quantitative_reasoning import quantitative_claim_violations
+
 
 ReasoningRoute = Literal["FAST", "ANALYZE", "DEEP"]
 ReasoningEffort = Literal["none", "low", "medium"]
@@ -544,6 +546,15 @@ def validate_model_response(
             reasons.append("large_evidence_delta_ignored_current_endpoints")
         if proposed and proposed.endswith(":/") and any(path != "/" for path in current_paths):
             reasons.append("regressed_to_root_baseline_after_large_delta")
+
+    # V17/V18 are executable output validators, not merely prompt guidance.
+    # Strong numerical/physical claims must agree with deterministic facts/bounds.
+    reasons.extend(
+        quantitative_claim_violations(
+            f"{message}\n{scenario_facts}",
+            response,
+        )
+    )
 
     if reasons and loop_guard == "clear":
         loop_guard = "replan_required"
