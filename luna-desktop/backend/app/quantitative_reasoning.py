@@ -169,6 +169,21 @@ def scale_decimal_exact(value: str, decimals: int) -> int:
     return int(integral)
 
 
+def max_unsigned_input_before_mul_overflow(bits: int, factor: int) -> int:
+    """Largest unsigned x such that x * factor is representable in the given bit width."""
+    if bits <= 0:
+        raise ValueError("bits must be positive")
+    if factor <= 0:
+        raise ValueError("factor must be positive")
+    return ((1 << bits) - 1) // factor
+
+
+def floor_rounding_loss_numerator(value: int, numerator: int, denominator: int) -> int:
+    """Discarded numerator units for floor(value*numerator/denominator)."""
+    if value < 0 or numerator < 0 or denominator <= 0:
+        raise ValueError("value/numerator must be non-negative and denominator positive")
+    return (value * numerator) % denominator
+
 def mul_div_floor(a: int, b: int, denominator: int) -> tuple[int, int]:
     """Exact integer multiply/divide; returns (quotient, discarded remainder)."""
     if denominator <= 0:
@@ -225,10 +240,16 @@ def quantitative_guidance(context: str, max_chars: int = 850) -> str:
         f"QUANTITATIVE REASONING domain={profile.name}: {checks}. Invariants: {invariants}. "
         "Before a numeric/security conclusion, state the numeric domain/representation, units or "
         "base units, bounds, operation order, rounding semantics and the invariant being tested. "
-        "Prefer integers/rationals/fixed-point over binary float for exact value flows. For nontrivial "
-        "math show formula -> substitution -> units -> bound/result; distinguish exact result from "
-        "approximation. For physical/timing/RF claims require a measurable mechanism, acquisition "
-        "conditions and noise/resolution limits. Treat arithmetic anomalies as hypotheses until the "
-        "operator supplies reproducible evidence."
+        "For integer a*b/d, derive the exact safe multiplication threshold floor(TYPE_MAX/b), reduce "
+        "the rational when possible, and bound floor-rounding loss to <1 base unit per operation. "
+        "Decimals define scale only: never invent USD/$/cent tolerances unless observed. Plain Rust "
+        "* does not saturate; saturation requires an explicit saturating operation. Keep distinct: "
+        "mathematical possibility, input reachability, runtime overflow behavior, and exploitability. "
+        "Prefer factual source/input-bound/build-profile inspection over synthetic harnesses when those "
+        "facts are unknown. Prefer integers/rationals/fixed-point over binary float for exact value "
+        "flows. For nontrivial math show formula -> substitution -> units -> bound/result; distinguish "
+        "exact result from approximation. For physical/timing/RF claims require a measurable mechanism, "
+        "acquisition conditions and noise/resolution limits. Treat arithmetic anomalies as hypotheses "
+        "until the operator supplies reproducible evidence."
     )
     return guidance[:max_chars]
