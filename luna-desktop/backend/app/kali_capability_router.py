@@ -22,12 +22,27 @@ _FAMILY_MARKERS: dict[str, tuple[str, ...]] = {
     "windows": ("smb", "windows", "active directory", "share"),
     "authentication": ("login", "autentica", "credencial", "senha", "password"),
     "offline": ("hash", "digest", "arquivo de hash", "hash file"),
+    "web_proxy": (
+        "intercept", "interceptar", "interceptação", "interceptacao", "proxy",
+        "requisição", "requisicao", "request", "replay", "http history",
+    ),
+    "packet_capture": (
+        "pacote", "packet", "pcap", "sniff", "wireshark", "captura de rede",
+        "capturar tráfego", "capturar trafego",
+    ),
 }
 
 _SELECTION_MARKERS = (
     "outras possibilidades", "outras ferramentas", "qual ferramenta",
     "qual tool", "o que usar", "próximo", "proximo", "e agora",
-    "continue", "mais eficiente", "melhor ferramenta",
+    "continue", "mais eficiente", "melhor ferramenta", "melhor app",
+    "interceptar", "interceptação", "interceptacao", "proxy",
+    "mais algum", "mais alguma", "alternativa", "alternativas",
+)
+
+_ALTERNATIVE_MARKERS = (
+    "mais algum", "mais alguma", "outra ferramenta", "outras ferramentas",
+    "outra opção", "outra opcao", "alternativa", "alternativas",
 )
 
 
@@ -35,6 +50,7 @@ _SELECTION_MARKERS = (
 class CapabilityCandidate:
     tool: str
     family: str
+    purpose: str
     relevance: float
     continuity: float
     context_fit: float
@@ -42,8 +58,8 @@ class CapabilityCandidate:
 
     def to_prompt(self) -> str:
         return (
-            f"{self.tool}[family={self.family},U={self.utility:.3f},"
-            f"R={self.relevance:.2f},C={self.continuity:.2f}]"
+            f"{self.tool}[family={self.family},purpose={self.purpose},"
+            f"U={self.utility:.3f},R={self.relevance:.2f},C={self.continuity:.2f}]"
         )
 
 
@@ -89,6 +105,9 @@ def rank_capabilities(
     message_lower = message.casefold()
     history_lower = history_text.casefold()
     has_target = bool(getattr(scenario, "target", None)) if scenario is not None else False
+    alternative_request = any(
+        marker in message_lower for marker in _ALTERNATIVE_MARKERS
+    )
 
     for name, spec in KALI_TOOL_DICTIONARY.items():
         explicit = 1.0 if name.casefold() in message_lower else 0.0
@@ -98,12 +117,14 @@ def rank_capabilities(
 
         relevance = min(1.0, 0.72 * explicit + 0.56 * family_fit)
         context_fit = min(1.0, family_fit + 0.22 * target_fit)
-        z = 2.2 * relevance + 1.15 * context_fit + 0.75 * continuity - 1.30
+        history_term = (-0.90 if alternative_request else 0.75) * continuity
+        z = 2.2 * relevance + 1.15 * context_fit + history_term - 1.30
         utility = 1.0 / (1.0 + math.exp(-z))
         ranked.append(
             CapabilityCandidate(
                 tool=name,
                 family=spec.family,
+                purpose=spec.purpose,
                 relevance=round(relevance, 4),
                 continuity=round(continuity, 4),
                 context_fit=round(context_fit, 4),
@@ -135,5 +156,8 @@ def capability_guidance(
     return (
         "KALI CAPABILITY ROUTER (candidatos, não ações automáticas): "
         + "; ".join(candidate.to_prompt() for candidate in candidates)
-        + ". Escolha somente uma ferramenta cujos pré-requisitos factuais estejam satisfeitos."
+        + ". Para pedidos de recomendação, compare papéis técnicos antes de escolher: "
+        "proxy de interceptação HTTP(S) != captura de pacotes. Restrições de entrega de "
+        "turnos anteriores (por exemplo 'apenas um comando') não persistem se o turno atual "
+        "não as repetir. Não emita comando quando o operador pediu apenas orientação."
     )
