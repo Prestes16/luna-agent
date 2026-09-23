@@ -106,13 +106,14 @@ def assess_nmap_port_strategy(context: str, ast: CommandAST) -> ContextualPortAs
     global service frequency rather than this application-specific profile.
     """
     normalized = context.casefold()
+    explicit_optimization = asks_high_value_port_optimization(context)
+    baseline_scan = any(
+        marker in normalized for marker in ("scan", "varredura", "nmap", "recon")
+    )
     applicable = (
         ast.tool == "nmap"
         and is_web_application_context(context)
-        and (
-            asks_high_value_port_optimization(context)
-            or any(marker in normalized for marker in ("scan", "varredura", "nmap", "recon"))
-        )
+        and (explicit_optimization or baseline_scan)
     )
     if not applicable:
         return ContextualPortAssessment("not_applicable", (), 1.0, 1.0, 1.0, 1.0, ())
@@ -121,14 +122,36 @@ def assess_nmap_port_strategy(context: str, ast: CommandAST) -> ContextualPortAs
     values = {key.casefold(): value for key, value in ast.option_values}
     reasons: list[str] = []
 
+    # IMPORTANT: baseline scans receive this profile as a soft tactical prior.
+    # Only an explicit "optimize/high-value ports" request turns it into a hard
+    # validator condition.  This prevents a quality advisory from breaking
+    # otherwise-correct Nmap, sudo and artifact-policy behavior.
     if "--top-ports" in options:
-        reasons.append("nmap_top_ports_generic_for_web_context")
-        return ContextualPortAssessment("web_application", (), 0.45, 0.60, 0.49, 0.441, tuple(reasons))
+        if explicit_optimization:
+            reasons.append("nmap_top_ports_generic_for_web_context")
+        return ContextualPortAssessment(
+            "web_application_optimization" if explicit_optimization else "web_application_baseline",
+            (),
+            0.45,
+            0.60,
+            0.49,
+            0.441,
+            tuple(reasons),
+        )
 
     selected = _parse_explicit_ports(values.get("-p"))
     if not selected:
-        reasons.append("nmap_web_optimization_ports_not_explicit")
-        return ContextualPortAssessment("web_application", (), 0.0, 0.0, 0.0, 0.0, tuple(reasons))
+        if explicit_optimization:
+            reasons.append("nmap_web_optimization_ports_not_explicit")
+        return ContextualPortAssessment(
+            "web_application_optimization" if explicit_optimization else "web_application_baseline",
+            (),
+            0.0,
+            0.0,
+            0.0,
+            0.0,
+            tuple(reasons),
+        )
 
     total_weight = sum(WEB_APPLICATION_PORT_WEIGHTS.values())
     relevant_weight = sum(WEB_APPLICATION_PORT_WEIGHTS.get(port, 0.0) for port in selected)
@@ -144,12 +167,15 @@ def assess_nmap_port_strategy(context: str, ast: CommandAST) -> ContextualPortAs
     complexity_penalty = math.exp(-0.012 * max(0, len(selected) - len(WEB_APPLICATION_PORT_WEIGHTS)))
     utility = f_beta * complexity_penalty
 
-    minimum_recall = 0.45 if asks_high_value_port_optimization(context) else 0.28
-    if recall < minimum_recall:
+    # Coverage is a hard gate only for an explicit optimization request.
+    # Baseline scans still expose the numeric metrics through response metadata,
+    # but they remain valid so operational policy (sudo/artifacts/target) can be
+    # evaluated independently.
+    if explicit_optimization and recall < 0.45:
         reasons.append("nmap_web_port_profile_low_coverage")
 
     return ContextualPortAssessment(
-        "web_application",
+        "web_application_optimization" if explicit_optimization else "web_application_baseline",
         selected,
         round(recall, 4),
         round(precision, 4),
