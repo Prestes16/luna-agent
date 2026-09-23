@@ -30,7 +30,8 @@ _KNOWN_TOOLS = (
     "subfinder", "traceroute", "ping", "enum4linux", "enum4linux-ng",
     "smbclient", "netexec", "crackmapexec", "hydra", "medusa", "john",
     "hashcat", "searchsploit", "msfconsole", "sslscan", "testssl", "tcpdump",
-    "tshark", "rpcclient", "ldapsearch",
+    "tshark", "rpcclient", "ldapsearch", "burpsuite", "mitmproxy", "mitmweb",
+    "zaproxy", "wireshark",
 )
 _URL_RE = re.compile(r"https?://[^\s<>\]\)]+", re.IGNORECASE)
 
