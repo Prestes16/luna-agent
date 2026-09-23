@@ -532,6 +532,8 @@ async def chat_agent_stream(request: Request):
                     validated.append({
                         "data": b64,
                         "mime": img.get("mime", "image/png"),
+                        "sensitivity": img.get("sensitivity", "normal"),
+                        "name": img.get("name", ""),
                     })
         images = validated or None
 
@@ -549,8 +551,9 @@ async def chat_agent_stream(request: Request):
                     kind="chat-screenshot",
                     media_type=image.get("mime", "image/png"),
                     source=f"chat:{session_id}",
+                    original_name=str(image.get("name", "") or ""),
                     description=f"visual evidence attached to chat turn image#{index}",
-                    sensitivity="normal",
+                    sensitivity=str(image.get("sensitivity", "normal") or "normal"),
                 )
             except (ValueError, TypeError, ProjectValidationError, ProjectNotFoundError):
                 logger.info(
