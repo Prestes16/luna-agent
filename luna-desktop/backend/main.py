@@ -35,7 +35,7 @@ import json as _json
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict
 
 # ── SSRF guard ────────────────────────────────────────────────────────────────
@@ -325,6 +325,85 @@ async def get_local_project_context(project_id: int):
 async def compress_local_project(project_id: int):
     try:
         return project_store.compress(project_id)
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+
+
+@app.get("/api/projects/{project_id}/evidence")
+async def list_local_project_evidence(project_id: int, limit: int = 200):
+    try:
+        return {
+            "evidence": project_store.list_evidence_artifacts(
+                project_id,
+                limit=max(1, min(int(limit), 1000)),
+            )
+        }
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+
+
+@app.post("/api/projects/{project_id}/evidence", status_code=201)
+async def upload_local_project_evidence(
+    project_id: int,
+    file: UploadFile = File(...),
+    kind: str = "artifact",
+    sensitivity: str = "normal",
+    description: str = "",
+):
+    try:
+        max_bytes = project_store.evidence_vault.max_artifact_bytes
+        raw = await file.read(max_bytes + 1)
+        if len(raw) > max_bytes:
+            raise HTTPException(
+                status_code=413,
+                detail=f"evidence artifact exceeds {max_bytes} bytes",
+            )
+        return project_store.add_evidence_artifact(
+            project_id,
+            data=raw,
+            kind=kind,
+            media_type=file.content_type or "application/octet-stream",
+            source="api-upload",
+            original_name=file.filename or "",
+            description=description,
+            sensitivity=sensitivity,
+        )
+    except HTTPException:
+        raise
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+    except (TypeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    finally:
+        await file.close()
+
+
+@app.get("/api/projects/{project_id}/evidence/{record_id}")
+async def get_local_project_evidence(project_id: int, record_id: int):
+    try:
+        metadata, raw = project_store.read_evidence_artifact(project_id, record_id)
+        return Response(
+            content=raw,
+            media_type=metadata["media_type"],
+            headers={
+                "X-Evidence-SHA256": metadata["sha256"],
+                "X-Evidence-Bytes": str(metadata["byte_length"]),
+                "X-Evidence-Kind": metadata["kind"],
+            },
+        )
+    except (ProjectValidationError, ProjectNotFoundError) as error:
+        _raise_project_http_error(error)
+
+
+@app.get("/api/projects/{project_id}/evidence/{record_id}/verify")
+async def verify_local_project_evidence(project_id: int, record_id: int):
+    try:
+        metadata, _raw = project_store.read_evidence_artifact(project_id, record_id)
+        return {
+            "id": record_id,
+            "sha256": metadata["sha256"],
+            "valid": project_store.verify_evidence_artifact(project_id, record_id),
+        }
     except (ProjectValidationError, ProjectNotFoundError) as error:
         _raise_project_http_error(error)
 
