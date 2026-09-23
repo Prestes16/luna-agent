@@ -33,6 +33,8 @@ class HarnessPolicy:
     write_actions_require_idempotency_key: bool = True
     retry_strategy: str = "exponential_backoff+jitter"
     transport_retry_limit: int = 2
+    retry_base_delay_seconds: float = 0.25
+    retry_max_delay_seconds: float = 2.0
     retrieval_cache_ttl_seconds: int = 300
     retrieval_cache_max_entries: int = 256
 
@@ -61,6 +63,9 @@ class TurnHarnessTrace:
     guardrails_out: list[str] = field(default_factory=list)
     cache_hits: int = 0
     cache_misses: int = 0
+    transport_retries: int = 0
+    transport_retry_delays_ms: list[int] = field(default_factory=list)
+    transport_retry_errors: list[str] = field(default_factory=list)
     termination_reason: str = "pending"
     memory: MemoryPlaneSnapshot | None = None
     last_checkpoint_id: int | None = None
@@ -252,6 +257,53 @@ class AgentHarness:
             return []
         return self.checkpoint_store.history(thread_id, limit=limit)
 
+    @staticmethod
+    def is_retryable_transport_error(error: BaseException) -> bool:
+        """Classify transient model-transport failures; auth/client errors fail closed."""
+        error_type = type(error).__name__.casefold()
+        message = str(error).casefold()
+        non_retryable = (
+            "401", "403", "invalid api key", "invalid_api_key",
+            "authentication", "unauthorized", "permission denied",
+            "bad request", "400", "not found", "404",
+        )
+        if any(marker in message for marker in non_retryable):
+            return False
+        retryable = (
+            "timeout", "timed out", "connection reset", "connection aborted",
+            "connection refused", "temporarily unavailable", "rate limit",
+            "too many requests", "server disconnected", "network error",
+            "remote protocol", "408", "425", "429", "500", "502", "503", "504",
+        )
+        return (
+            "timeout" in error_type
+            or "connection" in error_type
+            or any(marker in message for marker in retryable)
+        )
+
+    def transport_retry_delay(self, retry_number: int, *, turn_id: str = "") -> float:
+        """Bounded exponential backoff with stable per-turn jitter (retry_number starts at 1)."""
+        retry_number = max(1, int(retry_number))
+        base = min(
+            float(self.policy.retry_max_delay_seconds),
+            float(self.policy.retry_base_delay_seconds) * (2 ** (retry_number - 1)),
+        )
+        seed = f"{turn_id}:{retry_number}:{self.policy.version}".encode("utf-8")
+        fraction = int(hashlib.sha256(seed).hexdigest()[:8], 16) / 0xFFFFFFFF
+        jitter_factor = 0.75 + (0.50 * fraction)
+        return min(float(self.policy.retry_max_delay_seconds), base * jitter_factor)
+
+    def record_transport_retry(
+        self,
+        trace: TurnHarnessTrace,
+        *,
+        error: BaseException,
+        delay_seconds: float,
+    ) -> None:
+        trace.transport_retries += 1
+        trace.transport_retry_delays_ms.append(max(0, round(delay_seconds * 1000)))
+        trace.transport_retry_errors.append(type(error).__name__)
+
     def record_model_attempt(self, trace: TurnHarnessTrace) -> None:
         trace.model_attempts += 1
 
@@ -272,11 +324,11 @@ class AgentHarness:
     ) -> None:
         trace.guardrails_out[:] = [
             "response_validator",
-            "construction_grounding",
-            "quantitative_integrity",
-            "exact_arithmetic",
+            "factual_grounding",
+            "quantitative_claim_integrity_v17",
+            "exact_arithmetic_v18",
             "command_policy",
-            "host_safety",
+            "loop_guard",
         ]
         if validator_passed:
             trace.termination_reason = "validated_response"
@@ -302,6 +354,8 @@ class AgentHarness:
             ),
             "retry_strategy": self.policy.retry_strategy,
             "transport_retry_limit": self.policy.transport_retry_limit,
+            "retry_base_delay_seconds": self.policy.retry_base_delay_seconds,
+            "retry_max_delay_seconds": self.policy.retry_max_delay_seconds,
             "retrieval_cache_ttl_seconds": self.policy.retrieval_cache_ttl_seconds,
             "checkpointing_enabled": self.checkpoint_store is not None,
             "checkpoint_count": (
