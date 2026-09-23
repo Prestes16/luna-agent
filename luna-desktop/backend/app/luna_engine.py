@@ -19,6 +19,7 @@ from anthropic import AsyncAnthropic
 
 from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
+from .host_safety import host_safety_guidance
 from .kali_tool_guidance import guidance_for_context
 from .malware_analysis import malware_guidance, malware_tooling_summary
 from .technical_capabilities import technical_guidance
@@ -242,6 +243,13 @@ def _build_system_prompt(
             "não encadeie mutações ainda não verificadas. Diferencie ação somente-leitura, "
             "mudança transitória, mudança persistente, privilégio e comando interativo. "
             "Mudança persistente/privilegiada exige confirmação explícita e rollback factual."
+        ),
+        (
+            "Proteção do host: para qualquer comando capaz de alterar disco/partição/boot, árvore "
+            "de sistema, firewall/rota, persistência ou configuração global, comece por diagnóstico "
+            "somente-leitura. Nunca use download remoto encadeado diretamente a shell. Não proponha "
+            "alteração crítica sem ambiente factual, snapshot/backup confirmado quando aplicável, "
+            "escopo mínimo, verificação pós-estado e rollback."
         ),
         (
             "Se o operador pedir somente um comando, entregue o comando executável de forma "
@@ -1409,6 +1417,16 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         capability_context = technical_guidance(message)
         if capability_context:
             route_instruction += " " + capability_context
+
+        if any(
+            marker in message.casefold()
+            for marker in (
+                "sudo", "systemctl", "iptables", "nft", "ufw", "route", "disco",
+                "disk", "partição", "partition", "boot", "grub", "bcd", "rm ",
+                "chmod", "chown", "instale", "install", "configure", "configurar",
+            )
+        ):
+            route_instruction += " " + host_safety_guidance(message)
 
         malware_context = malware_guidance(
             f"{message}\n{scenario.to_prompt_block(600)}"
