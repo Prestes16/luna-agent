@@ -76,6 +76,18 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         engine.config["tool_execution_enabled"] = True
         self.assertFalse(engine._tool_execution_allowed())
 
+    def test_runtime_prompt_carries_execution_authority_and_exploit_contract(self) -> None:
+        from app.luna_engine import _build_system_prompt
+
+        prompt = _build_system_prompt(supervised_mode=True)
+        self.assertIn("L0 OBSERVE=AUTO", prompt)
+        self.assertIn("L1 PROBE=ON_DEMAND", prompt)
+        self.assertIn("L2 MUTATE", prompt)
+        self.assertIn("L3 HIGH IMPACT", prompt)
+        self.assertIn("artefato mínimo completo", prompt)
+        self.assertIn("success predicate", prompt)
+        self.assertIn("captura de logs/prints/evidência", prompt)
+
     def test_runtime_prompt_states_operator_executes_commands(self) -> None:
         prompt = _build_system_prompt(None, supervised_mode=True)
         self.assertIn("o operador executa comandos", prompt)
