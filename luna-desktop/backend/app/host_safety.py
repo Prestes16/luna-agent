@@ -45,15 +45,24 @@ _FIREWALL_ROUTE_PATTERNS = (
     re.compile(r"(?i)\broute\s+(?:del|delete)\b"),
 )
 
-_SYSTEM_CONFIG_PATTERNS = (
+_SYSTEM_CONFIG_PATH_PATTERNS = (
     re.compile(r"(?i)(?:^|\s)/(?:etc|boot|usr/lib/systemd|lib/systemd)/"),
+    re.compile(r"(?i)\bHKLM[:\\]"),
+)
+
+_CONFIG_WRITE_PATTERNS = (
+    re.compile(r"(?i)(?:>|>>)\s*/(?:etc|boot|usr/lib/systemd|lib/systemd)/"),
+    re.compile(r"(?i)\btee\b[^\n]*/(?:etc|boot|usr/lib/systemd|lib/systemd)/"),
+    re.compile(r"(?i)\bsed\b[^\n]*\s-i(?:\s|$)[^\n]*/(?:etc|boot|usr/lib/systemd|lib/systemd)/"),
+    re.compile(r"(?i)\b(?:cp|mv|install)\b[^\n]*/(?:etc|boot|usr/lib/systemd|lib/systemd)/"),
+    re.compile(r"(?i)\b(?:nano|vim|vi)\b[^\n]*/(?:etc|boot|usr/lib/systemd|lib/systemd)/"),
     re.compile(r"(?i)\b(?:reg(?:\.exe)?\s+(?:add|delete)|set-itemproperty|new-itemproperty)\b.*\bHKLM[:\\]"),
 )
 
 _PERSISTENCE_PATTERNS = (
     re.compile(r"(?i)\bsystemctl\s+(?:enable|disable|mask|unmask)\b"),
     re.compile(r"(?i)\b(?:schtasks|sc(?:\.exe)?)\b.*\b(?:/create|create|config)\b"),
-    re.compile(r"(?i)\bcrontab\b"),
+    re.compile(r"(?i)\bcrontab\b(?!\s+-l\b)"),
 )
 
 _LAB_MARKERS = (
@@ -123,7 +132,11 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
     system_tree_change = _matches_any(command, _SYSTEM_TREE_PATTERNS)
     network_control_change = _matches_any(command, _FIREWALL_ROUTE_PATTERNS)
     remote_pipe_execution = _matches_any(command, _REMOTE_PIPE_EXEC_PATTERNS)
-    system_config_change = _matches_any(command, _SYSTEM_CONFIG_PATTERNS)
+    system_config_path = _matches_any(command, _SYSTEM_CONFIG_PATH_PATTERNS)
+    config_write = _matches_any(command, _CONFIG_WRITE_PATTERNS)
+    system_config_change = bool(
+        system_config_path and (lifecycle.mutates_state or config_write)
+    )
     persistence_change = _matches_any(command, _PERSISTENCE_PATTERNS)
 
     environment_confirmed = _context_flag(context, _ENVIRONMENT_MARKERS)
