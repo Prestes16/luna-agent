@@ -28,6 +28,11 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(len(prompt), 4_000)
         self.assertIn(r"D:\workspace", prompt)
         self.assertNotIn("MODO HUNTER", prompt)
+        self.assertTrue(prompt.startswith("RUNTIME HARNESS — PREFIXO ESTÁVEL"))
+        self.assertLess(
+            prompt.index("Somente resposta final"),
+            prompt.index("CONTEXTO DINÂMICO DE RUNTIME"),
+        )
 
     def test_defaults_normalize_cloud_selection_to_local(self) -> None:
         with patch.dict(
@@ -39,6 +44,14 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(engine.config["zero_cloud_mode"])
         self.assertFalse(engine.config["tool_execution_enabled"])
         self.assertEqual(engine._resolve_model("ola", "gpt-4o"), ("ollama", "luna-cyber-fast"))
+
+    def test_local_diagnostics_exposes_harness_policy(self) -> None:
+        engine = LunaEngine()
+        diagnostics = engine.get_local_diagnostics()
+        self.assertEqual(diagnostics["harness"]["version"], "harness-v1")
+        self.assertEqual(diagnostics["harness"]["max_model_attempts"], 2)
+        self.assertEqual(diagnostics["harness"]["max_tool_calls"], 0)
+        self.assertFalse(diagnostics["harness"]["semantic_response_cache_enabled"])
 
     def test_instruction_only_build_cannot_be_enabled_by_runtime_config(self) -> None:
         engine = LunaEngine()
