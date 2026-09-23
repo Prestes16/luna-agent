@@ -62,6 +62,20 @@ class HostIntegrityValidatorTests(unittest.TestCase):
         )
         self.assertNotIn("host_rollback_plan_missing", validation.reasons)
 
+    def test_destructive_path_not_named_by_operator_is_rejected(self) -> None:
+        validation = self._validate(
+            "Estou no Kali Linux e quero remover um arquivo temporário antigo.",
+            "```bash\nrm -rf /tmp/luna-test\n```",
+        )
+        self.assertFalse(validation.valid)
+        self.assertIn("host_destructive_target_not_confirmed", validation.reasons)
+
+    def test_exact_destructive_path_avoids_unconfirmed_target_reason(self) -> None:
+        validation = self._validate(
+            "Estou no Kali Linux e quero remover exatamente /tmp/luna-test.",
+            "```bash\nrm -rf /tmp/luna-test\n```",
+        )
+        self.assertNotIn("host_destructive_target_not_confirmed", validation.reasons)
     def test_system_tree_recursive_delete_is_rejected(self) -> None:
         validation = self._validate(
             "Estou no Kali Linux e quero verificar configuração em /etc.",
