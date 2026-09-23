@@ -62,6 +62,19 @@ class KaliToolGuidanceTests(unittest.TestCase):
         self.assertIn("3306", guidance)
         self.assertNotIn("--top-ports quando", guidance.split("prefira -p", 1)[-1][:20])
 
+    def test_other_tools_followup_injects_capability_router(self) -> None:
+        scenario = ScenarioContext()
+        scenario.update("CTF autorizado no alvo https://wifhoodie.com.")
+        history = [
+            {"role": "assistant", "content": "```bash\nsudo nmap -sS -p 80,443 wifhoodie.com\n```"},
+        ]
+        guidance = guidance_for_context(
+            "Agora quero explorar outras possibilidades e ferramentas.",
+            scenario=scenario,
+            history=history,
+        )
+        self.assertIn("KALI CAPABILITY ROUTER", guidance)
+        self.assertIn("candidatos, não ações automáticas", guidance)
     def test_hydra_guidance_requests_missing_facts_instead_of_inventing(self) -> None:
         scenario = ScenarioContext()
         scenario.update("CTF autorizado no alvo https://wifhoodie.com.")
