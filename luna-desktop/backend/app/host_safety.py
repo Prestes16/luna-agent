@@ -94,6 +94,7 @@ class HostSafetyAssessment:
     persistent_change: bool
     environment_confirmed: bool
     protected_lab_confirmed: bool
+    device_target_confirmed: bool
     backup_or_snapshot_required: bool
     rollback_required: bool
     safe_to_recommend_now: bool
@@ -114,6 +115,14 @@ def _context_flag(context: str, markers: tuple[str, ...]) -> bool:
     return any(marker in normalized for marker in markers)
 
 
+def _device_targets(command: str) -> tuple[str, ...]:
+    values = re.findall(
+        r"(?i)(/dev/(?:sd[a-z]\d*|nvme\d+n\d+(?:p\d+)?|vd[a-z]\d*|xvd[a-z]\d*|mmcblk\d+(?:p\d+)?))",
+        command,
+    )
+    return tuple(dict.fromkeys(value.casefold() for value in values))
+
+
 def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessment:
     lifecycle = assess_command_execution(command)
     critical_storage = _matches_any(command, _CRITICAL_STORAGE_PATTERNS)
@@ -127,6 +136,13 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
     environment_confirmed = _context_flag(context, _ENVIRONMENT_MARKERS)
     protected_lab_confirmed = _context_flag(context, _LAB_MARKERS)
     explicit_high_impact = _context_flag(context, _EXPLICIT_HIGH_IMPACT_MARKERS)
+    device_targets = _device_targets(command)
+    context_lower = context.casefold()
+    device_target_confirmed = bool(
+        device_targets and all(target in context_lower for target in device_targets)
+    )
+    if critical_storage and not device_targets:
+        device_target_confirmed = False
 
     high_impact = any((
         critical_storage, boot_change, system_tree_change, network_control_change,
@@ -159,6 +175,8 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
         reasons.append("execution_environment_not_confirmed")
     if (critical_storage or boot_change) and not protected_lab_confirmed:
         reasons.append("snapshot_or_backup_not_confirmed")
+    if critical_storage and not device_target_confirmed:
+        reasons.append("storage_device_target_not_confirmed")
     if high_impact and not explicit_high_impact and not protected_lab_confirmed:
         reasons.append("high_impact_intent_not_explicit")
 
@@ -167,7 +185,10 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
     # explicit environment and intent before the command can even be proposed.
     hard_block = remote_pipe_execution or system_tree_change
     gated_block = (critical_storage or boot_change) and not (
-        environment_confirmed and protected_lab_confirmed and explicit_high_impact
+        environment_confirmed
+        and protected_lab_confirmed
+        and explicit_high_impact
+        and (device_target_confirmed if critical_storage else True)
     )
     environmental_block = high_impact and not environment_confirmed
     safe_to_recommend_now = not (hard_block or gated_block or environmental_block)
@@ -216,6 +237,7 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
         persistent_change=persistent_change,
         environment_confirmed=environment_confirmed,
         protected_lab_confirmed=protected_lab_confirmed,
+        device_target_confirmed=device_target_confirmed,
         backup_or_snapshot_required=backup_or_snapshot_required,
         rollback_required=rollback_required,
         safe_to_recommend_now=safe_to_recommend_now,
