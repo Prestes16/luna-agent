@@ -1,0 +1,15 @@
+# Luna Cyber local-first runtime + test baseline
+# Cloud provider SDKs are intentionally excluded.
+# Ollama uses its OpenAI-compatible local endpoint.
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pydantic>=2.7
+pydantic-settings>=2.3
+python-dotenv>=1.0
+
+httpx>=0.27
+aiohttp>=3.9
+requests>=2.31
+openai>=1.60
