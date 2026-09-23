@@ -1,8 +1,9 @@
 import unittest
 
-from app.kali_tool_guidance import guidance_for_message, requested_kali_tool
+from app.kali_tool_guidance import guidance_for_context, guidance_for_message, requested_kali_tool
 from app.luna_engine import LunaEngine  # noqa: F401
 from app.reasoning_pipeline import extract_commands
+from app.scenario_context import ScenarioContext
 
 
 class KaliToolGuidanceTests(unittest.TestCase):
@@ -34,6 +35,35 @@ class KaliToolGuidanceTests(unittest.TestCase):
         self.assertEqual(len(commands), 1)
         self.assertTrue(commands[0].startswith("ffuf "))
 
+    def test_followup_nmap_optimization_uses_contextual_port_profile(self) -> None:
+        scenario = ScenarioContext()
+        scenario.update("CTF autorizado no alvo https://wifhoodie.com.")
+        history = [
+            {"role": "assistant", "content": "```bash\nsudo nmap -sS -p 80,443 wifhoodie.com\n```"},
+        ]
+        guidance = guidance_for_context(
+            "Agora otimize esse comando para as principais portas de maior valor.",
+            scenario=scenario,
+            history=history,
+        )
+        self.assertIn("TOOL CONTRACT [nmap]", guidance)
+        self.assertIn("WEB HIGH-VALUE PORT PROFILE", guidance)
+        self.assertIn("3306", guidance)
+        self.assertNotIn("--top-ports quando", guidance.split("prefira -p", 1)[-1][:20])
+
+    def test_hydra_guidance_requests_missing_facts_instead_of_inventing(self) -> None:
+        scenario = ScenarioContext()
+        scenario.update("CTF autorizado no alvo https://wifhoodie.com.")
+        guidance = guidance_for_context(
+            "Agora use Hydra e me dê o comando no Kali.",
+            scenario=scenario,
+            history=[],
+        )
+        self.assertIn("TOOL READINESS [hydra]", guidance)
+        self.assertIn("service/module", guidance)
+        self.assertIn("identity source", guidance)
+        self.assertIn("secret source", guidance)
+        self.assertIn("não gere comando", guidance)
 
 if __name__ == "__main__":
     unittest.main()
