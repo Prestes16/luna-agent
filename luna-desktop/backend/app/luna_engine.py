@@ -19,6 +19,7 @@ from anthropic import AsyncAnthropic
 
 from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
+from .construction_reasoning import construction_guidance
 from .decision_intelligence import decision_guidance
 from .host_safety import host_safety_guidance
 from .kali_tool_guidance import guidance_for_context
@@ -211,6 +212,12 @@ def _build_system_prompt(
         (
             "Regra contextual: cenário -> fatos -> desconhecidos -> pergunta atual -> "
             "teste mínimo. Nunca promova desconhecidos a fatos."
+        ),
+        (
+            "Princípio BUILD-TO-BREAK: antes de quebrar, explorar ou auditar, reconstrua o modelo "
+            "mínimo de como o componente funciona: interfaces, fluxos, estado, fronteiras de "
+            "confiança, invariantes, dependências e controles. Se esse modelo estiver incompleto, "
+            "priorize evidência estrutural antes de assumir o mecanismo da falha."
         ),
         (
             "Prioridade: CURRENT USER MESSAGE > evidence delta > ScenarioContext > "
@@ -1410,6 +1417,12 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 " Nenhum target/host factual foi observado: descreva eventual teste somente "
                 "por método e path; não escreva curl, hostname, porta ou URL placeholder."
             )
+
+        construction_context = construction_guidance(
+            f"{message}\n{scenario.to_prompt_block(650)}"
+        )
+        if construction_context:
+            route_instruction += " " + construction_context
 
         tool_guidance = guidance_for_context(message, scenario=scenario, history=history)
         if tool_guidance:
