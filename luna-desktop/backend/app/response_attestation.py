@@ -10,10 +10,14 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from .command_ast import assess_nmap_strategy
+from .command_policy import parse_effective_command
+from .kali_tool_readiness import assess_tool_readiness
+from .offensive_strategy import assess_nmap_port_strategy
 from .operational_transform import transform_response_commands
 from .reasoning_pipeline import redact_sensitive_text
 from .reasoning_quality import score_response_quality
-from .reasoning_runtime_patch_v8 import command_attestations
+from .reasoning_runtime_patch_v8 import command_attestations, extract_commands
 
 
 def _quality_band(score: float) -> str:
@@ -38,6 +42,39 @@ def _replace_latest_assistant_history(engine: Any, session_id: str, content: str
             item["content"] = redact_sensitive_text(content)
             return
 
+
+def _strategy_attestations(engine: Any, session_id: str, message: str, response: str) -> list[dict]:
+    scenario = engine.scenario_contexts.get(session_id)
+    context_parts = [message]
+    if scenario is not None:
+        for attr in ("target", "current_goal", "environment"):
+            value = getattr(scenario, attr, None)
+            if value:
+                context_parts.append(str(value))
+    context = "\n".join(context_parts)
+
+    metrics: list[dict] = []
+    for command in extract_commands(response):
+        ast = parse_effective_command(command)
+        if not ast or ast.tool != "nmap":
+            continue
+        general = assess_nmap_strategy(context, ast)
+        ports = assess_nmap_port_strategy(context, ast)
+        metrics.append({
+            "tool": "nmap",
+            "intent": general.intent,
+            "information_gain": general.information_gain,
+            "noise": general.noise,
+            "cost": general.cost,
+            "utility": general.utility,
+            "port_profile": ports.profile,
+            "weighted_recall": ports.weighted_recall,
+            "weighted_precision": ports.weighted_precision,
+            "f_beta": ports.f_beta,
+            "context_utility": ports.context_utility,
+            "strategy_reasons": list(dict.fromkeys((*general.reasons, *ports.reasons))),
+        })
+    return metrics
 
 def install_response_attestation(engine_cls: type) -> None:
     """Wrap LunaEngine.stream_agent once without changing the core engine file."""
@@ -78,6 +115,8 @@ def install_response_attestation(engine_cls: type) -> None:
                 reasons = event.get("validation_reasons") or ()
                 score = score_response_quality(message, visible_text, reasons)
                 attestations = command_attestations(message, visible_text)
+                strategy_attestations = _strategy_attestations(self, sid, message, visible_text)
+                readiness = assess_tool_readiness(message, scenario=self.scenario_contexts.get(sid))
 
                 safe_attestations = []
                 for item in attestations:
@@ -99,6 +138,12 @@ def install_response_attestation(engine_cls: type) -> None:
                         if safe_attestations else None
                     ),
                     "command_attestations": safe_attestations,
+                    "strategy_attestations": strategy_attestations,
+                    "tool_readiness": {
+                        "tool": readiness.tool,
+                        "ready": readiness.ready,
+                        "missing": list(readiness.missing),
+                    },
                     "operational_transform_applied": bool(mutations),
                     "operational_mutations": safe_mutations,
                 })
