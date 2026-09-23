@@ -1,6 +1,7 @@
 import unittest
 
 from app.command_ast import assess_nmap_strategy, parse_command
+from app.offensive_strategy import assess_nmap_port_strategy
 from app.luna_engine import LunaEngine  # noqa: F401
 from app.reasoning_pipeline import validate_model_response
 from app.scenario_context import ScenarioContext
@@ -67,6 +68,18 @@ class StrategyAwareNmapTests(unittest.TestCase):
         validation = self._validate(message, response)
         self.assertNotIn("nmap_overbroad_for_initial_recon", validation.reasons)
         self.assertNotIn("nmap_strategy_utility_below_threshold", validation.reasons)
+
+    def test_generic_web_port_profile_is_advisory_not_hard_gate(self) -> None:
+        message = (
+            "CTF autorizado: faça um scan nmap no alvo https://wifhoodie.com."
+        )
+        assessment = assess_nmap_port_strategy(
+            message,
+            parse_command("nmap -sS wifhoodie.com"),
+        )
+        self.assertEqual(assessment.profile, "web_application_baseline")
+        self.assertEqual(assessment.reasons, ())
+        self.assertEqual(assessment.context_utility, 0.0)
 
     def test_web_optimization_rejects_global_top_ports_heuristic(self) -> None:
         scenario = ScenarioContext()
