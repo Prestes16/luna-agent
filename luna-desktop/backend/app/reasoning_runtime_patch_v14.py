@@ -95,7 +95,9 @@ def _host_safety_reasons(message: str, response: str, scenario: Any) -> list[str
             reasons.append("host_critical_storage_preflight_required")
         if assessment.boot_change and not assessment.safe_to_recommend_now:
             reasons.append("host_boot_change_preflight_required")
-        if lifecycle.mutates_state and lifecycle.privilege_required and not assessment.environment_confirmed:
+        if assessment.security_control_reduction and not assessment.safe_to_recommend_now:
+            reasons.append("host_security_control_preflight_required")
+        if "execution_environment_not_confirmed" in assessment.reasons:
             reasons.append("host_execution_environment_not_confirmed")
         if (
             assessment.rollback_required
@@ -175,10 +177,16 @@ def build_replan_instruction(validation, scenario_prompt: str, current_message: 
             "para bootloader/BCD/EFI comece por diagnóstico somente-leitura; exija snapshot/backup "
             "e plano de recuperação antes de propor alteração"
         )
+    if "host_security_control_preflight_required" in reasons:
+        additions.append(
+            "não desative Defender/firewall ou controles equivalentes no host; só considere redução "
+            "temporária de controle em VM/lab descartável explicitamente confirmado, com snapshot, "
+            "escopo mínimo, rollback e verificação"
+        )
     if "host_execution_environment_not_confirmed" in reasons:
         additions.append(
-            "não proponha mudança privilegiada sem saber se o comando será executado no Kali/VM, "
-            "Windows host ou outro ambiente; peça/confirme o ambiente primeiro"
+            "não proponha mudança de estado de alto impacto sem saber se o comando será executado "
+            "no Kali/VM, Windows host ou outro ambiente; peça/confirme o ambiente primeiro"
         )
     if "host_rollback_plan_missing" in reasons:
         additions.append(
