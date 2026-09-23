@@ -123,7 +123,7 @@ def _mismatch_penalty(context: str, profile: PrivacyRouteProfile) -> tuple[float
             "vpn": {"vpn", "vpn_then_tor"},
         }[requested]
         if profile.name not in compatible_profiles:
-            penalty += 0.45
+            penalty += 0.75
             reasons.append("explicit_route_family_mismatch")
 
     return min(1.0, penalty), reasons
