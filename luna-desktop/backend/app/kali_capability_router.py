@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
 from .kali_tool_dictionary import KALI_TOOL_DICTIONARY
+from .network_privacy import privacy_intent, score_privacy_routes
 
 
 _FAMILY_MARKERS: dict[str, tuple[str, ...]] = {
@@ -51,6 +52,30 @@ _ALTERNATIVE_MARKERS = (
     "mais algum", "mais alguma", "outra ferramenta", "outras ferramentas",
     "outra opção", "outra opcao", "alternativa", "alternativas",
 )
+
+
+_PRIVACY_TOOL_PROFILES: dict[str, tuple[str, ...]] = {
+    "proxychains4": ("proxychains_tor",),
+    "proxychains": ("proxychains_tor",),
+    "tor": ("tor", "proxychains_tor", "vpn_then_tor"),
+    "torsocks": ("tor", "proxychains_tor", "vpn_then_tor"),
+    "openvpn": ("vpn", "vpn_then_tor"),
+    "wg-quick": ("vpn", "vpn_then_tor"),
+    "wg": ("vpn", "vpn_then_tor"),
+}
+
+
+def _privacy_tool_fit(context: str, tool: str) -> float:
+    if not privacy_intent(context):
+        return 0.0
+    allowed = _PRIVACY_TOOL_PROFILES.get(tool)
+    if not allowed:
+        return 0.0
+    ranked = score_privacy_routes(context)
+    score_by_profile = {item.profile.name: item.utility for item in ranked}
+    best = max((score_by_profile.get(name, 0.0) for name in allowed), default=0.0)
+    ceiling = max((item.utility for item in ranked), default=1.0)
+    return min(1.0, best / max(ceiling, 1e-9))
 
 
 @dataclass(frozen=True)
@@ -122,8 +147,15 @@ def rank_capabilities(
         continuity = 1.0 if name.casefold() in history_lower else 0.0
         target_fit = 0.65 if has_target else 0.25
 
-        relevance = min(1.0, 0.72 * explicit + 0.56 * family_fit)
-        context_fit = min(1.0, family_fit + 0.22 * target_fit)
+        route_fit = _privacy_tool_fit(context, name)
+        relevance = min(
+            1.0,
+            0.72 * explicit + 0.56 * family_fit + 0.24 * route_fit,
+        )
+        context_fit = min(
+            1.0,
+            family_fit + 0.22 * target_fit + 0.30 * route_fit,
+        )
         history_term = (-0.90 if alternative_request else 0.75) * continuity
         z = 2.2 * relevance + 1.15 * context_fit + history_term - 1.30
         utility = 1.0 / (1.0 + math.exp(-z))
