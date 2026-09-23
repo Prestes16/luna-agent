@@ -170,6 +170,35 @@ Depending on the domain, Luna should preserve:
 - screenshots when visual state materially supports the finding;
 - cleanup/rollback result.
 
+## Evidence bundle and reproducibility math
+
+Every proof that may become a report finding should be capable of producing a deterministic
+evidence bundle. Raw artifacts are preserved byte-for-byte and individually SHA-256 hashed.
+The bundle binds the exact target, explicit success predicate and (when present) the exact
+command/PoC invocation hash.
+
+Supported evidence classes include logs, stdout/stderr, raw HTTP exchanges, debugger traces,
+PCAP/protocol transcripts, Web3 transaction artifacts and screenshots.
+
+When a proof is repeated, Luna must record the exact numerator/denominator instead of saying
+"reliable" from impression alone:
+
+```text
+success_rate = successes / trials
+```
+
+For binomial repeatability, the deterministic math layer computes a Wilson score interval:
+
+```text
+center = (p + z^2/(2n)) / (1 + z^2/n)
+
+margin = z * sqrt((p(1-p) + z^2/(4n))/n) / (1 + z^2/n)
+```
+
+This interval describes uncertainty in the tested repetitions; it is not a probability that an
+exploit works on untested hosts, versions or environments. Exact artifact hashes and tested
+conditions remain the evidentiary authority.
+
 ## Visual evidence
 
 Screenshots/images are first-class evidence.
