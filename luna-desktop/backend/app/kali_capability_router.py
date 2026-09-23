@@ -30,6 +30,11 @@ _FAMILY_MARKERS: dict[str, tuple[str, ...]] = {
         "pacote", "packet", "pcap", "sniff", "wireshark", "captura de rede",
         "capturar tráfego", "capturar trafego",
     ),
+    "privacy": (
+        "proxychains", "tor", "torsocks", "vpn", "wireguard", "openvpn",
+        "privacidade", "anonim", "rastre", "túnel", "tunel", "socks5",
+        "dns leak", "vazamento dns", "kill switch", "killswitch",
+    ),
 }
 
 _SELECTION_MARKERS = (
@@ -38,6 +43,8 @@ _SELECTION_MARKERS = (
     "continue", "mais eficiente", "melhor ferramenta", "melhor app",
     "interceptar", "interceptação", "interceptacao", "proxy",
     "mais algum", "mais alguma", "alternativa", "alternativas",
+    "proxychains", "tor", "vpn", "wireguard", "openvpn", "privacidade",
+    "anonim", "rastre", "túnel", "tunel", "dns leak", "kill switch",
 )
 
 _ALTERNATIVE_MARKERS = (
