@@ -26,12 +26,14 @@ from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
 from .construction_reasoning import construction_guidance
 from .decision_intelligence import decision_guidance
+from .exploit_proof import exploit_proof_guidance
 from .host_safety import host_safety_guidance
 from .kali_tool_guidance import guidance_for_context
 from .malware_analysis import malware_guidance, malware_tooling_summary
 from .quantitative_reasoning import quantitative_fact_sheet, quantitative_guidance
 from .technical_capabilities import technical_guidance
 from .threat_response import threat_response_guidance
+from .visual_evidence import build_visual_evidence_manifest, visual_evidence_guidance
 from .reasoning_pipeline import (
     build_replan_instruction,
     classify_complexity,
@@ -1266,6 +1268,17 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         images: lista de {"data": "<base64 string>", "mime": "image/png|jpeg|webp|gif"}
         """
         turn_started = time.perf_counter()
+        try:
+            visual_manifest = build_visual_evidence_manifest(images)
+        except ValueError as visual_error:
+            yield json.dumps({
+                "type": "error",
+                "message": f"Evidência visual inválida: {visual_error}",
+                "response_source": "input_guardrail",
+                "llm_called": False,
+            }, ensure_ascii=False)
+            return
+
         scenario = self.scenario_contexts.setdefault(session_id, ScenarioContext())
         evidence_delta = scenario.update(message, project_context=project_context)
         history = self._get_history(session_id)
@@ -1286,6 +1299,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             "llm_called": False,
             "evidence_delta_count": evidence_delta.count,
             "selected_modules": list(route.selected_modules),
+            "visual_evidence_count": len(visual_manifest),
+            "visual_evidence": [item.to_dict() for item in visual_manifest],
             "loop_guard": "pending",
             "response_source": "system_error",
             "request_count": 0,
@@ -1510,6 +1525,16 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         capability_context = technical_guidance(message)
         if capability_context:
             route_instruction += " " + capability_context
+
+        exploit_context = exploit_proof_guidance(
+            f"{message}\n{scenario.to_prompt_block(700)}"
+        )
+        if exploit_context:
+            route_instruction += " " + exploit_context
+
+        visual_context = visual_evidence_guidance(visual_manifest)
+        if visual_context:
+            route_instruction += " " + visual_context
 
         if any(
             marker in message.casefold()
