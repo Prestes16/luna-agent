@@ -73,7 +73,7 @@ DETERMINISTIC DERIVATION  -> DERIVED_FACT
 LLM PROPOSAL              -> HYPOTHESIS
 CONFIRMED TEST            -> VALIDATED_FINDING
 CONTRADICTING EVIDENCE    -> SUPERSEDED
-SECRET                    -> REDACT / NEVER STORE RAW
+SENSITIVE/CREDENTIAL      -> PRESERVE EXACT + CLASSIFY + HASH
 ```
 
 Each durable memory record carries at least:
@@ -88,7 +88,20 @@ Each durable memory record carries at least:
 - evidence level;
 - optional validity/TTL;
 - optional superseded-record link;
-- redaction metadata.
+- sensitivity classification;
+- exact-content SHA-256 and byte length.
+
+### Sensitive evidence policy
+
+Luna Cyber is a personal, local, operator-supervised system. Authorized credentials,
+cookies, tokens, investigation artifacts and classified evidence are preserved exactly
+when they are part of the technical record. The memory plane classifies them as
+`credential`, `sensitive` or `classified` and records SHA-256/byte-length integrity
+metadata instead of silently redacting them.
+
+Redaction remains appropriate only for explicitly non-evidentiary telemetry/fingerprint
+copies or when the operator requests a sanitized export. Evidence used for reproduction,
+reporting, correlation or validation retains its exact value.
 
 ### Cache policy
 
