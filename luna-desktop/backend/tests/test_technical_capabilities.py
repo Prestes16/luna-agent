@@ -45,6 +45,20 @@ class TechnicalCapabilityTests(unittest.TestCase):
         self.assertIn("programming_automation", guidance)
         self.assertIn("Delphi/Pascal/Nim/Zig", guidance)
         self.assertIn("embedded architectures", guidance)
+    def test_math_physics_capability_covers_numeric_and_signal_reasoning(self) -> None:
+        selected = select_capabilities(
+            "Audite rounding overflow probabilidade entropia e SNR em um sistema.",
+            limit=4,
+        )
+        names = {item.name for item in selected}
+        self.assertIn("math_physics", names)
+        guidance = technical_guidance(
+            "Analise matemática aplicada: fixed-point, overflow, entropia, timing e SNR.",
+        )
+        self.assertIn("math_physics", guidance)
+        self.assertIn("integer/modular arithmetic", guidance)
+        self.assertIn("dimensional analysis", guidance)
+
     def test_irrelevant_greeting_does_not_inject_capability_context(self) -> None:
         self.assertEqual(technical_guidance("Olá, bom dia!"), "")
 
