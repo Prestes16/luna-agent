@@ -31,7 +31,8 @@ _KNOWN_TOOLS = (
     "smbclient", "netexec", "crackmapexec", "hydra", "medusa", "john",
     "hashcat", "searchsploit", "msfconsole", "sslscan", "testssl", "tcpdump",
     "tshark", "rpcclient", "ldapsearch", "burpsuite", "mitmproxy", "mitmweb",
-    "zaproxy", "wireshark",
+    "zaproxy", "wireshark", "proxychains4", "proxychains", "tor", "torsocks",
+    "openvpn", "wg-quick", "wg",
 )
 _URL_RE = re.compile(r"https?://[^\s<>\]\)]+", re.IGNORECASE)
 
