@@ -1424,6 +1424,14 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         if construction_context:
             route_instruction += " " + construction_context
 
+        # Core reasoning guidance comes before tool/capability detail so it
+        # survives the compact route-instruction budget used by the 4B model.
+        decision_context = decision_guidance(
+            f"{message}\n{scenario.to_prompt_block(700)}"
+        )
+        if decision_context:
+            route_instruction += " " + decision_context
+
         tool_guidance = guidance_for_context(message, scenario=scenario, history=history)
         if tool_guidance:
             route_instruction += " " + tool_guidance
@@ -1431,12 +1439,6 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         capability_context = technical_guidance(message)
         if capability_context:
             route_instruction += " " + capability_context
-
-        decision_context = decision_guidance(
-            f"{message}\n{scenario.to_prompt_block(700)}"
-        )
-        if decision_context:
-            route_instruction += " " + decision_context
 
         if any(
             marker in message.casefold()
