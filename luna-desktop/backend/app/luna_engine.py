@@ -1408,6 +1408,21 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             context_summary=ctx_summary or "",
             history_count=len(history),
         )
+        self.harness.checkpoint(
+            harness_trace,
+            stage="context_ready",
+            state={
+                "route": route.route,
+                "reasoning_effort": route.reasoning_effort,
+                "evidence_delta_count": evidence_delta.count,
+                "selected_modules": sorted(runtime_modules),
+                "memory_provenance": list(
+                    harness_trace.memory.provenance
+                    if harness_trace.memory is not None
+                    else ()
+                ),
+            },
+        )
         turn_telemetry["harness"] = harness_trace.to_dict()
 
         if route.route == "FAST":
@@ -1528,6 +1543,15 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
 
         try:
             self.harness.record_model_attempt(harness_trace)
+            self.harness.checkpoint(
+                harness_trace,
+                stage="model_attempt_started",
+                state={
+                    "attempt": harness_trace.model_attempts,
+                    "route": route.route,
+                    "reasoning_effort": effective_reasoning_effort or "none",
+                },
+            )
             turn_telemetry["harness"] = harness_trace.to_dict()
             if client_type == 'claude':
                 gen = self._stream_claude_with_tools(
@@ -1552,6 +1576,17 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 scenario=scenario,
                 evidence_delta_count=evidence_delta.count,
             )
+            self.harness.checkpoint(
+                harness_trace,
+                stage="validation",
+                state={
+                    "valid": validation.valid,
+                    "reasons": list(validation.reasons),
+                    "loop_guard": validation.loop_guard,
+                    "response_chars": len(full_text),
+                },
+            )
+            turn_telemetry["harness"] = harness_trace.to_dict()
 
             if (
                 not validation.valid
@@ -1563,6 +1598,15 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 replan_used = True
                 self.harness.record_replan(harness_trace)
                 self.harness.record_model_attempt(harness_trace)
+                self.harness.checkpoint(
+                    harness_trace,
+                    stage="replan_started",
+                    state={
+                        "attempt": harness_trace.model_attempts,
+                        "replan": harness_trace.replans,
+                        "reasons": list(validation.reasons),
+                    },
+                )
                 turn_telemetry["harness"] = harness_trace.to_dict()
                 logger.info(
                     "chat.response.replan %s",
@@ -1635,6 +1679,17 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     scenario=scenario,
                     evidence_delta_count=evidence_delta.count,
                 )
+                self.harness.checkpoint(
+                    harness_trace,
+                    stage="replan_validation",
+                    state={
+                        "valid": validation.valid,
+                        "reasons": list(validation.reasons),
+                        "loop_guard": validation.loop_guard,
+                        "response_chars": len(full_text),
+                    },
+                )
+                turn_telemetry["harness"] = harness_trace.to_dict()
                 if replan_history:
                     history_out[:] = replan_history
 
@@ -1643,6 +1698,17 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     harness_trace,
                     validator_passed=False,
                     validation_reasons=validation.reasons,
+                )
+                self.harness.checkpoint(
+                    harness_trace,
+                    stage="rejected",
+                    state={
+                        "validator_passed": False,
+                        "reasons": list(validation.reasons),
+                        "model_attempts": harness_trace.model_attempts,
+                        "replans": harness_trace.replans,
+                    },
+                    human_review_required=True,
                 )
                 turn_telemetry["harness"] = harness_trace.to_dict()
                 turn_telemetry.update({
@@ -1686,6 +1752,18 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 yield event_json
 
         except Exception as e:
+            self.harness.finalize_error(harness_trace, "generation_error")
+            self.harness.checkpoint(
+                harness_trace,
+                stage="generation_error",
+                state={
+                    "error_type": type(e).__name__,
+                    "model_attempts": harness_trace.model_attempts,
+                    "replans": harness_trace.replans,
+                },
+                human_review_required=True,
+            )
+            turn_telemetry["harness"] = harness_trace.to_dict()
             logger.error(f"Stream error [{client_type}/{model_name}]: {e}")
 
             if client_type == 'ollama':
@@ -1844,6 +1922,16 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 validator_passed=validation.valid,
                 validation_reasons=validation.reasons,
             )
+        self.harness.checkpoint(
+            harness_trace,
+            stage="completed",
+            state={
+                "validator_passed": bool(validation and validation.valid),
+                "model_attempts": harness_trace.model_attempts,
+                "replans": harness_trace.replans,
+                "response_chars": len(full_text),
+            },
+        )
         turn_telemetry["harness"] = harness_trace.to_dict()
         turn_telemetry.update({
             "response_source": "model",
