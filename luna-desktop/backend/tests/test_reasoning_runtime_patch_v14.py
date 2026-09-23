@@ -32,6 +32,21 @@ class HostIntegrityValidatorTests(unittest.TestCase):
         self.assertFalse(validation.valid)
         self.assertIn("host_execution_environment_not_confirmed", validation.reasons)
 
+    def test_apt_mutation_requires_dry_run_first(self) -> None:
+        validation = self._validate(
+            "Estou no Kali Linux e quero instalar o pacote tor.",
+            "```bash\nsudo apt install tor\n```\nRollback: remover o pacote se necessário.",
+        )
+        self.assertFalse(validation.valid)
+        self.assertIn("host_package_change_preflight_required", validation.reasons)
+
+    def test_apt_simulation_is_allowed_as_preflight(self) -> None:
+        validation = self._validate(
+            "Estou no Kali Linux e quero primeiro simular a instalação do pacote tor.",
+            "```bash\napt-get -s install tor\n```",
+        )
+        self.assertNotIn("host_package_change_preflight_required", validation.reasons)
+        self.assertNotIn("host_execution_environment_not_confirmed", validation.reasons)
     def test_persistent_service_change_requires_rollback_plan(self) -> None:
         validation = self._validate(
             "Estou no Kali Linux e quero habilitar o serviço ssh no boot.",
