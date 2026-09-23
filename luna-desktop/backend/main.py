@@ -76,6 +76,7 @@ def _is_ssrf_safe(url: str) -> bool:
 # Add backend to path
 sys.path.insert(0, os.path.dirname(__file__))
 
+from app.harness_checkpoints import CheckpointStore
 from app.luna_engine import LunaEngine
 from app.models import ChatRequest, ChatResponse
 from app.project_store import ProjectNotFoundError, ProjectStore, ProjectValidationError
@@ -107,6 +108,15 @@ async def lifespan(app: FastAPI):
     
     # Initialize services
     luna_engine = LunaEngine()
+    try:
+        ttl_days = max(1, int(os.getenv("LUNA_CHECKPOINT_TTL_DAYS", "30")))
+    except ValueError:
+        ttl_days = 30
+    checkpoint_store = CheckpointStore(
+        project_store.root / ".harness" / "checkpoints.sqlite3",
+        ttl_days=ttl_days,
+    )
+    luna_engine.harness.attach_checkpoint_store(checkpoint_store)
     code_analyzer = CodeAnalyzer()
     security_scanner = SecurityScanner()
     blockchain_service = BlockchainService()
