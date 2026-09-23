@@ -16,6 +16,7 @@ import json
 import sqlite3
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -68,8 +69,18 @@ class CheckpointStore:
         connection.execute("PRAGMA busy_timeout=5000")
         return connection
 
+    @contextmanager
+    def _connection(self):
+        """Always release SQLite file handles before callers leave the operation."""
+        connection = self._connect()
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
     def _initialize(self) -> None:
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS harness_checkpoints (
@@ -133,7 +144,7 @@ class CheckpointStore:
         created_at = float(time.time() if now is None else now)
         expires_at = created_at + self.ttl_seconds
 
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             cursor = connection.execute(
                 """
                 INSERT INTO harness_checkpoints (
@@ -186,7 +197,7 @@ class CheckpointStore:
         )
 
     def get(self, checkpoint_id: int) -> HarnessCheckpoint | None:
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             row = connection.execute(
                 "SELECT * FROM harness_checkpoints WHERE checkpoint_id = ?",
                 (int(checkpoint_id),),
@@ -195,7 +206,7 @@ class CheckpointStore:
 
     def latest(self, thread_id: str) -> HarnessCheckpoint | None:
         thread_id = self._validate_identifier(thread_id, "thread_id")
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             row = connection.execute(
                 """
                 SELECT * FROM harness_checkpoints
@@ -209,7 +220,7 @@ class CheckpointStore:
     def history(self, thread_id: str, *, limit: int = 50) -> list[HarnessCheckpoint]:
         thread_id = self._validate_identifier(thread_id, "thread_id")
         limit = max(1, min(int(limit), 500))
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             rows = connection.execute(
                 """
                 SELECT * FROM harness_checkpoints
@@ -222,7 +233,7 @@ class CheckpointStore:
 
     def prune_expired(self, *, now: float | None = None) -> int:
         cutoff = float(time.time() if now is None else now)
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             cursor = connection.execute(
                 "DELETE FROM harness_checkpoints WHERE expires_at <= ?",
                 (cutoff,),
@@ -230,7 +241,7 @@ class CheckpointStore:
             return max(0, int(cursor.rowcount))
 
     def count(self) -> int:
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             row = connection.execute(
                 "SELECT COUNT(*) AS count FROM harness_checkpoints"
             ).fetchone()
