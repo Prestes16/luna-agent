@@ -22,6 +22,7 @@ from .module_loader import ModuleLoader
 from .kali_tool_guidance import guidance_for_context
 from .malware_analysis import malware_guidance, malware_tooling_summary
 from .technical_capabilities import technical_guidance
+from .threat_response import threat_response_guidance
 from .reasoning_pipeline import (
     build_replan_instruction,
     classify_complexity,
@@ -1415,6 +1416,11 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         if malware_context:
             route_instruction += " " + malware_context
             route_instruction += " MALWARE TOOLING: " + malware_tooling_summary()
+            response_context = threat_response_guidance(
+                f"{message}\n{scenario.to_prompt_block(600)}"
+            )
+            if response_context:
+                route_instruction += " " + response_context
 
         system = _build_system_prompt(
             workspace_path,
