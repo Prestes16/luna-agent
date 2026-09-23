@@ -37,7 +37,11 @@ _EXEC_RE = re.compile(
     r"wg-quick|wg|file|sha256sum|strings|xxd|yara|capa|floss|rizin|radare2|objdump|readelf|binwalk|"
     r"volatility3|vol|olevba|apktool|jadx|wine|java|dotnet|mono|wscript|cscript|"
     r"msfconsole|python(?:3)?|pwsh|"
-    r"powershell|invoke-webrequest|iwr)\b",
+    r"powershell|invoke-webrequest|iwr|rm|rmdir|shred|mkfs(?:\.[a-z0-9]+)?|"
+    r"wipefs|fdisk|cfdisk|sfdisk|parted|dd|chmod|chown|systemctl|nft|iptables|"
+    r"ufw|firewall-cmd|ip|route|resolvectl|tee|sed|cp|mv|mount|umount|"
+    r"grub-install|grub-mkconfig|update-grub|efibootmgr|reg(?:\.exe)?|bcdedit|"
+    r"bootrec|bootsect|diskpart|format(?:\.com)?|schtasks|sc(?:\.exe)?)\b",
     re.IGNORECASE,
 )
 
