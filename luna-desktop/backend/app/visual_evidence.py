@@ -1,8 +1,9 @@
 """Visual evidence manifest and reasoning contract for screenshots/images.
 
-The transport path already supports image content. This module makes screenshots
-first-class evidence: exact bytes are hashed, metadata is bounded, and the model is
-told to separate visible observations from interpretation.
+The transport path supports image content. This module makes screenshots first-class
+evidence: exact bytes are hashed, metadata is bounded, and the model is told to
+separate visible observations from interpretation. Runtime must additionally verify
+that the selected local model reports a real vision capability before semantic reading.
 """
 
 from __future__ import annotations
