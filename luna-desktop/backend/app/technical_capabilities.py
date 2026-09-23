@@ -1,1 +1,155 @@
-"""Lazy technical capability map for Luna instruction-only operation.\n\nThe goal is breadth without stuffing the small local model with a giant static\nprompt. The current request activates only a few relevant domains and tells the\nmodel what it is expected to be able to explain or construct for the operator.\nNo capability in this file grants host execution.\n"""\n\nfrom __future__ import annotations\n\nfrom dataclasses import dataclass\n\n\n@dataclass(frozen=True)\nclass TechnicalCapability:\n    name: str\n    markers: tuple[str, ...]\n    knowledge: tuple[str, ...]\n    deliverables: tuple[str, ...]\n\n    def prompt(self) -> str:\n        return (\n            f"{self.name}: knowledge={'; '.join(self.knowledge)}; "\n            f"deliverables={'; '.join(self.deliverables)}"\n        )\n\n\nCAPABILITIES: tuple[TechnicalCapability, ...] = (\n    TechnicalCapability(\n        "web_api",\n        ("web", "http", "https", "api", "rest", "graphql", "jwt", "cookie", "session", "cors"),\n        ("HTTP semantics and proxies", "auth/session boundaries", "input validation", "API abuse cases"),\n        ("curl/httpx tests", "request-replay recipes", "small validation scripts", "fuzzing harnesses"),\n    ),\n    TechnicalCapability(\n        "network_protocols",\n        ("nmap", "tcp", "udp", "dns", "smb", "ldap", "ssh", "tls", "packet", "pcap", "rede"),\n        ("TCP/IP and routing", "service enumeration", "protocol state", "packet/TLS analysis"),\n        ("scan plans", "packet filters", "protocol probes", "parsers"),\n    ),\n    TechnicalCapability(\n        "identity_auth",\n        ("login", "auth", "credential", "senha", "password", "oauth", "oidc", "kerberos", "ntlm"),\n        ("authentication flows", "authorization models", "credential handling", "identity protocols"),\n        ("test matrices", "request templates", "credential-safe scripts", "evidence checklists"),\n    ),\n    TechnicalCapability(\n        "linux_privilege",\n        ("linux", "sudo", "suid", "capabilities", "cron", "systemd", "privesc", "privilege escalation"),\n        ("Linux permissions", "services and jobs", "capabilities/SUID", "local privilege boundaries"),\n        ("enumeration commands", "small audit scripts", "proof-of-condition checks", "rollback steps"),\n    ),\n    TechnicalCapability(\n        "windows_ad",\n        ("windows", "active directory", "ad", "smb", "ldap", "kerberos", "winrm", "powershell"),\n        ("Windows security model", "AD/Kerberos/LDAP", "SMB/RPC", "PowerShell administration"),\n        ("enumeration plans", "PowerShell helpers", "LDAP queries", "evidence parsers"),\n    ),\n    TechnicalCapability(\n        "exploit_dev",\n        ("exploit", "buffer overflow", "rop", "heap", "stack", "gdb", "pwndbg", "fuzz", "crash"),\n        ("memory safety", "calling conventions", "debugging", "fuzzing and crash triage"),\n        ("minimal PoCs for authorized labs", "fuzz harnesses", "crash reproducers", "debug scripts"),\n    ),\n    TechnicalCapability(\n        "reverse_engineering",\n        ("reverse", "reversing", "ghidra", "radare", "rizin", "assembly", "disassembly", "binary"),\n        ("assembly and ABI", "static/dynamic analysis", "binary formats", "decompilation limits"),\n        ("analysis checklists", "GDB scripts", "binary parsers", "function-mapping notes"),\n    ),\n    TechnicalCapability(\n        "cloud_container",\n        ("docker", "container", "kubernetes", "k8s", "aws", "azure", "gcp", "cloud", "iam"),\n        ("container isolation", "Kubernetes/RBAC", "cloud IAM", "metadata and secret boundaries"),\n        ("audit commands", "manifest checks", "policy tests", "configuration validators"),\n    ),\n    TechnicalCapability(\n        "wireless",\n        ("wifi", "wi-fi", "802.11", "wireless", "wpa", "aircrack", "hcxdumptool"),\n        ("802.11 frames", "WPA security", "radio/interface modes", "capture validation"),\n        ("capture workflows", "interface checks", "pcap analysis", "lab scripts"),\n    ),\n    TechnicalCapability(\n        "blockchain_web3",\n        ("solana", "anchor", "web3", "smart contract", "solidity", "ethereum", "pda", "spl", "program"),\n        ("transaction/account models", "program authority", "state invariants", "on-chain attack surfaces"),\n        ("tests", "PoCs in local/devnet labs", "invariant checks", "transaction parsers"),\n    ),\n    TechnicalCapability(\n        "malware_forensics",\n        ("malware", "forensic", "forense", "memory dump", "yara", "volatility", "sandbox"),\n        ("static/dynamic triage", "artifact timelines", "memory/process evidence", "IOC reasoning"),\n        ("YARA rules", "artifact parsers", "timeline scripts", "triage checklists"),\n    ),\n    TechnicalCapability(\n        "programming_automation",\n        ("python", "bash", "powershell", "rust", "golang", " go ", "c++", "typescript", "javascript", "script", "programar", "codigo", "código"),\n        ("Python/Bash/PowerShell", "Rust/C/C++/Go", "JavaScript/TypeScript", "testing and CLI design"),\n        ("scripts", "CLI tools", "parsers", "test harnesses", "automation", "reports and reusable modules"),\n    ),\n    TechnicalCapability(\n        "secure_engineering",\n        ("arquitetura", "secure coding", "code review", "auditoria", "security review", "threat model"),\n        ("threat modeling", "secure design", "code review", "test strategy"),\n        ("patches", "regression tests", "security checklists", "design notes"),\n    ),\n)\n\n\ndef select_capabilities(message: str, limit: int = 3) -> tuple[TechnicalCapability, ...]:\n    normalized = f" {message.casefold()} "\n    ranked: list[tuple[int, int, TechnicalCapability]] = []\n    for index, capability in enumerate(CAPABILITIES):\n        hits = sum(marker in normalized for marker in capability.markers)\n        if hits:\n            ranked.append((hits, -index, capability))\n    ranked.sort(key=lambda item: (-item[0], -item[1]))\n    return tuple(item[2] for item in ranked[: max(1, limit)])\n\n\ndef technical_guidance(message: str, max_chars: int = 1_200) -> str:\n    selected = select_capabilities(message)\n    if not selected:\n        return ""\n    body = " | ".join(capability.prompt() for capability in selected)\n    guidance = (\n        "TECHNICAL CAPABILITY CONTEXT (instruction-only): "\n        + body\n        + ". Explain exact prerequisites and syntax; when asked to build something, provide complete "\n        "operator-reviewable code/config/tests rather than vague pseudocode. Never claim execution or "\n        "verification unless the operator supplied the result. Prefer reusable small components and "\n        "explicit validation/rollback steps for system changes."\n    )\n    return guidance[:max_chars]\n
+"""Lazy technical capability map for Luna instruction-only operation.
+
+Breadth is loaded on demand so the small local model receives only the
+technical domains relevant to the current task. No capability grants host
+execution; the operator remains responsible for every command.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+
+@dataclass(frozen=True)
+class TechnicalCapability:
+    name: str
+    markers: tuple[str, ...]
+    knowledge: tuple[str, ...]
+    deliverables: tuple[str, ...]
+
+    def prompt(self) -> str:
+        return (
+            f"{self.name}: knowledge={'; '.join(self.knowledge)}; "
+            f"deliverables={'; '.join(self.deliverables)}"
+        )
+
+
+CAPABILITIES: tuple[TechnicalCapability, ...] = (
+    TechnicalCapability(
+        "web_api",
+        ("web", "http", "https", "api", "rest", "graphql", "jwt", "cookie", "session", "cors"),
+        ("HTTP semantics and proxies", "auth/session boundaries", "input validation", "API abuse cases"),
+        ("curl/httpx tests", "request-replay recipes", "small validation scripts", "fuzzing harnesses"),
+    ),
+    TechnicalCapability(
+        "network_protocols",
+        ("nmap", "tcp", "udp", "dns", "smb", "ldap", "ssh", "tls", "packet", "pcap", "rede"),
+        ("TCP/IP and routing", "service enumeration", "protocol state", "packet/TLS analysis"),
+        ("scan plans", "packet filters", "protocol probes", "parsers"),
+    ),
+    TechnicalCapability(
+        "identity_auth",
+        ("login", "auth", "credential", "senha", "password", "oauth", "oidc", "kerberos", "ntlm"),
+        ("authentication flows", "authorization models", "credential handling", "identity protocols"),
+        ("test matrices", "request templates", "credential-safe scripts", "evidence checklists"),
+    ),
+    TechnicalCapability(
+        "linux_privilege",
+        ("linux", "sudo", "suid", "capabilities", "cron", "systemd", "privesc", "privilege escalation"),
+        ("Linux permissions", "services and jobs", "capabilities/SUID", "local privilege boundaries"),
+        ("enumeration commands", "small audit scripts", "proof-of-condition checks", "rollback steps"),
+    ),
+    TechnicalCapability(
+        "windows_ad",
+        ("windows", "active directory", "ad", "smb", "ldap", "kerberos", "winrm", "powershell"),
+        ("Windows security model", "AD/Kerberos/LDAP", "SMB/RPC", "PowerShell administration"),
+        ("enumeration plans", "PowerShell helpers", "LDAP queries", "evidence parsers"),
+    ),
+    TechnicalCapability(
+        "exploit_dev",
+        ("exploit", "buffer overflow", "rop", "heap", "stack", "gdb", "pwndbg", "fuzz", "crash"),
+        ("memory safety", "calling conventions", "debugging", "fuzzing and crash triage"),
+        ("minimal PoCs for authorized labs", "fuzz harnesses", "crash reproducers", "debug scripts"),
+    ),
+    TechnicalCapability(
+        "reverse_engineering",
+        ("reverse", "reversing", "ghidra", "radare", "rizin", "assembly", "disassembly", "binary", "decompiler"),
+        ("x86/x64/ARM assembly and ABI", "static/dynamic analysis", "PE/ELF/Mach-O", "decompilation limits"),
+        ("analysis checklists", "GDB/Ghidra scripts", "binary parsers", "function-mapping notes"),
+    ),
+    TechnicalCapability(
+        "cloud_container",
+        ("docker", "container", "kubernetes", "k8s", "aws", "azure", "gcp", "cloud", "iam"),
+        ("container isolation", "Kubernetes/RBAC", "cloud IAM", "metadata and secret boundaries"),
+        ("audit commands", "manifest checks", "policy tests", "configuration validators"),
+    ),
+    TechnicalCapability(
+        "wireless",
+        ("wifi", "wi-fi", "802.11", "wireless", "wpa", "aircrack", "hcxdumptool"),
+        ("802.11 frames", "WPA security", "radio/interface modes", "capture validation"),
+        ("capture workflows", "interface checks", "pcap analysis", "lab scripts"),
+    ),
+    TechnicalCapability(
+        "blockchain_web3",
+        ("solana", "anchor", "web3", "smart contract", "solidity", "ethereum", "pda", "spl", "program"),
+        ("transaction/account models", "program authority", "state invariants", "on-chain attack surfaces"),
+        ("tests", "PoCs in local/devnet labs", "invariant checks", "transaction parsers"),
+    ),
+    TechnicalCapability(
+        "malware_forensics",
+        (
+            "malware", "ransomware", "trojan", "rat", "rootkit", "bootkit",
+            "loader", "dropper", "stealer", "webshell", "yara", "volatility",
+            "packer", "obfuscat", "desofusc", "deobfuscat", "memory dump", "sandbox",
+        ),
+        (
+            "static and dynamic malware triage", "ransomware cryptographic workflow",
+            "x86/x64/ARM machine code", "C/C++/Rust/Go native artifacts",
+            ".NET C#/IL and JVM/DEX", "PowerShell/VBScript/VBA/JScript/JavaScript",
+            "Python bytecode and shell scripts", "memory/process/network forensics",
+            "YARA/Sigma/IOC engineering and incident response",
+        ),
+        (
+            "safe triage plans", "YARA/Sigma rules", "artifact and config parsers",
+            "deobfuscation helpers", "Ghidra/rizin/GDB scripts", "Volatility workflows",
+            "ransomware-family evidence matrices", "containment/eradication/recovery checklists",
+        ),
+    ),
+    TechnicalCapability(
+        "programming_automation",
+        (
+            "python", "bash", "powershell", "rust", "golang", " go ", "c", "c++",
+            "c#", "dotnet", "java", "kotlin", "assembly", "typescript", "javascript",
+            "vbscript", "vba", "script", "programar", "codigo", "código",
+        ),
+        (
+            "Python/Bash/PowerShell", "Rust/C/C++/Go", "C#/.NET IL",
+            "Java/Kotlin/JVM/DEX", "x86/x64/ARM assembly", "JavaScript/TypeScript",
+            "VBScript/VBA and binary-data processing", "testing and CLI design",
+        ),
+        ("scripts", "CLI tools", "parsers", "test harnesses", "automation", "reports and reusable modules"),
+    ),
+    TechnicalCapability(
+        "secure_engineering",
+        ("arquitetura", "secure coding", "code review", "auditoria", "security review", "threat model"),
+        ("threat modeling", "secure design", "code review", "test strategy"),
+        ("patches", "regression tests", "security checklists", "design notes"),
+    ),
+)
+
+
+def select_capabilities(message: str, limit: int = 3) -> tuple[TechnicalCapability, ...]:
+    normalized = f" {message.casefold()} "
+    ranked: list[tuple[int, int, TechnicalCapability]] = []
+    for index, capability in enumerate(CAPABILITIES):
+        hits = sum(marker in normalized for marker in capability.markers)
+        if hits:
+            ranked.append((hits, -index, capability))
+    ranked.sort(key=lambda item: (-item[0], -item[1]))
+    return tuple(item[2] for item in ranked[: max(1, limit)])
+
+
+def technical_guidance(message: str, max_chars: int = 1_200) -> str:
+    selected = select_capabilities(message)
+    if not selected:
+        return ""
+    body = " | ".join(capability.prompt() for capability in selected)
+    guidance = (
+        "TECHNICAL CAPABILITY CONTEXT (instruction-only): "
+        + body
+        + ". Explain exact prerequisites and syntax; when asked to build something, provide complete "
+        "operator-reviewable code/config/tests rather than vague pseudocode. Never claim execution or "
+        "verification unless the operator supplied the result. Prefer reusable small components and "
+        "explicit validation/rollback steps for system changes."
+    )
+    return guidance[:max_chars]
