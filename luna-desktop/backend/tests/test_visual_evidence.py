@@ -2,6 +2,7 @@ import base64
 import hashlib
 import unittest
 
+from app.luna_engine import LunaEngine
 from app.visual_evidence import (
     build_visual_evidence_manifest,
     visual_evidence_guidance,
@@ -18,6 +19,17 @@ class VisualEvidenceTests(unittest.TestCase):
         self.assertEqual(len(manifest), 1)
         self.assertEqual(manifest[0].byte_length, len(raw))
         self.assertEqual(manifest[0].sha256, hashlib.sha256(raw).hexdigest())
+
+    def test_engine_transports_image_to_openai_compatible_ollama_content(self) -> None:
+        encoded = base64.b64encode(b"screen").decode("ascii")
+        content = LunaEngine._build_vision_content(
+            "Leia esta captura.",
+            [{"data": encoded, "mime": "image/png"}],
+            "ollama",
+        )
+        self.assertEqual(content[0]["type"], "image_url")
+        self.assertTrue(content[0]["image_url"]["url"].startswith("data:image/png;base64,"))
+        self.assertEqual(content[-1], {"type": "text", "text": "Leia esta captura."})
 
     def test_invalid_base64_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
