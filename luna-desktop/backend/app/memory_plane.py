@@ -6,7 +6,8 @@ Design goals:
 - FTS5 lexical retrieval with a deterministic recent fallback;
 - strict separation between durable facts/evidence, hypotheses and episodes;
 - never treat model output as a durable fact automatically;
-- redact common credentials before persistence;
+- preserve exact authorized evidence, including credentials/sensitive artifacts;
+- classify sensitive artifacts instead of redacting them;
 - no semantic response cache and no remote/vector dependency.
 
 The JSON project store remains compatible during migration. ProjectStore dual-writes
@@ -73,29 +74,38 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def redact_memory_text(value: str) -> str:
-    """Redact common credentials before durable persistence."""
-    redacted = re.sub(
-        r"(?im)(Authorization\s*:\s*Bearer\s+)([^\s\r\n]+)",
-        r"\1[REDACTED]",
-        value,
-    )
-    redacted = re.sub(
-        r'(?i)("(?:token|access_token|refresh_token|api_key|apikey|password|secret)"\s*:\s*")[^"]+("?)',
-        r"\1[REDACTED]\2",
-        redacted,
-    )
-    redacted = re.sub(
-        r"(?im)(Set-Cookie\s*:\s*[^=;\s]+)=([^;\r\n]+)",
-        r"\1=[REDACTED]",
-        redacted,
-    )
-    redacted = re.sub(
-        r"(?im)\b(api[_-]?key|secret|password|passwd|private[_-]?key)\s*([:=])\s*([^\s,;]+)",
-        r"\1\2[REDACTED]",
-        redacted,
-    )
-    return redacted
+SENSITIVITY_LEVELS = frozenset({"normal", "sensitive", "credential", "classified"})
+
+
+def classify_sensitive_artifact(value: str) -> str:
+    """Classify exact local evidence without altering the artifact."""
+    text = str(value or "")
+    normalized = text.casefold()
+    if re.search(
+        r"(?im)(authorization\s*:\s*bearer\s+\S+|set-cookie\s*:|"
+        r"api[_-]?key\s*[:=]|password\s*[:=]|passwd\s*[:=]|"
+        r"secret\s*[:=]|private[_-]?key\s*[:=]|"
+        r"-----begin [^-]*private key-----)",
+        text,
+    ):
+        return "credential"
+    if any(
+        marker in normalized
+        for marker in (
+            "classified", "confidential", "restricted", "sigil",
+            "investigação classificada", "investigacao classificada",
+        )
+    ):
+        return "classified"
+    if any(
+        marker in normalized
+        for marker in (
+            "credential", "credencial", "token", "cookie", "session id",
+            "session_id", "access_token", "refresh_token",
+        )
+    ):
+        return "sensitive"
+    return "normal"
 
 
 @dataclass(frozen=True)
@@ -112,6 +122,9 @@ class MemoryRecord:
     valid_until: Optional[str]
     supersedes: Optional[int]
     status: str
+    sensitivity: str
+    content_sha256: str
+    content_bytes: int
     secret_redacted: bool
     metadata: dict[str, Any]
 
@@ -129,6 +142,9 @@ class MemoryRecord:
             "valid_until": self.valid_until,
             "supersedes": self.supersedes,
             "status": self.status,
+            "sensitivity": self.sensitivity,
+            "content_sha256": self.content_sha256,
+            "content_bytes": self.content_bytes,
             "secret_redacted": self.secret_redacted,
             "metadata": dict(self.metadata),
         }
@@ -169,6 +185,9 @@ class MemoryPlane:
                     valid_until TEXT,
                     supersedes INTEGER,
                     status TEXT NOT NULL DEFAULT 'active',
+                    sensitivity TEXT NOT NULL DEFAULT 'normal',
+                    content_sha256 TEXT NOT NULL DEFAULT '',
+                    content_bytes INTEGER NOT NULL DEFAULT 0,
                     secret_redacted INTEGER NOT NULL DEFAULT 0,
                     metadata_json TEXT NOT NULL DEFAULT '{}',
                     UNIQUE(project_id, source_hash)
@@ -182,6 +201,23 @@ class MemoryPlane:
                     ON memory_records(project_id, source_hash);
                 """
             )
+            columns = {
+                str(row["name"])
+                for row in connection.execute("PRAGMA table_info(memory_records)").fetchall()
+            }
+            if "sensitivity" not in columns:
+                connection.execute(
+                    "ALTER TABLE memory_records ADD COLUMN sensitivity TEXT NOT NULL DEFAULT 'normal'"
+                )
+            if "content_sha256" not in columns:
+                connection.execute(
+                    "ALTER TABLE memory_records ADD COLUMN content_sha256 TEXT NOT NULL DEFAULT ''"
+                )
+            if "content_bytes" not in columns:
+                connection.execute(
+                    "ALTER TABLE memory_records ADD COLUMN content_bytes INTEGER NOT NULL DEFAULT 0"
+                )
+
             try:
                 connection.execute(
                     """
@@ -238,6 +274,9 @@ class MemoryPlane:
             valid_until=str(row["valid_until"]) if row["valid_until"] is not None else None,
             supersedes=int(row["supersedes"]) if row["supersedes"] is not None else None,
             status=str(row["status"]),
+            sensitivity=str(row["sensitivity"] or "normal"),
+            content_sha256=str(row["content_sha256"] or hashlib.sha256(str(row["content"]).encode("utf-8")).hexdigest()),
+            content_bytes=int(row["content_bytes"] or len(str(row["content"]).encode("utf-8"))),
             secret_redacted=bool(row["secret_redacted"]),
             metadata=metadata,
         )
@@ -269,6 +308,7 @@ class MemoryPlane:
         supersedes: Optional[int] = None,
         metadata: Optional[dict[str, Any]] = None,
         dedupe_key: Optional[str] = None,
+        sensitivity: Optional[str] = None,
     ) -> MemoryRecord:
         project_id = self._validate_project_id(project_id)
         kind = self._validate_kind(kind)
@@ -288,18 +328,22 @@ class MemoryPlane:
         if supersedes is not None and (isinstance(supersedes, bool) or int(supersedes) < 1):
             raise ValueError("supersedes must be a positive record id")
 
-        safe_content = redact_memory_text(content.strip())
-        safe_provenance = redact_memory_text(provenance)
-        safe_source = redact_memory_text(source)
-        secret_redacted = safe_content != content.strip() or safe_provenance != provenance or safe_source != source
+        exact_content = content.strip()
+        exact_provenance = provenance
+        exact_source = source
+        sensitivity_value = str(sensitivity or classify_sensitive_artifact(exact_content)).casefold()
+        if sensitivity_value not in SENSITIVITY_LEVELS:
+            raise ValueError("invalid sensitivity")
+        content_bytes = len(exact_content.encode("utf-8"))
+        content_sha256 = hashlib.sha256(exact_content.encode("utf-8")).hexdigest()
         timestamp = str(observed_at or _now())
         metadata_obj = dict(metadata or {})
         metadata_json = json.dumps(metadata_obj, ensure_ascii=False, sort_keys=True)
         source_hash = self._source_hash(
             project_id=project_id,
             kind=kind,
-            source=safe_source,
-            content=safe_content,
+            source=exact_source,
+            content=exact_content,
             dedupe_key=dedupe_key,
         )
 
@@ -324,22 +368,25 @@ class MemoryPlane:
                 INSERT INTO memory_records (
                     project_id, kind, content, provenance, source, source_hash,
                     observed_at, evidence_level, valid_until, supersedes, status,
-                    secret_redacted, metadata_json
+                    sensitivity, content_sha256, content_bytes, secret_redacted, metadata_json
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)
                 """,
                 (
                     project_id,
                     kind,
-                    safe_content,
-                    safe_provenance,
-                    safe_source,
+                    exact_content,
+                    exact_provenance,
+                    exact_source,
                     source_hash,
                     timestamp,
                     evidence_level,
                     str(valid_until) if valid_until is not None else None,
                     int(supersedes) if supersedes is not None else None,
-                    1 if secret_redacted else 0,
+                    sensitivity_value,
+                    content_sha256,
+                    content_bytes,
+                    0,
                     metadata_json,
                 ),
             )
@@ -355,7 +402,7 @@ class MemoryPlane:
                 try:
                     connection.execute(
                         "INSERT INTO memory_fts(rowid, content, provenance, source) VALUES (?, ?, ?, ?)",
-                        (record_id, safe_content, safe_provenance, safe_source),
+                        (record_id, exact_content, exact_provenance, exact_source),
                     )
                 except sqlite3.OperationalError:
                     self.fts5_enabled = False
@@ -533,17 +580,17 @@ class MemoryPlane:
             lines.append("SEMANTIC DURABLE FACTS:")
             for item in facts:
                 lines.append(
-                    f"- [{item.kind}|{item.evidence_level}|{item.provenance}] {item.content}"
+                    f"- [{item.kind}|{item.evidence_level}|{item.sensitivity}|{item.provenance}] {item.content}"
                 )
         if hypotheses:
             lines.append("HYPOTHESES — NOT FACTS:")
             for item in hypotheses:
-                lines.append(f"- [{item.provenance}] {item.content}")
+                lines.append(f"- [{item.sensitivity}|{item.provenance}] {item.content}")
         if episodes:
             lines.append("EPISODIC RECENT/RELEVANT:")
             for item in reversed(episodes):
                 lines.append(
-                    f"- [{item.observed_at[:25]}|{item.evidence_level}|{item.source}] "
+                    f"- [{item.observed_at[:25]}|{item.evidence_level}|{item.sensitivity}|{item.source}] "
                     f"{item.content[:360]}"
                 )
         return "\n".join(lines)[:max_chars]
@@ -589,4 +636,5 @@ class MemoryPlane:
             "fts5_enabled": self.fts5_enabled,
             "semantic_response_cache_enabled": False,
             "vector_backend_enabled": False,
+            "exact_sensitive_artifact_retention": True,
         }
