@@ -34,6 +34,7 @@ _ANALYZE_MARKERS = (
     "o que isso prova", "não prova", "nao prova", "e agora", "próximo teste",
     "proximo teste", "inferência", "inferencia", "hipótese", "hipotese",
     "evidência", "evidencia", "http/", "authorization", "content-type",
+    "otimize", "otimizar", "prioriz", "maior valor", "hydra", "brute force", "credencial",
 )
 _DEEP_MARKERS = (
     "cadeia de vulnerabilidades", "exploit chain", "threat model", "modelo de ameaça",
@@ -47,7 +48,8 @@ _RETEST_MARKERS = (
 )
 _MENTOR_MARKERS = (
     "kali", "linux", "devtools", "network", "initiator", "header", "payload",
-    "response", "curl", "nmap", "burp", "chrome", "firefox", "ctf", "autoriz",
+    "response", "curl", "nmap", "hydra", "ffuf", "gobuster", "sqlmap", "nuclei",
+    "burp", "chrome", "firefox", "ctf", "autoriz",
     "evidência", "evidencia", "http/", "json", "endpoint", "api/", "fato:",
 )
 
