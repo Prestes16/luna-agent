@@ -11,6 +11,7 @@ import json
 from typing import Any
 
 from .command_ast import assess_nmap_strategy
+from .command_execution import assess_command_execution
 from .command_policy import parse_effective_command
 from .kali_tool_readiness import assess_tool_readiness
 from .network_privacy import privacy_intent, score_privacy_routes
@@ -143,6 +144,22 @@ def install_response_attestation(engine_cls: type) -> None:
                 reasons = event.get("validation_reasons") or ()
                 score = score_response_quality(message, visible_text, reasons)
                 attestations = command_attestations(message, visible_text)
+                execution_attestations = [
+                    assess_command_execution(
+                        command,
+                        operator_requested_execution=any(
+                            marker in message.casefold()
+                            for marker in (
+                                "execute", "executar", "rode", "rodar", "aplique",
+                                "configure", "configurar", "instale", "inicie",
+                            )
+                        ),
+                        tool_execution_enabled=bool(
+                            self.config.get("tool_execution_enabled", False)
+                        ),
+                    ).to_dict()
+                    for command in extract_commands(visible_text)
+                ]
                 strategy_attestations = _strategy_attestations(self, sid, message, visible_text)
                 readiness = assess_tool_readiness(message, scenario=self.scenario_contexts.get(sid))
                 privacy_attestation = _privacy_attestation(self, sid, message)
@@ -167,6 +184,14 @@ def install_response_attestation(engine_cls: type) -> None:
                         if safe_attestations else None
                     ),
                     "command_attestations": safe_attestations,
+                    "execution_attestations": [
+                        {
+                            key: value
+                            for key, value in item.items()
+                            if key != "command"
+                        }
+                        for item in execution_attestations
+                    ],
                     "strategy_attestations": strategy_attestations,
                     "privacy_attestation": privacy_attestation,
                     "tool_readiness": {
@@ -186,6 +211,11 @@ def install_response_attestation(engine_cls: type) -> None:
                         "quality_band": _quality_band(score.total),
                         "target_verified": event.get("target_verified"),
                         "operational_transform_applied": bool(mutations),
+                        "execution_ready": (
+                            all(item.get("execution_ready", False) for item in execution_attestations)
+                            if execution_attestations
+                            else None
+                        ),
                         "privacy_profile": (
                             privacy_attestation.get("top_profile")
                             if isinstance(privacy_attestation, dict)
