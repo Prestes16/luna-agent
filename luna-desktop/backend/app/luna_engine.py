@@ -24,6 +24,7 @@ from .decision_intelligence import decision_guidance
 from .host_safety import host_safety_guidance
 from .kali_tool_guidance import guidance_for_context
 from .malware_analysis import malware_guidance, malware_tooling_summary
+from .quantitative_reasoning import quantitative_guidance
 from .technical_capabilities import technical_guidance
 from .threat_response import threat_response_guidance
 from .reasoning_pipeline import (
@@ -219,6 +220,10 @@ def _build_system_prompt(
             "evidência estrutural antes de inferir mecanismo de falha."
         ),
         (
+            "Quantitativo: representação -> unidades/base units -> limites -> ordem/arredondamento "
+            "-> invariante -> evidência; não trate aproximação como resultado exato."
+        ),
+        (
             "Prioridade: CURRENT USER MESSAGE > evidence delta > ScenarioContext > "
             "project context > memory summary > mensagens antigas."
         ),
@@ -254,7 +259,7 @@ def _build_system_prompt(
     ]
 
     if route_instruction:
-        lines.extend(("", route_instruction[:1_600]))
+        lines.extend(("", route_instruction[:2_000]))
 
     if evidence_delta:
         lines.extend(("", evidence_delta[:800]))
@@ -1410,6 +1415,13 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         )
         if construction_context:
             route_instruction += " " + construction_context
+
+        quantitative_context = quantitative_guidance(
+            f"{message}\n{scenario.to_prompt_block(650)}",
+            max_chars=700,
+        )
+        if quantitative_context:
+            route_instruction += " " + quantitative_context
 
         # Core reasoning guidance comes before tool/capability detail so it
         # survives the compact route-instruction budget used by the 4B model.
