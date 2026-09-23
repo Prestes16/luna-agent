@@ -187,7 +187,7 @@ def technical_guidance(message: str, max_chars: int = 1_200) -> str:
         return ""
     body = " | ".join(capability.prompt() for capability in selected)
     guidance = (
-        "TECHNICAL CAPABILITY CONTEXT (instruction-only supervised-copilot baseline): "
+        "TECHNICAL CAPABILITY CONTEXT (supervised-copilot baseline; model tool loop locked, separate operator-gated executor): "
         + body
         + ". Explain exact prerequisites and syntax; when asked to build something, provide complete "
         "operator-reviewable code/config/tests rather than vague pseudocode. For exploit validation, "
