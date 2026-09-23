@@ -89,14 +89,32 @@ _SELECTION_MARKERS = (
 )
 
 
+def _contains_tool_name(value: str, tool: str) -> bool:
+    """Match a CLI name as a token while allowing sentence punctuation after it."""
+    haystack = value.casefold()
+    needle = tool.casefold()
+    start = 0
+    while True:
+        index = haystack.find(needle, start)
+        if index < 0:
+            return False
+        before = haystack[index - 1] if index > 0 else ""
+        after_index = index + len(needle)
+        after = haystack[after_index] if after_index < len(haystack) else ""
+        before_blocked = bool(before) and (before.isalnum() or before in "_.-")
+        after_blocked = bool(after) and (after.isalnum() or after in "_-")
+        if not before_blocked and not after_blocked:
+            return True
+        start = index + 1
+
+
 def requested_kali_tool(message: str) -> str | None:
     normalized = message.casefold()
     known_tools = set(_TOOL_GUIDANCE) | set(KALI_TOOL_DICTIONARY)
     for tool in sorted(known_tools, key=len, reverse=True):
-        if re.search(rf"(?<![\w.-]){re.escape(tool)}(?![\w.-])", normalized):
+        if _contains_tool_name(normalized, tool):
             return tool
     return None
-
 
 def _history_text(history: Sequence[Mapping[str, Any]]) -> str:
     parts: list[str] = []
