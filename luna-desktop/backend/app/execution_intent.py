@@ -35,6 +35,25 @@ ON_DEMAND = "ON_DEMAND"
 APPROVAL_REQUIRED = "APPROVAL_REQUIRED"
 BLOCKED = "BLOCKED"
 
+_LOCAL_OBSERVE_TOOLS = frozenset(
+    {
+        "cat", "head", "tail", "grep", "rg", "find", "ls", "pwd", "which",
+        "whereis", "command", "type", "id", "whoami", "uname", "hostname",
+        "ip", "ss", "netstat", "route", "resolvectl", "systemctl", "journalctl",
+        "ps", "pgrep", "file", "sha256sum", "sha512sum", "md5sum", "strings",
+        "xxd", "readelf", "objdump", "yara", "capa", "floss", "rizin", "radare2",
+        "binwalk", "volatility3", "vol", "olevba", "apktool", "jadx", "wg",
+        "apt", "apt-get",
+    }
+)
+
+_INTERPRETER_OR_SHELL_TOOLS = frozenset(
+    {
+        "sh", "bash", "zsh", "dash", "fish", "python", "python3", "perl", "ruby",
+        "php", "node", "pwsh", "powershell", "cmd", "wscript", "cscript",
+    }
+)
+
 _ACTIVE_PROBE_TOOLS = frozenset(
     {
         "nmap", "curl", "wget", "httpx", "whatweb", "nikto", "ffuf", "gobuster",
@@ -47,6 +66,7 @@ _ACTIVE_PROBE_TOOLS = frozenset(
 _HIGH_IMPACT_TOOLS = frozenset(
     {
         "msfconsole", "msfvenom", "chisel", "socat",
+        *_INTERPRETER_OR_SHELL_TOOLS,
     }
 )
 
@@ -256,6 +276,15 @@ def build_execution_intent(
     active_probe = tool in _ACTIVE_PROBE_TOOLS
     semantic_mutation = _semantic_remote_mutation(command)
     high_impact_semantic = _is_high_impact_command(command, tool)
+    known_observe = tool in _LOCAL_OBSERVE_TOOLS
+    known_semantics = bool(
+        known_observe
+        or active_probe
+        or high_impact_semantic
+        or lifecycle.mutates_state
+        or lifecycle.persistent_change
+        or lifecycle.destructive
+    )
     normalized_scope_target = _normalize_scope_target(scope_target)
     target_required = bool(active_probe or semantic_mutation or target)
     if target_required:
@@ -268,7 +297,9 @@ def build_execution_intent(
         # not to a remote network target.
         target_bound = True
 
-    if lifecycle.destructive or host.host_impact in {"blocked", "critical"} or high_impact_semantic:
+    if not known_semantics:
+        level = L3_HIGH_IMPACT
+    elif lifecycle.destructive or host.host_impact in {"blocked", "critical"} or high_impact_semantic:
         level = L3_HIGH_IMPACT
     elif lifecycle.mutates_state or lifecycle.persistent_change or semantic_mutation:
         level = L2_MUTATE
@@ -277,7 +308,9 @@ def build_execution_intent(
     else:
         level = L0_OBSERVE
 
-    if host.host_impact == "blocked":
+    if not known_semantics:
+        authority = BLOCKED
+    elif host.host_impact == "blocked":
         authority = BLOCKED
     elif (
         operator_requested_execution
@@ -337,6 +370,8 @@ def build_execution_intent(
             f"authority={authority}",
         )
     )
+    if not known_semantics:
+        reasons.append("unknown_tool_semantics_fail_closed")
     if active_probe:
         reasons.append("active_probe")
     if semantic_mutation:
