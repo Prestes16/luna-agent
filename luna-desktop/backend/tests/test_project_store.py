@@ -115,6 +115,34 @@ class ProjectStoreTests(unittest.TestCase):
         self.assertIn("RCE confirmada", context)
         self.assertIn("TEST_TOKEN_123", context)
 
+    def test_project_store_persists_report_grade_evidence(self) -> None:
+        self.store.create_project({
+            "name": "Evidence",
+            "project_type": "bounty",
+            "color": "orange",
+        })
+        raw = b"HTTP/1.1 200 OK\r\nX-Proof: yes\r\n"
+        record = self.store.add_evidence_artifact(
+            1,
+            data=raw,
+            kind="http-response",
+            media_type="message/http",
+            source="curl",
+            original_name="response.txt",
+            sensitivity="sensitive",
+        )
+        self.assertEqual(record["byte_length"], len(raw))
+        self.assertTrue(self.store.verify_evidence_artifact(1, record["id"]))
+
+        listed = self.store.list_evidence_artifacts(1)
+        self.assertEqual(len(listed), 1)
+        metadata, restored = self.store.read_evidence_artifact(1, record["id"])
+        self.assertEqual(metadata["sha256"], record["sha256"])
+        self.assertEqual(restored, raw)
+
+        self.store.delete_project(1)
+        self.assertEqual(self.store.evidence_vault.stats(1)["records"], 0)
+
     def test_compression_preserves_recent_messages(self) -> None:
         self.store.create_project({"name": "Contexto", "project_type": "research", "color": "green"})
         for index in range(24):
