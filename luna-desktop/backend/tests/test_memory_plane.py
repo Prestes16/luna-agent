@@ -13,7 +13,7 @@ class MemoryPlaneTests(unittest.TestCase):
     def tearDown(self) -> None:
         self.temp_dir.cleanup()
 
-    def test_typed_records_redact_secrets_and_preserve_provenance(self) -> None:
+    def test_typed_records_preserve_and_classify_sensitive_evidence(self) -> None:
         record = self.plane.add_record(
             project_id=1,
             kind="evidence",
@@ -24,9 +24,11 @@ class MemoryPlaneTests(unittest.TestCase):
         )
         self.assertEqual(record.kind, "evidence")
         self.assertEqual(record.provenance, "operator:terminal")
-        self.assertTrue(record.secret_redacted)
-        self.assertNotIn("super-secret-token", record.content)
-        self.assertIn("[REDACTED]", record.content)
+        self.assertFalse(record.secret_redacted)
+        self.assertEqual(record.sensitivity, "credential")
+        self.assertIn("super-secret-token", record.content)
+        self.assertEqual(record.content_bytes, len(record.content.encode("utf-8")))
+        self.assertEqual(len(record.content_sha256), 64)
 
     def test_model_output_stays_episode_not_durable_fact(self) -> None:
         self.plane.add_record(
@@ -115,6 +117,7 @@ class MemoryPlaneTests(unittest.TestCase):
         status = self.plane.stats()
         self.assertFalse(status["semantic_response_cache_enabled"])
         self.assertFalse(status["vector_backend_enabled"])
+        self.assertTrue(status["exact_sensitive_artifact_retention"])
 
 
 if __name__ == "__main__":
