@@ -91,6 +91,14 @@ class HostSafetyPolicyTests(unittest.TestCase):
         self.assertTrue(item.system_tree_change)
         self.assertFalse(item.safe_to_recommend_now)
 
+    def test_windows_system_tree_normal_backslashes_are_blocked(self) -> None:
+        item = assess_host_safety(
+            "Remove-Item -Recurse C:\\Windows\\System32",
+            context="Windows host",
+        )
+        self.assertTrue(item.system_tree_change)
+        self.assertFalse(item.safe_to_recommend_now)
+
     def test_wireguard_up_is_connectivity_impacting(self) -> None:
         item = assess_host_safety(
             "sudo wg-quick up wg0",
