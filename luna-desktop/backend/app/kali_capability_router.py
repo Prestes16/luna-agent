@@ -156,7 +156,8 @@ def capability_guidance(
     return (
         "KALI CAPABILITY ROUTER (candidatos, não ações automáticas): "
         + "; ".join(candidate.to_prompt() for candidate in candidates)
-        + ". Para pedidos de recomendação, compare papéis técnicos antes de escolher: "
+        + ". Escolha somente ferramentas cujos pré-requisitos factuais estejam satisfeitos. "
+        "Para pedidos de recomendação, compare papéis técnicos antes de escolher: "
         "proxy de interceptação HTTP(S) != captura de pacotes. Restrições de entrega de "
         "turnos anteriores (por exemplo 'apenas um comando') não persistem se o turno atual "
         "não as repetir. Não emita comando quando o operador pediu apenas orientação."
