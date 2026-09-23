@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from typing import Sequence, Mapping, Any
 
-from .kali_tool_dictionary import get_tool_spec
+from .kali_tool_dictionary import KALI_TOOL_DICTIONARY, get_tool_spec
 from .kali_tool_readiness import assess_tool_readiness
 from .offensive_strategy import nmap_context_guidance
 
@@ -79,7 +79,8 @@ _FOLLOWUP_MARKERS = (
 
 def requested_kali_tool(message: str) -> str | None:
     normalized = message.casefold()
-    for tool in sorted(_TOOL_GUIDANCE, key=len, reverse=True):
+    known_tools = set(_TOOL_GUIDANCE) | set(KALI_TOOL_DICTIONARY)
+    for tool in sorted(known_tools, key=len, reverse=True):
         if re.search(rf"(?<![\w.-]){re.escape(tool)}(?![\w.-])", normalized):
             return tool
     return None
@@ -103,8 +104,9 @@ def guidance_for_context(message: str, *, scenario=None, history: Sequence[Mappi
     if not tool:
         return ""
 
-    chunks = [f"TOOL CONTRACT [{tool}]: {_TOOL_GUIDANCE[tool]}"]
     spec = get_tool_spec(tool)
+    base_guidance = _TOOL_GUIDANCE.get(tool) or (spec.prompt() if spec else "")
+    chunks = [f"TOOL CONTRACT [{tool}]: {base_guidance}"]
     if spec:
         chunks.append("LINUX TOOL DICTIONARY: " + spec.prompt())
 
