@@ -274,6 +274,121 @@ def quantitative_fact_sheet(context: str, max_chars: int = 900) -> str:
     )
     return facts[:max_chars]
 
+def quantitative_claim_violations(context: str, response: str) -> tuple[str, ...]:
+    """Deterministic V17/V18 checks for strong quantitative/physical output claims."""
+    reasons: list[str] = []
+    normalized_context = context.casefold()
+    normalized_response = response.casefold()
+
+    match = _RUST_U64_MUL_DIV_RE.search(context)
+    if match:
+        src = match.group("src")
+        type_patterns = (
+            rf"\b{re.escape(src)}\b.{{0,48}}\bu64\b",
+            rf"\bu64\b.{{0,48}}\b{re.escape(src)}\b",
+        )
+        if any(
+            re.search(pattern, context, flags=re.IGNORECASE | re.DOTALL)
+            for pattern in type_patterns
+        ):
+            mul = int(match.group("mul").replace("_", ""))
+            div = int(match.group("div").replace("_", ""))
+            if mul > 0 and div > 0:
+                maximum = (1 << 64) - 1
+                threshold = max_unsigned_input_before_mul_overflow(64, mul)
+                first_overflow = threshold + 1
+                gcd = math.gcd(mul, div)
+                reduced = (mul // gcd, div // gcd)
+                response_digits = response.replace("_", "").replace(",", "")
+
+                if re.search(r"(?i)\bu64\s*::\s*max\b", response):
+                    if str(maximum) not in response_digits:
+                        reasons.append("exact_arithmetic_u64_max_mismatch")
+
+                threshold_windows = re.findall(
+                    r"(?is)(?:threshold|limite(?:\s+máximo|\s+maximo)?(?:\s+seguro)?|"
+                    r"primeiro\s+(?:valor\s+que\s+)?(?:overflow|estoura)).{0,160}",
+                    response,
+                )
+                for window in threshold_windows:
+                    numbers = {
+                        int(raw.replace("_", "").replace(",", ""))
+                        for raw in re.findall(r"\b\d[\d_,]{8,}\b", window)
+                    }
+                    if numbers and not ({threshold, first_overflow} & numbers):
+                        reasons.append("exact_arithmetic_u64_threshold_mismatch")
+                        break
+
+                ratio_claim = re.search(
+                    r"(?is)(?:reduz(?:ida|ido|ir)?|razão|razao|ratio).{0,80}"
+                    r"(\d[\d_]*)\s*/\s*(\d[\d_]*)",
+                    response,
+                )
+                if ratio_claim:
+                    claimed = (
+                        int(ratio_claim.group(1).replace("_", "")),
+                        int(ratio_claim.group(2).replace("_", "")),
+                    )
+                    if claimed != reduced:
+                        reasons.append("exact_arithmetic_ratio_mismatch")
+
+                if (
+                    "i128" not in normalized_context
+                    and re.search(
+                        r"(?is)(?:domínio|dominio|domain|tipo|opera(?:ção|cao)?|"
+                        r"overflow).{0,60}\bi128\b|\bi128\b.{0,60}"
+                        r"(?:domínio|dominio|domain|tipo|overflow)",
+                        response,
+                    )
+                ):
+                    reasons.append("unobserved_numeric_domain_i128")
+
+                positive_saturation_claim = re.search(
+                    r"(?i)\b(?:satura|saturating|saturates)\b", response
+                )
+                saturation_negated = re.search(
+                    r"(?i)(?:não|nao|does\s+not|is\s+not).{0,35}"
+                    r"(?:satura|saturating|saturates)",
+                    response,
+                )
+                if (
+                    positive_saturation_claim
+                    and not saturation_negated
+                    and "saturating_" not in normalized_context
+                ):
+                    reasons.append("unobserved_saturating_semantics")
+
+    profile = select_quantitative_profile(context)
+    if profile and profile.name in {"network_signal_physics", "hardware_side_channel"}:
+        strong_claim = re.search(
+            r"(?i)\b(?:prova|proves?|confirma|confirms?|garante|guarantees?|"
+            r"causa|causes?|exploitável|exploitavel|vazamento|leak(?:age)?)\b",
+            response,
+        )
+        if strong_claim:
+            mechanism_named = any(
+                marker in normalized_response
+                for marker in (
+                    "mecanismo", "mechanism", "acoplamento", "coupling",
+                    "propagação", "propagacao", "propagation", "leakage model",
+                )
+            )
+            measurement_named = any(
+                marker in normalized_response
+                for marker in (
+                    "medição", "medicao", "measurement", "snr", "ruído", "ruido",
+                    "noise", "resolução", "resolucao", "resolution", "amostra",
+                    "sample", "intervalo", "bound", "limite",
+                )
+            )
+            if not mechanism_named:
+                reasons.append("physical_claim_missing_mechanism")
+            if not measurement_named:
+                reasons.append("physical_claim_missing_measurement_bound")
+
+    return tuple(dict.fromkeys(reasons))
+
+
 def quantitative_guidance(context: str, max_chars: int = 850) -> str:
     profile = select_quantitative_profile(context)
     if not profile:
