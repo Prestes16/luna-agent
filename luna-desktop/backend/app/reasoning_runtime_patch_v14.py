@@ -91,6 +91,8 @@ def _host_safety_reasons(message: str, response: str, scenario: Any) -> list[str
             reasons.append("host_package_change_preflight_required")
         if assessment.system_tree_change:
             reasons.append("host_system_tree_recursive_mutation")
+        if "destructive_target_not_confirmed" in assessment.reasons:
+            reasons.append("host_destructive_target_not_confirmed")
         if assessment.critical_storage and not assessment.safe_to_recommend_now:
             reasons.append("host_critical_storage_preflight_required")
         if assessment.boot_change and not assessment.safe_to_recommend_now:
@@ -166,6 +168,11 @@ def build_replan_instruction(validation, scenario_prompt: str, current_message: 
         additions.append(
             "não proponha rm/chmod/chown recursivo sobre árvore de sistema; reduza o escopo ao "
             "artefato factual e use alternativa reversível"
+        )
+    if "host_destructive_target_not_confirmed" in reasons:
+        additions.append(
+            "comando destrutivo só pode citar alvo/processo/dispositivo que o operador informou "
+            "literalmente; faça listagem/stat/process discovery primeiro e não invente o alvo"
         )
     if "host_critical_storage_preflight_required" in reasons:
         additions.append(
