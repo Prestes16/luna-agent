@@ -80,7 +80,22 @@ PROFILES: tuple[PrivacyRouteProfile, ...] = (
 
 
 def _has_word(value: str, word: str) -> bool:
-    return bool(re.search(rf"(?<!\\w){re.escape(word)}(?!\\w)", value, re.IGNORECASE))
+    """Unicode-safe token boundary check without regex lookaround ambiguity."""
+    haystack = value.casefold()
+    needle = word.casefold()
+    start = 0
+    while True:
+        index = haystack.find(needle, start)
+        if index < 0:
+            return False
+        before = haystack[index - 1] if index > 0 else ""
+        after_index = index + len(needle)
+        after = haystack[after_index] if after_index < len(haystack) else ""
+        before_is_word = bool(before) and (before.isalnum() or before == "_")
+        after_is_word = bool(after) and (after.isalnum() or after == "_")
+        if not before_is_word and not after_is_word:
+            return True
+        start = index + 1
 
 
 def privacy_intent(value: str) -> bool:
