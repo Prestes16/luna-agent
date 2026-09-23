@@ -60,6 +60,30 @@ class HostSafetyPolicyTests(unittest.TestCase):
         self.assertTrue(item.rollback_required)
         self.assertEqual(item.host_impact, "high")
 
+    def test_windows_defender_disable_requires_protected_lab(self) -> None:
+        item = assess_host_safety(
+            "Set-MpPreference -DisableRealtimeMonitoring $true",
+            context="Estou no Windows host e quero desativar Defender.",
+        )
+        self.assertTrue(item.security_control_reduction)
+        self.assertFalse(item.safe_to_recommend_now)
+
+    def test_windows_system_tree_recursive_delete_is_blocked(self) -> None:
+        item = assess_host_safety(
+            r"Remove-Item -Recurse C:\\Windows\\System32",
+            context="Windows host",
+        )
+        self.assertTrue(item.system_tree_change)
+        self.assertFalse(item.safe_to_recommend_now)
+
+    def test_wireguard_up_is_connectivity_impacting(self) -> None:
+        item = assess_host_safety(
+            "sudo wg-quick up wg0",
+            context="Estou no Kali Linux e quero configurar VPN.",
+        )
+        self.assertTrue(item.connectivity_change)
+        self.assertTrue(item.network_control_change)
+        self.assertTrue(item.rollback_required)
     def test_boot_change_requires_protected_environment(self) -> None:
         item = assess_host_safety(
             "sudo grub-install /dev/sda",
