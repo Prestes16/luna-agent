@@ -249,8 +249,8 @@ class ProjectStore:
         role = payload.get("role")
         if role not in MESSAGE_ROLES:
             raise ProjectValidationError("role inválido")
-        content = self._validate_text(payload.get("content"), "content", 50_000, required=True)
-        content = redact_memory_text(content)
+        raw_content = self._validate_text(payload.get("content"), "content", 50_000, required=True)
+        content = redact_memory_text(raw_content)
         model = self._validate_text(payload.get("model", ""), "model", 100)
         with self._lock:
             data = self._load_index()
@@ -278,7 +278,7 @@ class ProjectStore:
             self.memory_plane.add_record(
                 project_id=project_id,
                 kind="episode",
-                content=content,
+                content=raw_content,
                 provenance="project_store:messages.json",
                 source=f"conversation:{role}",
                 evidence_level="model_output" if role == "luna" else "episode",
@@ -298,8 +298,8 @@ class ProjectStore:
             return facts
 
     def add_fact(self, project_id: int, value: Any) -> list[str]:
-        fact = self._validate_text(value, "fact", 1_000, required=True)
-        fact = redact_memory_text(fact)
+        raw_fact = self._validate_text(value, "fact", 1_000, required=True)
+        fact = redact_memory_text(raw_fact)
         with self._lock:
             facts = self.list_facts(project_id)
             if fact.casefold() not in {existing.casefold() for existing in facts}:
@@ -310,7 +310,7 @@ class ProjectStore:
             self.memory_plane.add_record(
                 project_id=project_id,
                 kind="operator_fact",
-                content=fact,
+                content=raw_fact,
                 provenance="project_store:facts.json",
                 source="project_fact",
                 evidence_level="declared",
