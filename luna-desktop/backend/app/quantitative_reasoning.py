@@ -8,6 +8,7 @@ bounds, rounding, conservation and measurable physical mechanisms.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Iterable
@@ -229,6 +230,49 @@ def shannon_capacity_bps(bandwidth_hz: float, snr_linear: float) -> float:
         raise ValueError("bandwidth and SNR must be non-negative")
     return bandwidth_hz * math.log2(1.0 + snr_linear)
 
+
+_RUST_U64_MUL_DIV_RE = re.compile(
+    r"(?is)\blet\s+(?P<dest>[A-Za-z_]\w*)\s*=\s*"
+    r"(?P<src>[A-Za-z_]\w*)\s*\*\s*(?P<mul>\d[\d_]*)\s*/\s*(?P<div>\d[\d_]*)\s*;?"
+)
+
+
+def quantitative_fact_sheet(context: str, max_chars: int = 900) -> str:
+    """Derive compact deterministic facts from simple observed integer expressions."""
+    match = _RUST_U64_MUL_DIV_RE.search(context)
+    if not match:
+        return ""
+    src = match.group("src")
+    type_patterns = (
+        rf"\b{re.escape(src)}\b.{{0,48}}\bu64\b",
+        rf"\bu64\b.{{0,48}}\b{re.escape(src)}\b",
+    )
+    if not any(re.search(pattern, context, flags=re.IGNORECASE | re.DOTALL) for pattern in type_patterns):
+        return ""
+
+    mul = int(match.group("mul").replace("_", ""))
+    div = int(match.group("div").replace("_", ""))
+    if mul <= 0 or div <= 0:
+        return ""
+
+    maximum = (1 << 64) - 1
+    threshold = max_unsigned_input_before_mul_overflow(64, mul)
+    gcd = math.gcd(mul, div)
+    reduced_mul = mul // gcd
+    reduced_div = div // gcd
+    facts = (
+        f"DETERMINISTIC NUMERIC FACTS: observed `{match.group(0).strip()}` and {src}:u64. "
+        f"With no observed cast/helper, Rust infers the unsuffixed integer literals in this expression "
+        f"to the u64 operation domain; the source multiplication `{src}*{mul}` is therefore u64. "
+        f"u64::MAX={maximum}; multiplication is mathematically representable iff "
+        f"{src}<={threshold}; {threshold + 1} is the first overflowing input for factor {mul}. "
+        f"The exact ratio {mul}/{div} reduces to {reduced_mul}/{reduced_div}. After a non-overflowing "
+        f"multiply, u64 division floors; discarded fraction is (({src}*{mul})%{div})/{div} of one "
+        f"base unit, so per-evaluation floor loss is <1 base unit. UNKNOWN from the snippet: whether "
+        f"{src} can reach that threshold, whether an explicit cast/helper changes the operation, and "
+        "the deployed overflow-check behavior. Do not substitute i64/i128 bounds without observed casts."
+    )
+    return facts[:max_chars]
 
 def quantitative_guidance(context: str, max_chars: int = 850) -> str:
     profile = select_quantitative_profile(context)
