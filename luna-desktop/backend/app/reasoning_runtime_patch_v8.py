@@ -34,8 +34,9 @@ _EXEC_RE = re.compile(
     r"smbclient|netexec|crackmapexec|hydra|medusa|john|hashcat|searchsploit|"
     r"sslscan|testssl|tcpdump|tshark|rpcclient|ldapsearch|burpsuite|mitmproxy|"
     r"mitmweb|zaproxy|wireshark|proxychains4|proxychains|tor|torsocks|openvpn|"
-    r"wg-quick|wg|yara|capa|floss|rizin|radare2|objdump|readelf|binwalk|"
-    r"volatility3|vol|olevba|apktool|jadx|msfconsole|python(?:3)?|pwsh|"
+    r"wg-quick|wg|file|sha256sum|strings|xxd|yara|capa|floss|rizin|radare2|objdump|readelf|binwalk|"
+    r"volatility3|vol|olevba|apktool|jadx|wine|java|dotnet|mono|wscript|cscript|"
+    r"msfconsole|python(?:3)?|pwsh|"
     r"powershell|invoke-webrequest|iwr)\b",
     re.IGNORECASE,
 )
