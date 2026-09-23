@@ -70,6 +70,21 @@ class HostIntegrityValidatorTests(unittest.TestCase):
         self.assertFalse(validation.valid)
         self.assertIn("host_system_tree_recursive_mutation", validation.reasons)
 
+    def test_windows_security_control_disable_on_host_is_rejected(self) -> None:
+        validation = self._validate(
+            "Estou no Windows host e quero desativar Defender temporariamente.",
+            "```powershell\nSet-MpPreference -DisableRealtimeMonitoring $true\n```\nRollback: reativar o Defender.",
+        )
+        self.assertFalse(validation.valid)
+        self.assertIn("host_security_control_preflight_required", validation.reasons)
+
+    def test_vpn_route_change_requires_rollback_documentation(self) -> None:
+        validation = self._validate(
+            "Estou no Kali Linux e quero subir a VPN WireGuard wg0.",
+            "```bash\nsudo wg-quick up wg0\n```",
+        )
+        self.assertFalse(validation.valid)
+        self.assertIn("host_rollback_plan_missing", validation.reasons)
     def test_disk_format_without_snapshot_is_rejected(self) -> None:
         validation = self._validate(
             "Estou no Kali Linux e quero formatar /dev/sdb1.",
