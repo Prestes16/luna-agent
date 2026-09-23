@@ -97,12 +97,12 @@ def score_candidate(candidate: DecisionCandidate) -> DecisionScore:
     # Confidence is evidence-led and construction-aware. A plausible action must
     # not look highly certain when the mechanism or system model is weak.
     confidence = _clip(
-        0.38 * evidence
-        + 0.12 * scope
-        + 0.12 * discriminative
-        + 0.10 * safety
-        + 0.14 * construction
-        + 0.14 * mechanism
+        0.50 * evidence
+        + 0.08 * scope
+        + 0.10 * discriminative
+        + 0.08 * safety
+        + 0.12 * construction
+        + 0.12 * mechanism
     )
     uncertainty = binary_entropy(confidence)
 
