@@ -57,6 +57,19 @@ _HIGH_IMPACT_PATTERNS = (
     re.compile(r"(?i)\b(?:setuid|suid)\b.*\b(?:chmod|cp|install)\b"),
 )
 
+_HTTP_MUTATION_PATTERNS = (
+    re.compile(r"(?i)\bcurl\b.*(?:\s-X\s*(?:POST|PUT|PATCH|DELETE)\b)"),
+    re.compile(r"(?i)\bcurl\b.*(?:\s--request\s+(?:POST|PUT|PATCH|DELETE)\b)"),
+    re.compile(r"(?i)\bcurl\b.*(?:\s(?:-d|--data|--data-raw|--data-binary|--json)\b)"),
+    re.compile(r"(?i)\bcurl\b.*(?:\s(?:-T|--upload-file)\b)"),
+)
+
+_TOOL_HIGH_IMPACT_PATTERNS = (
+    re.compile(r"(?i)\bnmap\b.*--script(?:=|\s+)[^\n]*(?:exploit|dos|intrusive)"),
+    re.compile(r"(?i)\bsqlmap\b.*--(?:os-shell|os-pwn|sql-shell|file-write|file-dest)\b"),
+    re.compile(r"(?i)\b(?:nc|netcat|ncat)\b[^\n]*\s-e\s"),
+)
+
 
 @dataclass(frozen=True)
 class ExecutionIntent:
@@ -138,13 +151,20 @@ def _is_high_impact_command(command: str, tool: str) -> bool:
     return (
         tool in _HIGH_IMPACT_TOOLS
         or any(pattern.search(command) for pattern in _HIGH_IMPACT_PATTERNS)
+        or any(pattern.search(command) for pattern in _TOOL_HIGH_IMPACT_PATTERNS)
         or "privilege escalation" in lowered
         or "persistência" in lowered
         or "persistence" in lowered
     )
 
 
-def _risk_index(*, lifecycle, host, active_probe: bool, high_impact_semantic: bool) -> float:
+def _semantic_remote_mutation(command: str) -> bool:
+    """Detect target-state mutation that generic local lifecycle analysis cannot see."""
+    return any(pattern.search(command) for pattern in _HTTP_MUTATION_PATTERNS)
+
+
+def _risk_index(*, lifecycle, host, active_probe: bool, semantic_mutation: bool,
+                high_impact_semantic: bool) -> float:
     """Bounded nonlinear risk index.
 
     This is not a probability of compromise. It is a monotone engineering index:
@@ -155,7 +175,7 @@ def _risk_index(*, lifecycle, host, active_probe: bool, high_impact_semantic: bo
     dimensions = (
         (0.14, active_probe),
         (0.24, lifecycle.privilege_required),
-        (0.38, lifecycle.mutates_state),
+        (0.38, lifecycle.mutates_state or semantic_mutation),
         (0.52, lifecycle.persistent_change),
         (0.82, lifecycle.destructive),
         (0.58, not lifecycle.reversible),
@@ -211,11 +231,12 @@ def build_execution_intent(
     tool = lifecycle.tool or _effective_tool(command)
     target = _target_from_command(command)
     active_probe = tool in _ACTIVE_PROBE_TOOLS
+    semantic_mutation = _semantic_remote_mutation(command)
     high_impact_semantic = _is_high_impact_command(command, tool)
 
     if lifecycle.destructive or host.host_impact in {"blocked", "critical"} or high_impact_semantic:
         level = L3_HIGH_IMPACT
-    elif lifecycle.mutates_state or lifecycle.persistent_change:
+    elif lifecycle.mutates_state or lifecycle.persistent_change or semantic_mutation:
         level = L2_MUTATE
     elif active_probe:
         level = L1_PROBE
@@ -257,6 +278,7 @@ def build_execution_intent(
         lifecycle=lifecycle,
         host=host,
         active_probe=active_probe,
+        semantic_mutation=semantic_mutation,
         high_impact_semantic=high_impact_semantic,
     )
     readiness = _readiness_index(
@@ -277,6 +299,8 @@ def build_execution_intent(
     )
     if active_probe:
         reasons.append("active_probe")
+    if semantic_mutation:
+        reasons.append("semantic_remote_mutation")
     if high_impact_semantic:
         reasons.append("high_impact_semantic")
     if level != L0_OBSERVE and not scope_confirmed:
@@ -294,7 +318,7 @@ def build_execution_intent(
         expected_effect=expected_effect,
         evidence_expected=evidence,
         privilege_required=lifecycle.privilege_required,
-        mutates_state=lifecycle.mutates_state,
+        mutates_state=lifecycle.mutates_state or semantic_mutation,
         persistent_change=lifecycle.persistent_change,
         destructive=lifecycle.destructive,
         rollback_required=host.rollback_required,
