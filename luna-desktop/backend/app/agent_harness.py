@@ -16,8 +16,11 @@ from __future__ import annotations
 import hashlib
 import threading
 import time
+import uuid
 from dataclasses import asdict, dataclass, field
 from typing import Any
+
+from .harness_checkpoints import CheckpointStore, HarnessCheckpoint
 
 
 @dataclass(frozen=True)
@@ -49,6 +52,7 @@ class MemoryPlaneSnapshot:
 @dataclass
 class TurnHarnessTrace:
     session_id: str
+    turn_id: str
     route: str
     policy_version: str
     model_attempts: int = 0
@@ -59,6 +63,7 @@ class TurnHarnessTrace:
     cache_misses: int = 0
     termination_reason: str = "pending"
     memory: MemoryPlaneSnapshot | None = None
+    last_checkpoint_id: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -138,15 +143,24 @@ class ExactTTLCache:
 class AgentHarness:
     """Bounded runtime facade around generation, memory, cache and guardrails."""
 
-    def __init__(self, policy: HarnessPolicy | None = None) -> None:
+    def __init__(
+        self,
+        policy: HarnessPolicy | None = None,
+        checkpoint_store: CheckpointStore | None = None,
+    ) -> None:
         self.policy = policy or HarnessPolicy()
         self.retrieval_cache = ExactTTLCache(
             max_entries=self.policy.retrieval_cache_max_entries
         )
+        self.checkpoint_store = checkpoint_store
+
+    def attach_checkpoint_store(self, store: CheckpointStore | None) -> None:
+        self.checkpoint_store = store
 
     def begin_turn(self, *, session_id: str, route: str) -> TurnHarnessTrace:
         trace = TurnHarnessTrace(
             session_id=session_id,
+            turn_id=uuid.uuid4().hex[:16],
             route=route,
             policy_version=self.policy.version,
         )
@@ -195,6 +209,43 @@ class AgentHarness:
             value,
             ttl_seconds=self.policy.retrieval_cache_ttl_seconds,
         )
+
+    def checkpoint(
+        self,
+        trace: TurnHarnessTrace,
+        *,
+        stage: str,
+        state: dict[str, Any],
+        human_review_required: bool = False,
+    ) -> HarnessCheckpoint | None:
+        store = self.checkpoint_store
+        if store is None:
+            return None
+        checkpoint = store.save(
+            thread_id=trace.session_id,
+            turn_id=trace.turn_id,
+            stage=stage,
+            state=state,
+            human_review_required=human_review_required,
+            parent_checkpoint_id=trace.last_checkpoint_id,
+        )
+        trace.last_checkpoint_id = checkpoint.checkpoint_id
+        return checkpoint
+
+    def latest_checkpoint(self, thread_id: str) -> HarnessCheckpoint | None:
+        if self.checkpoint_store is None:
+            return None
+        return self.checkpoint_store.latest(thread_id)
+
+    def checkpoint_history(
+        self,
+        thread_id: str,
+        *,
+        limit: int = 50,
+    ) -> list[HarnessCheckpoint]:
+        if self.checkpoint_store is None:
+            return []
+        return self.checkpoint_store.history(thread_id, limit=limit)
 
     def record_model_attempt(self, trace: TurnHarnessTrace) -> None:
         trace.model_attempts += 1
@@ -247,4 +298,10 @@ class AgentHarness:
             "retry_strategy": self.policy.retry_strategy,
             "transport_retry_limit": self.policy.transport_retry_limit,
             "retrieval_cache_ttl_seconds": self.policy.retrieval_cache_ttl_seconds,
+            "checkpointing_enabled": self.checkpoint_store is not None,
+            "checkpoint_count": (
+                self.checkpoint_store.count()
+                if self.checkpoint_store is not None
+                else 0
+            ),
         }
