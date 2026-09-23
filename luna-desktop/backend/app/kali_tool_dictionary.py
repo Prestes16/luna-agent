@@ -78,7 +78,7 @@ KALI_TOOL_DICTIONARY: dict[str, KaliToolSpec] = {
     ),
     "john": KaliToolSpec(
         "john", "offline", "hash/file", "offline hash analysis",
-        ("format and input paths must be factual"),
+        ("format and input paths must be factual",),
         ("hash or hash file",),
     ),
     "dig": KaliToolSpec(
