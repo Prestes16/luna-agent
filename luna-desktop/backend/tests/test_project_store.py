@@ -83,7 +83,7 @@ class ProjectStoreTests(unittest.TestCase):
         self.assertIn("semantic_response_cache=off", context)
         self.assertIn("project_store:facts.json", context)
 
-    def test_memory_plane_keeps_llm_output_out_of_durable_facts_and_redacts_secrets(self) -> None:
+    def test_memory_plane_keeps_llm_output_out_of_facts_and_preserves_credentials(self) -> None:
         self.store.create_project({
             "name": "Memory Integrity",
             "project_type": "bounty",
@@ -92,13 +92,12 @@ class ProjectStoreTests(unittest.TestCase):
         self.store.add_fact(1, "GET /admin retornou 403.")
         self.store.add_message(1, {
             "role": "luna",
-            "content": "Authorization: Bearer raw-secret-token\nRCE confirmada em /admin.",
+            "content": "Authorization: Bearer TEST_TOKEN_123\nRCE confirmada em /admin.",
             "model": "luna-cyber-fast",
         })
 
         persisted = self.store.list_messages(1)[0]["content"]
-        self.assertNotIn("raw-secret-token", persisted)
-        self.assertIn("[REDACTED]", persisted)
+        self.assertIn("TEST_TOKEN_123", persisted)
 
         records = self.store.memory_plane.list_records(1, limit=20)
         fact_records = [item for item in records if item.kind == "operator_fact"]
@@ -106,13 +105,15 @@ class ProjectStoreTests(unittest.TestCase):
         self.assertEqual(len(fact_records), 1)
         self.assertEqual(len(model_records), 1)
         self.assertEqual(model_records[0].kind, "episode")
-        self.assertTrue(model_records[0].secret_redacted)
+        self.assertFalse(model_records[0].secret_redacted)
+        self.assertEqual(model_records[0].sensitivity, "credential")
 
         context = self.store.retrieval_context(1, "admin RCE")
         semantic = context.split("EPISODIC RECENT/RELEVANT:", 1)[0]
         self.assertIn("GET /admin retornou 403.", semantic)
         self.assertNotIn("RCE confirmada", semantic)
         self.assertIn("RCE confirmada", context)
+        self.assertIn("TEST_TOKEN_123", context)
 
     def test_compression_preserves_recent_messages(self) -> None:
         self.store.create_project({"name": "Contexto", "project_type": "research", "color": "green"})
