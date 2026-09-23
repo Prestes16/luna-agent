@@ -144,6 +144,18 @@ Exploit-proof readiness uses a weighted geometric model over:
 
 Primitive evidence, target binding and success predicate form a critical floor.
 
+For probabilistic/reliability claims, Luna must report observed successes/trials and
+a calibrated interval rather than calling a one-off success "reliable". The V1
+deterministic helpers include a Wilson score interval for binary repeated trials and
+the exact one-sided zero-failure binomial upper bound:
+
+```text
+p_upper = 1 - alpha^(1/n)
+```
+
+These are report-calibration tools, not assumptions that exploit trials are
+independent or stationary in the real target.
+
 ### Report evidence
 
 Depending on the domain, Luna should preserve:
@@ -184,9 +196,20 @@ PIXELS
 Obscured or cropped text must never be invented. If visual resolution is
 insufficient, Luna must identify the unresolved field instead of guessing.
 
-Actual semantic image understanding requires a multimodal local model. Model
-selection is a separate hardware/runtime gate and must not be confused with the
-already-implemented image transport/evidence integrity layer.
+Actual semantic image understanding requires a multimodal local model. Runtime now
+queries the exact Ollama model with `/api/show` and requires the reported
+`vision` capability before claiming that pixels were semantically read. If the
+selected model is text-only, the image bytes/manifest remain preserved as evidence
+but visual interpretation is blocked.
+
+An explicit local multimodal model can be selected with:
+
+```text
+LUNA_VISION_MODEL=<installed Ollama vision model>
+```
+
+This is deliberately fail-closed: Luna must never pretend it inspected a screenshot
+when the model cannot actually consume visual content.
 
 ## Kali knowledge plane
 
@@ -218,3 +241,28 @@ Per-tool metadata should include:
 
 This avoids stuffing all Kali documentation into the model context and keeps
 guidance aligned with the exact installed tool version.
+
+
+## Report-grade evidence pack contract
+
+A validated finding should be reproducible from an evidence pack rather than from
+the narrative alone. The future executor/report pipeline will bind:
+
+```text
+finding id
+target / environment
+preconditions
+exact command or PoC artifact
+artifact SHA-256
+raw stdout/stderr or protocol transcript
+visual evidence SHA-256 when applicable
+success predicate
+quantitative measurements / sample counts
+pre-state / post-state
+cleanup / rollback result
+timestamps
+```
+
+The evidence pack does not automatically promote a hypothesis to a finding. Promotion
+still requires the success predicate to be observed and the causal mechanism to satisfy
+the BUILD -> MODEL -> MATH/PHYSICS -> INVARIANT -> TEST -> EVIDENCE chain.
