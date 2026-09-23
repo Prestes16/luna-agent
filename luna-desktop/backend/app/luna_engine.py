@@ -26,6 +26,7 @@ from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
 from .construction_reasoning import construction_guidance
 from .decision_intelligence import decision_guidance
+from .evidence_bundle import evidence_bundle_guidance
 from .exploit_proof import exploit_proof_guidance
 from .execution_intent import build_execution_intent, operator_requested_execution
 from .host_safety import host_safety_guidance
@@ -1618,6 +1619,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         )
         if exploit_context:
             route_instruction += " " + exploit_context
+            route_instruction += " " + evidence_bundle_guidance()
 
         visual_context = visual_evidence_guidance(visual_manifest)
         if visual_context:
