@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .memory_plane import MemoryPlane, redact_memory_text
+
 
 DEFAULT_PROJECTS_DIR = Path(r"D:\LunaCyber\projects")
 PROJECT_TYPES = frozenset({"app", "bounty", "solana", "script", "research", "other"})
@@ -62,6 +64,7 @@ class ProjectStore:
         self.root.mkdir(parents=True, exist_ok=True)
         self._index = self.root / "index.json"
         self._lock = threading.RLock()
+        self.memory_plane = MemoryPlane(self.root / ".memory" / "memory.sqlite3")
         if not self._index.exists():
             self._write_json(self._index, {"version": 1, "projects": []})
 
@@ -231,6 +234,7 @@ class ProjectStore:
             target = self._data_dir(project_id)
             if target.exists():
                 shutil.rmtree(target)
+            self.memory_plane.delete_project(project_id)
 
     def list_messages(self, project_id: int) -> list[dict[str, Any]]:
         with self._lock:
@@ -246,6 +250,7 @@ class ProjectStore:
         if role not in MESSAGE_ROLES:
             raise ProjectValidationError("role inválido")
         content = self._validate_text(payload.get("content"), "content", 50_000, required=True)
+        content = redact_memory_text(content)
         model = self._validate_text(payload.get("model", ""), "model", 100)
         with self._lock:
             data = self._load_index()
@@ -270,6 +275,17 @@ class ProjectStore:
             if project.get("session_count", 0) == 0:
                 project["session_count"] = 1
             self._write_json(self._index, data)
+            self.memory_plane.add_record(
+                project_id=project_id,
+                kind="episode",
+                content=content,
+                provenance="project_store:messages.json",
+                source=f"conversation:{role}",
+                evidence_level="model_output" if role == "luna" else "episode",
+                observed_at=message["timestamp"],
+                metadata={"role": role, "model": model},
+                dedupe_key=f"message:{message_id}:{message['timestamp']}",
+            )
             return message
 
     def list_facts(self, project_id: int) -> list[str]:
@@ -283,6 +299,7 @@ class ProjectStore:
 
     def add_fact(self, project_id: int, value: Any) -> list[str]:
         fact = self._validate_text(value, "fact", 1_000, required=True)
+        fact = redact_memory_text(fact)
         with self._lock:
             facts = self.list_facts(project_id)
             if fact.casefold() not in {existing.casefold() for existing in facts}:
@@ -290,7 +307,77 @@ class ProjectStore:
                     raise ProjectValidationError("limite de 200 fatos atingido")
                 facts.append(fact)
                 self._write_json(self._data_dir(project_id) / "facts.json", facts)
+            self.memory_plane.add_record(
+                project_id=project_id,
+                kind="operator_fact",
+                content=fact,
+                provenance="project_store:facts.json",
+                source="project_fact",
+                evidence_level="declared",
+                dedupe_key=f"fact:{fact.casefold()}",
+            )
             return facts
+
+    def _sync_legacy_memory(
+        self,
+        project_id: int,
+        *,
+        facts: list[str],
+        messages: list[dict[str, Any]],
+    ) -> None:
+        """Lazily migrate legacy JSON into typed memory without changing API contracts."""
+        safe_facts = [redact_memory_text(str(fact)) for fact in facts]
+        if safe_facts != facts:
+            self._write_json(self._data_dir(project_id) / "facts.json", safe_facts)
+            facts[:] = safe_facts
+
+        safe_messages: list[dict[str, Any]] = []
+        messages_changed = False
+        for item in messages:
+            safe_item = dict(item)
+            original_content = str(safe_item.get("content", ""))
+            safe_content = redact_memory_text(original_content)
+            if safe_content != original_content:
+                safe_item["content"] = safe_content
+                messages_changed = True
+            safe_messages.append(safe_item)
+        if messages_changed:
+            self._write_json(self._data_dir(project_id) / "messages.json", safe_messages)
+            messages[:] = safe_messages
+
+        for fact in facts:
+            self.memory_plane.add_record(
+                project_id=project_id,
+                kind="operator_fact",
+                content=fact,
+                provenance="project_store:facts.json",
+                source="project_fact",
+                evidence_level="declared",
+                dedupe_key=f"fact:{fact.casefold()}",
+            )
+
+        for item in messages[-64:]:
+            if item.get("is_compressed"):
+                continue
+            role = str(item.get("role", "system"))
+            if role not in MESSAGE_ROLES:
+                continue
+            content = str(item.get("content", "")).strip()
+            if not content:
+                continue
+            timestamp = str(item.get("timestamp", "")) or _now()
+            message_id = int(item.get("id", 0) or 0)
+            self.memory_plane.add_record(
+                project_id=project_id,
+                kind="episode",
+                content=content,
+                provenance="project_store:messages.json",
+                source=f"conversation:{role}",
+                evidence_level="model_output" if role == "luna" else "episode",
+                observed_at=timestamp,
+                metadata={"role": role, "model": str(item.get("model", ""))},
+                dedupe_key=f"message:{message_id}:{timestamp}",
+            )
 
     def retrieval_context(
         self,
@@ -300,12 +387,7 @@ class ProjectStore:
         semantic_top_k: int = 5,
         episodic_top_k: int = 4,
     ) -> str:
-        """Query-focused local memory: durable facts + recent relevant episodes.
-
-        This is a deterministic lexical/recency retrieval layer over the current
-        JSON store. It intentionally does not pretend to be an embedding/vector
-        backend; the interface can be swapped later without changing the runtime.
-        """
+        """Query-focused typed local memory with provenance and fact/hypothesis separation."""
         query = self._validate_text(query, "query", 20_000, required=True)
         semantic_top_k = max(1, min(int(semantic_top_k), 12))
         episodic_top_k = max(1, min(int(episodic_top_k), 12))
@@ -315,63 +397,23 @@ class ProjectStore:
             project = dict(self._find(data, project_id))
             facts = list(self.list_facts(project_id))
             messages = list(self.list_messages(project_id))
-
-        query_terms = _terms(query)
-
-        ranked_facts = [
-            (_relevance(fact, query_terms), index, fact)
-            for index, fact in enumerate(facts)
-        ]
-        relevant_facts = [
-            fact
-            for score, _index, fact in sorted(
-                ranked_facts,
-                key=lambda item: (item[0], item[1]),
-                reverse=True,
+            self._sync_legacy_memory(
+                project_id,
+                facts=facts,
+                messages=messages,
             )
-            if score > 0
-        ][:semantic_top_k]
-        if not relevant_facts:
-            relevant_facts = facts[-semantic_top_k:]
 
-        episodes = [
-            item for item in messages
-            if not item.get("is_compressed") and item.get("role") in MESSAGE_ROLES
-        ][-32:]
-        ranked_episodes = []
-        total = max(1, len(episodes))
-        for index, item in enumerate(episodes):
-            content = str(item.get("content", ""))
-            semantic_score = _relevance(content, query_terms)
-            recency_score = (index + 1) / total
-            score = (semantic_score * 0.82) + (recency_score * 0.18)
-            ranked_episodes.append((score, index, item))
-        selected_episodes = [
-            item
-            for _score, _index, item in sorted(
-                ranked_episodes,
-                key=lambda row: (row[0], row[1]),
-                reverse=True,
-            )[:episodic_top_k]
-        ]
-        selected_episodes.sort(key=lambda item: str(item.get("timestamp", "")))
-
-        lines = [
-            f"PROJECT MEMORY: {project.get('name', '')}",
-            f"type={project.get('project_type', 'other')}",
-            "backend=local-json; retrieval=lexical+recency; vector_backend=not_enabled",
-        ]
-        if relevant_facts:
-            lines.append("SEMANTIC DURABLE FACTS:")
-            lines.extend(f"- {fact}" for fact in relevant_facts)
-        if selected_episodes:
-            lines.append("EPISODIC RECENT/RELEVANT:")
-            for item in selected_episodes:
-                timestamp = str(item.get("timestamp", ""))[:25]
-                role = str(item.get("role", "system"))
-                content = " ".join(str(item.get("content", "")).split())[:360]
-                lines.append(f"- [{timestamp}] {role}: {content}")
-        return "\n".join(lines)[:4_500]
+        memory_context = self.memory_plane.retrieval_context(
+            project_id,
+            query,
+            semantic_top_k=semantic_top_k,
+            episodic_top_k=episodic_top_k,
+        )
+        prefix = (
+            f"PROJECT MEMORY: {project.get('name', '')}\n"
+            f"type={project.get('project_type', 'other')}\n"
+        )
+        return (prefix + memory_context)[:4_500]
 
     def context(self, project_id: int) -> str:
         with self._lock:
