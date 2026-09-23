@@ -1,3 +1,4 @@
+import base64
 import tempfile
 import unittest
 from pathlib import Path
@@ -238,6 +239,48 @@ class ProjectApiTests(unittest.TestCase):
         )
         self.assertEqual(verified.status_code, 200)
         self.assertTrue(verified.json()["valid"])
+
+    def test_project_chat_image_is_persisted_as_visual_evidence(self) -> None:
+        created = self.client.post("/api/projects", json={
+            "name": "Chat Evidence",
+            "project_type": "bounty",
+            "color": "cyan",
+        })
+        self.assertEqual(created.status_code, 201)
+        project_id = created.json()["id"]
+
+        class FakeLuna:
+            async def stream_agent(self, **_kwargs):
+                yield '{"type":"text_chunk","text":"ok"}'
+                yield '{"type":"response_meta","validator_passed":true}'
+
+        previous_engine = main.luna_engine
+        main.luna_engine = FakeLuna()
+        raw = b"exact-chat-image"
+        try:
+            response = self.client.post("/chat/agent/stream", json={
+                "message": "Analise a captura.",
+                "session_id": f"project-{project_id}",
+                "model": "luna-cyber-fast",
+                "images": [{
+                    "data": base64.b64encode(raw).decode("ascii"),
+                    "mime": "image/png",
+                }],
+            })
+        finally:
+            main.luna_engine = previous_engine
+
+        self.assertEqual(response.status_code, 200)
+        evidence = self.client.get(
+            f"/api/projects/{project_id}/evidence"
+        ).json()["evidence"]
+        self.assertEqual(len(evidence), 1)
+        self.assertEqual(evidence[0]["kind"], "chat-screenshot")
+        _metadata, restored = main.project_store.read_evidence_artifact(
+            project_id,
+            evidence[0]["id"],
+        )
+        self.assertEqual(restored, raw)
 
     def test_api_rejects_traversal_and_extra_fields(self) -> None:
         traversal = self.client.post("/api/projects", json={
