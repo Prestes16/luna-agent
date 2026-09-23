@@ -54,6 +54,32 @@ class ProjectStoreTests(unittest.TestCase):
         with self.assertRaises(ProjectValidationError):
             self.store.update_project(1, {"unexpected": True})
 
+    def test_retrieval_context_separates_semantic_and_episodic_memory(self) -> None:
+        self.store.create_project({
+            "name": "Anchor Audit",
+            "project_type": "solana",
+            "color": "green",
+        })
+        self.store.add_fact(1, "O settlement usa USDC SPL com 6 decimais.")
+        self.store.add_fact(1, "A interface possui tema escuro.")
+        self.store.add_message(1, {
+            "role": "user",
+            "content": "Auditar cálculo de fee e overflow em amount u64.",
+            "model": "luna-cyber-fast",
+        })
+        self.store.add_message(1, {
+            "role": "luna",
+            "content": "Precisamos verificar os limites reais de amount.",
+            "model": "luna-cyber-fast",
+        })
+
+        context = self.store.retrieval_context(1, "fee overflow USDC amount")
+        self.assertIn("SEMANTIC DURABLE FACTS:", context)
+        self.assertIn("USDC SPL", context)
+        self.assertIn("EPISODIC RECENT/RELEVANT:", context)
+        self.assertIn("amount u64", context)
+        self.assertIn("vector_backend=not_enabled", context)
+
     def test_compression_preserves_recent_messages(self) -> None:
         self.store.create_project({"name": "Contexto", "project_type": "research", "color": "green"})
         for index in range(24):
