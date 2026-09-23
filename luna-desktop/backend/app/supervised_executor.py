@@ -18,6 +18,8 @@ import asyncio
 import hashlib
 import shlex
 import time
+import secrets
+import threading
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
@@ -98,6 +100,48 @@ class ExecutionApproval:
 
     def to_dict(self) -> dict:
         return asdict(self)
+
+
+class ExecutionApprovalStore:
+    """Ephemeral one-shot approval tokens; approvals are never model-generated."""
+
+    def __init__(self) -> None:
+        self._items: dict[str, ExecutionApproval] = {}
+        self._lock = threading.RLock()
+
+    def issue(self, approval: ExecutionApproval) -> str:
+        token = secrets.token_urlsafe(24)
+        with self._lock:
+            self._items[token] = approval
+        return token
+
+    def consume(self, token: str, *, now: float | None = None) -> ExecutionApproval | None:
+        if not isinstance(token, str) or not token:
+            return None
+        current = float(time.time() if now is None else now)
+        with self._lock:
+            approval = self._items.pop(token, None)
+            if approval is None:
+                return None
+            if current > approval.expires_at:
+                return None
+            return approval
+
+    def prune_expired(self, *, now: float | None = None) -> int:
+        current = float(time.time() if now is None else now)
+        with self._lock:
+            expired = [
+                token
+                for token, approval in self._items.items()
+                if current > approval.expires_at
+            ]
+            for token in expired:
+                self._items.pop(token, None)
+            return len(expired)
+
+    def count(self) -> int:
+        with self._lock:
+            return len(self._items)
 
 
 @dataclass(frozen=True)
