@@ -41,7 +41,10 @@ _EXEC_RE = re.compile(
     r"wipefs|fdisk|cfdisk|sfdisk|parted|dd|chmod|chown|systemctl|nft|iptables|"
     r"ufw|firewall-cmd|ip|route|resolvectl|tee|sed|cp|mv|mount|umount|"
     r"grub-install|grub-mkconfig|update-grub|efibootmgr|reg(?:\.exe)?|bcdedit|"
-    r"bootrec|bootsect|diskpart|format(?:\.com)?|schtasks|sc(?:\.exe)?)\b",
+    r"bootrec|bootsect|diskpart|format(?:\.com)?|schtasks|sc(?:\.exe)?|"
+    r"set-mppreference|set-netfirewallprofile|disable-netadapter|"
+    r"set-dnsclientserveraddress|new-netroute|remove-netroute|remove-item|"
+    r"icacls|takeown|netsh|nmcli|rfkill|stop-service|restart-service)\b",
     re.IGNORECASE,
 )
 
