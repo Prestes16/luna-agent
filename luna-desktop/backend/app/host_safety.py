@@ -15,18 +15,14 @@ from .command_execution import assess_command_execution
 
 
 _REMOTE_PIPE_EXEC_PATTERNS = (
-    re.compile(r"(?is)\bcurl\b[^
-|;]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh)\b"),
-    re.compile(r"(?is)\bwget\b[^
-|;]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh)\b"),
-    re.compile(r"(?is)\b(?:irm|iwr|invoke-restmethod|invoke-webrequest)\b[^
-|;]*\|\s*(?:iex|invoke-expression)\b"),
+    re.compile(r"(?is)\bcurl\b[^\n|;]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh)\b"),
+    re.compile(r"(?is)\bwget\b[^\n|;]*\|\s*(?:sudo\s+)?(?:sh|bash|zsh)\b"),
+    re.compile(r"(?is)\b(?:irm|iwr|invoke-restmethod|invoke-webrequest)\b[^\n|;]*\|\s*(?:iex|invoke-expression)\b"),
 )
 
 _CRITICAL_STORAGE_PATTERNS = (
     re.compile(r"(?i)\b(?:mkfs(?:\.[a-z0-9]+)?|wipefs|fdisk|cfdisk|sfdisk|parted)\b"),
-    re.compile(r"(?i)\bdd\b[^
-]*\bof=/dev/(?:sd|nvme|vd|xvd|mmcblk)[^\s]*"),
+    re.compile(r"(?i)\bdd\b[^\n]*\bof=/dev/(?:sd|nvme|vd|xvd|mmcblk)[^\s]*"),
     re.compile(r"(?i)\b(?:diskpart|format(?:\.com)?)\b"),
 )
 
@@ -36,14 +32,9 @@ _BOOT_PATTERNS = (
 )
 
 _SYSTEM_TREE_PATTERNS = (
-    re.compile(r"(?i)\brm\b[^
-]*(?:-r|-rf|-fr)[^
-]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),
-    re.compile(r"(?i)\b(?:chmod|chown)\b[^
-]*-R[^
-]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),
-    re.compile(r"(?i)\bfind\s+/(?:\s|[^
-]*)-delete\b"),
+    re.compile(r"(?i)\brm\b[^\n]*(?:-r|-rf|-fr)[^\n]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),
+    re.compile(r"(?i)\b(?:chmod|chown)\b[^\n]*-R[^\n]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),
+    re.compile(r"(?i)\bfind\s+/(?:\s|[^\n]*)-delete\b"),
 )
 
 _FIREWALL_ROUTE_PATTERNS = (
@@ -185,9 +176,6 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
     if high_impact and not explicit_high_impact and not protected_lab_confirmed:
         reasons.append("high_impact_intent_not_explicit")
 
-    # Remote pipe-to-shell is never operator-ready because the downloaded body
-    # has not been reviewed. Storage/boot changes require a protected lab plus
-    # explicit environment and intent before the command can even be proposed.
     hard_block = remote_pipe_execution or system_tree_change
     gated_block = (critical_storage or boot_change) and not (
         environment_confirmed
