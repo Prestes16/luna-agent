@@ -18,6 +18,28 @@ class AgentHarnessTests(unittest.TestCase):
         self.assertTrue(policy["write_actions_require_idempotency_key"])
         self.assertEqual(policy["retry_strategy"], "exponential_backoff+jitter")
 
+    def test_transport_retry_is_bounded_classified_and_deterministic(self) -> None:
+        harness = AgentHarness()
+        self.assertTrue(harness.is_retryable_transport_error(TimeoutError("timed out")))
+        self.assertTrue(harness.is_retryable_transport_error(RuntimeError("503 unavailable")))
+        self.assertFalse(harness.is_retryable_transport_error(RuntimeError("401 unauthorized")))
+
+        delay_a = harness.transport_retry_delay(1, turn_id="turn-a")
+        delay_b = harness.transport_retry_delay(1, turn_id="turn-a")
+        self.assertEqual(delay_a, delay_b)
+        self.assertGreater(delay_a, 0.0)
+        self.assertLessEqual(delay_a, harness.policy.retry_max_delay_seconds)
+
+        trace = harness.begin_turn(session_id="x", route="ANALYZE")
+        harness.record_transport_retry(
+            trace,
+            error=TimeoutError("timed out"),
+            delay_seconds=delay_a,
+        )
+        self.assertEqual(trace.transport_retries, 1)
+        self.assertEqual(len(trace.transport_retry_delays_ms), 1)
+        self.assertEqual(trace.transport_retry_errors, ["TimeoutError"])
+
     def test_replan_is_bounded_to_one_extra_attempt(self) -> None:
         harness = AgentHarness(HarnessPolicy(max_model_attempts=2))
         trace = harness.begin_turn(session_id="x", route="ANALYZE")
@@ -105,7 +127,8 @@ class AgentHarnessTests(unittest.TestCase):
             trace, validator_passed=False, validation_reasons=("bad",)
         )
         self.assertEqual(trace.termination_reason, "guardrail_rejection")
-        self.assertIn("exact_arithmetic", trace.guardrails_out)
+        self.assertIn("exact_arithmetic_v18", trace.guardrails_out)
+        self.assertIn("quantitative_claim_integrity_v17", trace.guardrails_out)
 
 
 if __name__ == "__main__":
