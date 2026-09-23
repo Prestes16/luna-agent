@@ -420,7 +420,10 @@ async def chat_agent_stream(request: Request):
     project_match = re.fullmatch(r"project-(\d{1,10})", session_id)
     if project_match:
         try:
-            project_context = project_store.context(int(project_match.group(1)))
+            project_context = project_store.retrieval_context(
+                int(project_match.group(1)),
+                message or "contexto atual",
+            )
         except (ProjectValidationError, ProjectNotFoundError):
             logger.info("[chat] Projeto da sessão não foi encontrado: %s", session_id)
 
