@@ -40,6 +40,17 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(engine.config["tool_execution_enabled"])
         self.assertEqual(engine._resolve_model("ola", "gpt-4o"), ("ollama", "luna-cyber-fast"))
 
+    def test_instruction_only_build_cannot_be_enabled_by_runtime_config(self) -> None:
+        engine = LunaEngine()
+        self.assertTrue(engine.config["instruction_only_mode"])
+        self.assertFalse(engine._tool_execution_allowed())
+        engine.config["tool_execution_enabled"] = True
+        self.assertFalse(engine._tool_execution_allowed())
+
+    def test_runtime_prompt_states_operator_executes_commands(self) -> None:
+        prompt = _build_system_prompt(None, supervised_mode=True)
+        self.assertIn("o operador executa comandos", prompt)
+
     async def test_ollama_unavailable_never_falls_back_to_cloud(self) -> None:
         with (
             patch("app.luna_engine._ollama_is_available_sync", return_value=False),
