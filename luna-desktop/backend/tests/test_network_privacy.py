@@ -8,6 +8,8 @@ from app.network_privacy import (
     privacy_configuration_guidance,
     privacy_guidance,
     privacy_intent,
+    privacy_preflight_guidance,
+    local_privacy_preflight_needed,
     score_privacy_routes,
 )
 from app.reasoning_pipeline import extract_commands
@@ -79,6 +81,16 @@ class NetworkPrivacyTests(unittest.TestCase):
         self.assertIn("proxy_dns", guidance)
         self.assertIn("reversible", guidance)
 
+    def test_unknown_local_privacy_prerequisites_do_not_require_remote_target(self) -> None:
+        context = (
+            "Estou no Kali. Não sei se Tor e Proxychains estão instalados, não sei qual "
+            "arquivo de configuração existe e não confirmei nenhuma porta SOCKS."
+        )
+        self.assertTrue(local_privacy_preflight_needed(context))
+        guidance = privacy_preflight_guidance(context)
+        self.assertIn("remote target/base URL is NOT required", guidance)
+        self.assertIn("command -v tor proxychains4 proxychains", guidance)
+        self.assertIn("does NOT prove", guidance)
     def test_contextual_guidance_includes_privacy_math_and_workflow(self) -> None:
         scenario = self._scenario()
         guidance = guidance_for_context(
