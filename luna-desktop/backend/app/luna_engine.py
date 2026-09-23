@@ -62,6 +62,8 @@ _OLLAMA_FALLBACK_MODEL = "qwen3.5:4b"
 _OLLAMA_ALT_MODELS = [_OLLAMA_FALLBACK_MODEL]
 _OLLAMA_MODELS_CACHE: tuple[float, List[str]] = (0.0, [])
 _OLLAMA_MODELS_CACHE_TTL_SECONDS = 30.0
+_OLLAMA_CAPABILITIES_CACHE: Dict[str, tuple[float, frozenset[str]]] = {}
+_OLLAMA_CAPABILITIES_CACHE_TTL_SECONDS = 60.0
 
 # ── Model routing map ─────────────────────────────────────────────────────────
 MODEL_MAP: Dict[str, tuple] = {
@@ -133,6 +135,47 @@ async def _ollama_list_models_async(*, force: bool = False) -> List[str]:
     except Exception:
         pass
     return []
+
+
+async def _ollama_model_capabilities_async(
+    model: str,
+    *,
+    force: bool = False,
+) -> frozenset[str]:
+    """Read capabilities reported by the exact installed Ollama model."""
+    model = str(model or "").strip()
+    if not model:
+        return frozenset()
+    cached = _OLLAMA_CAPABILITIES_CACHE.get(model)
+    if (
+        not force
+        and cached is not None
+        and time.monotonic() - cached[0] < _OLLAMA_CAPABILITIES_CACHE_TTL_SECONDS
+    ):
+        return cached[1]
+
+    capabilities: frozenset[str] = frozenset()
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            response = await client.post(
+                f"{OLLAMA_API_ROOT}/api/show",
+                json={"model": model},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                raw = data.get("capabilities", [])
+                if isinstance(raw, list):
+                    capabilities = frozenset(
+                        str(item).strip().casefold()
+                        for item in raw
+                        if str(item).strip()
+                    )
+    except Exception:
+        capabilities = frozenset()
+
+    _OLLAMA_CAPABILITIES_CACHE[model] = (time.monotonic(), capabilities)
+    return capabilities
 
 
 async def _ollama_best_model_async(preferred: str = _OLLAMA_DEFAULT_MODEL) -> str:
@@ -235,6 +278,18 @@ def _build_system_prompt(
         (
             "Quantitativo: representação -> unidades/base units -> limites -> ordem/arredondamento "
             "-> invariante -> evidência; não trate aproximação como resultado exato."
+        ),
+        (
+            "Autoridade de execução: L0 OBSERVE=AUTO dentro do host/workspace; "
+            "L1 PROBE=ON_DEMAND com alvo/escopo ligados; L2 MUTATE exige aprovação + pre/post-state "
+            "+ verificação/rollback; L3 HIGH IMPACT (exploit/privesc/persistência/destrutivo) exige "
+            "aprovação explícita por ação e objetivo de prova delimitado, podendo ser BLOCKED."
+        ),
+        (
+            "Exploit/PoC: quando solicitado em escopo autorizado e houver fatos suficientes, produza "
+            "artefato mínimo completo e executável/reprodutível, ligado ao alvo/versão/estado observados, "
+            "com success predicate, captura de logs/prints/evidência, checks quantitativos e cleanup; "
+            "não infle impacto além do que foi comprovado."
         ),
         (
             "Prioridade: CURRENT USER MESSAGE > evidence delta > ScenarioContext > "
@@ -378,6 +433,7 @@ class LunaEngine:
         self._bad_key_providers: set = set()
         self.config = {
             "default_model": os.getenv("LUNA_MODEL", _OLLAMA_DEFAULT_MODEL),
+            "vision_model": os.getenv("LUNA_VISION_MODEL", "").strip(),
             "temperature": None,
             "max_tokens": _env_int("LUNA_MAX_TOKENS", 512, 64, 4_096),
             "zero_cloud_mode": _env_flag("LUNA_ZERO_CLOUD", True),
@@ -1309,6 +1365,31 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
 
         # Resolve model — usa versão async para descobrir modelo Ollama disponível
         client_type, model_name = await self._auto_route_with_ollama_model(message, model_str)
+
+        if visual_manifest and client_type == "ollama":
+            configured_vision_model = str(self.config.get("vision_model", "") or "").strip()
+            vision_candidate = configured_vision_model or str(model_name or "")
+            capabilities = await _ollama_model_capabilities_async(vision_candidate)
+            turn_telemetry["vision_model"] = vision_candidate or None
+            turn_telemetry["vision_capabilities"] = sorted(capabilities)
+            if "vision" not in capabilities:
+                turn_telemetry["loop_guard"] = "vision_model_not_ready"
+                self.turn_metadata[session_id] = dict(turn_telemetry)
+                yield json.dumps({
+                    "type": "error",
+                    "message": (
+                        "A captura foi preservada como evidência, mas o modelo Ollama selecionado "
+                        f"({vision_candidate or 'desconhecido'}) não reporta capability 'vision'. "
+                        "Configure LUNA_VISION_MODEL para um modelo local multimodal instalado; "
+                        "a Luna não vai fingir que leu pixels que o modelo não recebeu semanticamente."
+                    ),
+                    "response_source": "vision_capability_guardrail",
+                    "llm_called": False,
+                    "visual_evidence": [item.to_dict() for item in visual_manifest],
+                }, ensure_ascii=False)
+                return
+            model_name = vision_candidate
+
         client = self._get_client(client_type) if client_type else None
         turn_telemetry["provider"] = client_type
         turn_telemetry["model"] = model_name
