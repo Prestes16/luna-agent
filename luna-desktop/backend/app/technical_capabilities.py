@@ -56,7 +56,7 @@ CAPABILITIES: tuple[TechnicalCapability, ...] = (
         ("enumeration plans", "PowerShell helpers", "LDAP queries", "evidence parsers"),
     ),
     TechnicalCapability(
-        "exploit_validation",
+        "exploit_dev",
         (
             "exploit", "exploração", "exploracao", "poc", "proof of concept",
             "prova de conceito", "comprovar achado", "validar achado", "reproducer",
@@ -187,7 +187,7 @@ def technical_guidance(message: str, max_chars: int = 1_200) -> str:
         return ""
     body = " | ".join(capability.prompt() for capability in selected)
     guidance = (
-        "TECHNICAL CAPABILITY CONTEXT (supervised-copilot baseline): "
+        "TECHNICAL CAPABILITY CONTEXT (instruction-only supervised-copilot baseline): "
         + body
         + ". Explain exact prerequisites and syntax; when asked to build something, provide complete "
         "operator-reviewable code/config/tests rather than vague pseudocode. For exploit validation, "
