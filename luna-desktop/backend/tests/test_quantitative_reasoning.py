@@ -9,6 +9,7 @@ from app.quantitative_reasoning import (
     max_unsigned_input_before_mul_overflow,
     floor_rounding_loss_numerator,
     mul_div_floor,
+    quantitative_fact_sheet,
     quantitative_guidance,
     scale_decimal_exact,
     select_quantitative_profile,
@@ -63,6 +64,20 @@ class QuantitativeReasoningTests(unittest.TestCase):
         self.assertGreater(capacity, 20e6)
         self.assertTrue(math.isfinite(capacity))
 
+    def test_rust_u64_mul_div_fact_sheet_derives_exact_values(self) -> None:
+        facts = quantitative_fact_sheet(
+            "let fee = amount * 125 / 10_000; amount é u64 e o ativo usa 6 casas decimais."
+        )
+        self.assertIn("18446744073709551615", facts)
+        self.assertIn("147573952589676412", facts)
+        self.assertIn("1/80", facts)
+        self.assertIn("<1 base unit", facts)
+
+    def test_fact_sheet_requires_observed_u64_type(self) -> None:
+        self.assertEqual(
+            quantitative_fact_sheet("let fee = amount * 125 / 10_000; tipo desconhecido."),
+            "",
+        )
     def test_anchor_context_selects_blockchain_financial_math(self) -> None:
         profile = select_quantitative_profile(
             "Auditoria Anchor Solana: USDC SPL, fee, u64, rounding e randomness VRF."
