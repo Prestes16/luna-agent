@@ -183,7 +183,9 @@ def privacy_guidance(context: str) -> str:
         "não inventados. Proxychains/Tor não transportam UDP/raw sockets: Nmap -sS/-sU/ICMP não "
         "devem ser tratados como proxyáveis; para aplicações TCP, valide compatibilidade antes. "
         "Camadas adicionais (VPN+Tor) só são recomendadas quando o ganho esperado supera custo, "
-        "latência e risco operacional."
+        "latência e risco operacional. Roteamento não remove identidade de aplicação: cookies, "
+        "login em contas pessoais, fingerprint do navegador, WebRTC e correlação temporal devem "
+        "ser tratados como superfícies separadas de privacidade."
     )
 
 
@@ -217,6 +219,10 @@ def privacy_configuration_guidance(context: str) -> str:
             "VPN: verify default route, DNS, IPv4/IPv6 and reconnect/failure behavior before calling the tunnel ready",
             "VPN: kill-switch/firewall changes must be explicit, reversible and scoped to the intended interface/profile",
         ))
+    if "tor" in normalized and "vpn" in normalized:
+        rules.append(
+            "LAYER ORDER: VPN->Tor and Tor->VPN are not equivalent trust models; state the requested order explicitly and do not configure Tor->VPN unless the VPN/profile actually supports that transport"
+        )
     if "nmap" in normalized and any(marker in normalized for marker in ("proxychains", "tor", "torsocks")):
         rules.append(
             "NMAP: SOCKS/proxy wrappers are incompatible with -sS/-sU/raw discovery; if proxying is required, use only connect-style semantics that are actually supported and verify target/DNS handling"
