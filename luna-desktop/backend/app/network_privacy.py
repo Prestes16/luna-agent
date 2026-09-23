@@ -261,6 +261,43 @@ def privacy_configuration_guidance(context: str) -> str:
     return "PRIVACY CONFIG WORKFLOW [" + phases + "]: " + " | ".join(rules)
 
 
+def local_privacy_preflight_needed(context: str) -> bool:
+    """True when local Tor/Proxychains prerequisites are explicitly unknown."""
+    if not privacy_intent(context):
+        return False
+    normalized = context.casefold()
+    unknown_markers = (
+        "não sei se", "nao sei se", "não confirmado", "nao confirmado",
+        "não confirmei", "nao confirmei", "não sei qual", "nao sei qual",
+        "desconheço", "desconheco", "unknown",
+    )
+    local_markers = (
+        "instalad", "arquivo de configuração", "arquivo de configuracao",
+        "config", "porta socks", "socks", "listener", "binário", "binario",
+    )
+    return (
+        any(marker in normalized for marker in unknown_markers)
+        and any(marker in normalized for marker in local_markers)
+        and ("proxychains" in normalized or _has_word(normalized, "tor"))
+    )
+
+
+def privacy_preflight_guidance(context: str) -> str:
+    """Deterministic first-step rules for unknown local privacy prerequisites."""
+    if not local_privacy_preflight_needed(context):
+        return ""
+
+    return (
+        "LOCAL PRIVACY PREFLIGHT: a remote target/base URL is NOT required to discover local "
+        "Tor/Proxychains prerequisites. Do not ask for the target before this local inventory. "
+        "The first step must be read-only and should discover the available binaries for tor, "
+        "proxychains4 and proxychains without assuming which Proxychains variant exists. Prefer "
+        "one local inventory command: command -v tor proxychains4 proxychains. Explain that "
+        "this proves only binary presence/on-PATH; it does NOT prove package health, active "
+        "service, config path, chain mode, proxy_dns, SOCKS listener or correct routing. Ask for "
+        "the remote target only later, when an actual egress/application validation requires it."
+    )
+
 def privacy_tooling_summary() -> str:
     return (
         "Ferramentas conhecidas: proxychains4/proxychains (encadeamento por connect), "
