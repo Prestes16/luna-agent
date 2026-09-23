@@ -36,6 +36,19 @@ _FAMILY_MARKERS: dict[str, tuple[str, ...]] = {
         "privacidade", "anonim", "rastre", "túnel", "tunel", "socks5",
         "dns leak", "vazamento dns", "kill switch", "killswitch",
     ),
+    "malware": (
+        "malware", "ransomware", "trojan", "rat", "rootkit", "bootkit",
+        "loader", "dropper", "stealer", "yara", "capa", "floss", "packer",
+        "obfuscat", "desofusc", "deobfuscat",
+    ),
+    "reverse_engineering": (
+        "reverse", "reversing", "ghidra", "rizin", "radare", "objdump",
+        "readelf", "assembly", "disassembly", "apk", "dex", "smali",
+    ),
+    "forensics": (
+        "forensic", "forense", "volatility", "memory dump", "memória", "memoria",
+        "timeline", "ioc", "artefato",
+    ),
 }
 
 _SELECTION_MARKERS = (
@@ -46,6 +59,8 @@ _SELECTION_MARKERS = (
     "mais algum", "mais alguma", "alternativa", "alternativas",
     "proxychains", "tor", "vpn", "wireguard", "openvpn", "privacidade",
     "anonim", "rastre", "túnel", "tunel", "dns leak", "kill switch",
+    "malware", "ransomware", "yara", "volatility", "ghidra", "rizin",
+    "radare", "reverse engineering", "forense", "forensic",
 )
 
 _ALTERNATIVE_MARKERS = (
