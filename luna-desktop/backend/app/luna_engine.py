@@ -220,6 +220,13 @@ def _build_system_prompt(
             "evidência estrutural antes de inferir mecanismo de falha."
         ),
         (
+            "Perfil ofensivo: esta é uma instância local pessoal. Em escopo autorizado informado "
+            "pelo operador, raciocine como analista ofensivo sênior: superfície -> trust boundary "
+            "-> primitive -> pré-condições -> exploitability -> impacto -> prova -> rollback. "
+            "Cubra Web/API/auth, privesc, rede, binários/memória, malware/reverse e Web3/Solana/Anchor; "
+            "nunca promova hipótese a finding sem evidência reproduzível."
+        ),
+        (
             "Quantitativo: representação -> unidades/base units -> limites -> ordem/arredondamento "
             "-> invariante -> evidência; não trate aproximação como resultado exato."
         ),
@@ -1541,6 +1548,51 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     continue
             return buffered_events, buffered_text
 
+        async def collect_generation_with_transport_retry(
+            generator_factory,
+            *,
+            stage: str,
+        ) -> tuple[List[str], str]:
+            retry_number = 0
+            while True:
+                try:
+                    return await collect_generation(generator_factory())
+                except Exception as transport_error:
+                    next_retry = retry_number + 1
+                    if (
+                        next_retry > self.harness.policy.transport_retry_limit
+                        or not self.harness.is_retryable_transport_error(transport_error)
+                    ):
+                        raise
+                    delay = self.harness.transport_retry_delay(
+                        next_retry,
+                        turn_id=harness_trace.turn_id,
+                    )
+                    self.harness.record_transport_retry(
+                        harness_trace,
+                        error=transport_error,
+                        delay_seconds=delay,
+                    )
+                    self.harness.checkpoint(
+                        harness_trace,
+                        stage=f"{stage}_transport_retry",
+                        state={
+                            "retry_number": next_retry,
+                            "delay_ms": round(delay * 1000),
+                            "error_type": type(transport_error).__name__,
+                        },
+                    )
+                    turn_telemetry["harness"] = harness_trace.to_dict()
+                    logger.warning(
+                        "chat.transport.retry stage=%s retry=%s delay_ms=%s error=%s",
+                        stage,
+                        next_retry,
+                        round(delay * 1000),
+                        type(transport_error).__name__,
+                    )
+                    await asyncio.sleep(delay)
+                    retry_number = next_retry
+
         try:
             self.harness.record_model_attempt(harness_trace)
             self.harness.checkpoint(
@@ -1553,11 +1605,13 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 },
             )
             turn_telemetry["harness"] = harness_trace.to_dict()
-            if client_type == 'claude':
-                gen = self._stream_claude_with_tools(
-                    model_name, messages, system, workspace_path or '', call_ctr, history_out)
-            else:
-                gen = self._stream_openai_with_tools(
+            def build_initial_generator() -> AsyncIterator[str]:
+                history_out.clear()
+                if client_type == 'claude':
+                    return self._stream_claude_with_tools(
+                        model_name, messages, system, workspace_path or '', call_ctr, history_out
+                    )
+                return self._stream_openai_with_tools(
                     client,
                     model_name,
                     messages,
@@ -1569,7 +1623,10 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     turn_telemetry,
                 )
 
-            buffered_events, full_text = await collect_generation(gen)
+            buffered_events, full_text = await collect_generation_with_transport_retry(
+                build_initial_generator,
+                stage="model_attempt",
+            )
             validation = validate_model_response(
                 message=message,
                 response=full_text,
@@ -1651,17 +1708,19 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     {"role": "user", "content": replan_instruction},
                 ]
                 replan_history: list = []
-                if client_type == 'claude':
-                    replan_gen = self._stream_claude_with_tools(
-                        model_name,
-                        replan_messages,
-                        system,
-                        workspace_path or '',
-                        call_ctr,
-                        replan_history,
-                    )
-                else:
-                    replan_gen = self._stream_openai_with_tools(
+
+                def build_replan_generator() -> AsyncIterator[str]:
+                    replan_history.clear()
+                    if client_type == 'claude':
+                        return self._stream_claude_with_tools(
+                            model_name,
+                            replan_messages,
+                            system,
+                            workspace_path or '',
+                            call_ctr,
+                            replan_history,
+                        )
+                    return self._stream_openai_with_tools(
                         client,
                         model_name,
                         replan_messages,
@@ -1672,7 +1731,11 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                         replan_effort,
                         turn_telemetry,
                     )
-                buffered_events, full_text = await collect_generation(replan_gen)
+
+                buffered_events, full_text = await collect_generation_with_transport_retry(
+                    build_replan_generator,
+                    stage="replan",
+                )
                 validation = validate_model_response(
                     message=message,
                     response=full_text,
