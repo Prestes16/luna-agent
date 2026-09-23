@@ -15,11 +15,12 @@ from . import reasoning_runtime_patch_v6 as _stage6
 from . import reasoning_runtime_patch_v7 as _stage7
 from . import reasoning_runtime_patch_v8 as _stage8
 from . import reasoning_runtime_patch_v9 as _stage9
+from . import reasoning_runtime_patch_v10 as _stage10
 from .command_policy import effective_tool as _effective_tool
 from .command_policy import parse_effective_command as _parse_effective_command
 from .reasoning_runtime_patch_v6 import action_fingerprint as _patched_action_fingerprint
 from .reasoning_runtime_patch_v8 import extract_commands as _patched_extract_commands
-from .reasoning_runtime_patch_v9 import (
+from .reasoning_runtime_patch_v10 import (
     build_replan_instruction as _patched_build_replan_instruction,
     validate_model_response as _patched_validate_model_response,
 )
