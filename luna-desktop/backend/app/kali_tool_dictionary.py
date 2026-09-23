@@ -191,6 +191,39 @@ KALI_TOOL_DICTIONARY: dict[str, KaliToolSpec] = {
         ("preserve target", "do not invent certificates or SNI overrides"),
         ("target",),
     ),
+    "burpsuite": KaliToolSpec(
+        "burpsuite", "web_proxy", "browser/app HTTP(S) traffic",
+        "interactive HTTP(S) interception, inspection and request replay",
+        (
+            "this is an intercepting proxy, not a packet sniffer",
+            "proxy/certificate setup belongs to operator environment and must not be invented",
+        ),
+    ),
+    "mitmproxy": KaliToolSpec(
+        "mitmproxy", "web_proxy", "HTTP(S) client traffic",
+        "terminal-first HTTP(S) interception with scriptable flows",
+        (
+            "use when CLI/scriptability is valuable",
+            "proxy/certificate setup must match the operator environment",
+        ),
+    ),
+    "zaproxy": KaliToolSpec(
+        "zaproxy", "web_proxy", "browser/app HTTP(S) traffic",
+        "GUI intercepting proxy with web assessment workflow",
+        (
+            "treat it as an HTTP(S) proxy, not raw packet capture",
+            "do not invent proxy/certificate configuration",
+        ),
+    ),
+    "wireshark": KaliToolSpec(
+        "wireshark", "packet_capture", "interface/capture file",
+        "packet capture and protocol analysis",
+        (
+            "use for observing packets/protocols; it is not an HTTP request interception/rewrite proxy",
+            "interface and capture source must be factual",
+        ),
+        ("capture source",),
+    ),
 }
 
 
