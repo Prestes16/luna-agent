@@ -13,7 +13,11 @@ from typing import Sequence, Mapping, Any
 from .kali_capability_router import capability_guidance
 from .kali_tool_dictionary import KALI_TOOL_DICTIONARY, get_tool_spec
 from .kali_tool_readiness import assess_tool_readiness
-from .network_privacy import privacy_guidance, privacy_intent, privacy_tooling_summary
+from .network_privacy import (
+    privacy_configuration_guidance,
+    privacy_guidance,
+    privacy_tooling_summary,
+)
 from .offensive_strategy import nmap_context_guidance
 
 
@@ -111,6 +115,7 @@ def guidance_for_context(message: str, *, scenario=None, history: Sequence[Mappi
     scenario_prompt = scenario.to_prompt_block(650) if scenario is not None else ""
     combined_context = f"{message}\n{scenario_prompt}\n{history_text}"
     privacy = privacy_guidance(combined_context)
+    privacy_config = privacy_configuration_guidance(combined_context)
     selection_request = bool(capability) or bool(privacy) or any(
         marker in normalized for marker in _SELECTION_MARKERS
     )
@@ -126,7 +131,7 @@ def guidance_for_context(message: str, *, scenario=None, history: Sequence[Mappi
         tool = requested_kali_tool(history_text)
 
     if not tool:
-        chunks = [item for item in (capability, privacy) if item]
+        chunks = [item for item in (capability, privacy, privacy_config) if item]
         if privacy:
             chunks.append("PRIVACY TOOLING: " + privacy_tooling_summary())
         return " ".join(chunks)
@@ -146,6 +151,8 @@ def guidance_for_context(message: str, *, scenario=None, history: Sequence[Mappi
         chunks.append(capability)
     if privacy:
         chunks.append(privacy)
+        if privacy_config:
+            chunks.append(privacy_config)
         chunks.append("PRIVACY TOOLING: " + privacy_tooling_summary())
 
     readiness = assess_tool_readiness(message, scenario=scenario, history_text=history_text)
