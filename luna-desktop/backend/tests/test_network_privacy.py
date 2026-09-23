@@ -49,6 +49,22 @@ class NetworkPrivacyTests(unittest.TestCase):
         self.assertIn("IPv4", guidance)
         self.assertIn("IPv6", guidance)
 
+    def test_privacy_guidance_separates_network_route_from_application_identity(self) -> None:
+        guidance = privacy_guidance("Quero usar Tor para melhorar minha privacidade no navegador.")
+        self.assertIn("cookies", guidance)
+        self.assertIn("fingerprint", guidance)
+        self.assertIn("WebRTC", guidance)
+        self.assertIn("correlação temporal", guidance)
+
+    def test_vpn_tor_workflow_requires_explicit_layer_order(self) -> None:
+        guidance = privacy_configuration_guidance(
+            "Quero combinar VPN e Tor de forma segura."
+        )
+        self.assertIn("LAYER ORDER", guidance)
+        self.assertIn("VPN->Tor", guidance)
+        self.assertIn("Tor->VPN", guidance)
+        self.assertIn("not equivalent", guidance)
+
     def test_configuration_workflow_is_fail_closed_and_reversible(self) -> None:
         guidance = privacy_configuration_guidance(
             "Configure proxychains com Tor e depois valide DNS e IPv6."
