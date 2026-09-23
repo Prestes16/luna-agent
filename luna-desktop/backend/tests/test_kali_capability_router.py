@@ -46,6 +46,56 @@ class KaliCapabilityRouterTests(unittest.TestCase):
         self.assertLess(guidance.count("[family="), 5)
         self.assertIn("pré-requisitos factuais", guidance)
 
+    def test_http_interception_prefers_proxy_family_over_packet_capture(self) -> None:
+        scenario = self._scenario()
+        ranked = rank_capabilities(
+            "Qual é o melhor app no Kali para interceptar requisições HTTP e poder inspecionar/replay?",
+            scenario=scenario,
+            history=[],
+            limit=4,
+        )
+        self.assertEqual(ranked[0].family, "web_proxy")
+        self.assertIn(ranked[0].tool, {"burpsuite", "mitmproxy", "zaproxy"})
+        self.assertNotEqual(ranked[0].tool, "wireshark")
+
+    def test_explicit_wireshark_is_packet_capture_not_proxy(self) -> None:
+        scenario = self._scenario()
+        ranked = rank_capabilities(
+            "Quero usar wireshark para analisar uma captura de pacotes.",
+            scenario=scenario,
+            history=[],
+            limit=4,
+        )
+        self.assertEqual(ranked[0].tool, "wireshark")
+        self.assertEqual(ranked[0].family, "packet_capture")
+        self.assertIn("packet capture", ranked[0].purpose)
+
+    def test_alternative_request_penalizes_already_mentioned_tool(self) -> None:
+        scenario = self._scenario()
+        ranked = rank_capabilities(
+            "Mais algum? Quero outra alternativa para interceptar requisições.",
+            scenario=scenario,
+            history=[
+                {"role": "assistant", "content": "BurpSuite é um proxy de interceptação HTTP(S)."}
+            ],
+            limit=4,
+        )
+        self.assertNotEqual(ranked[0].tool, "burpsuite")
+        self.assertEqual(ranked[0].family, "web_proxy")
+
+    def test_interception_guidance_scopes_delivery_to_current_turn(self) -> None:
+        scenario = self._scenario()
+        guidance = capability_guidance(
+            "Qual o melhor app para interceptar requisições no Kali?",
+            scenario=scenario,
+            history=[
+                {"role": "user", "content": "Me dê apenas um comando bash."}
+            ],
+        )
+        self.assertIn("proxy de interceptação HTTP(S) != captura de pacotes", guidance)
+        self.assertIn("turnos anteriores", guidance)
+        self.assertIn("Não emita comando", guidance)
+
     def test_expanded_tools_are_canonical_command_candidates(self) -> None:
         response = (
             "```bash\nsslscan wifhoodie.com:443\n```\n"
