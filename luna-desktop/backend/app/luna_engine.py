@@ -17,6 +17,7 @@ from datetime import datetime
 from openai import AsyncOpenAI
 from anthropic import AsyncAnthropic
 
+from .agent_harness import AgentHarness
 from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
 from .construction_reasoning import construction_guidance
@@ -347,6 +348,7 @@ class LunaEngine:
         self.compression_summaries: Dict[str, str] = {}   # session_id → accumulated summary
         self.scenario_contexts: Dict[str, ScenarioContext] = {}
         self.turn_metadata: Dict[str, Dict[str, Any]] = {}
+        self.harness = AgentHarness()
         # Provedores cujas keys foram confirmadas como inválidas (401) nesta sessão
         self._bad_key_providers: set = set()
         self.config = {
@@ -1247,6 +1249,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             history=history,
             mentor_enabled=bool(self.config.get("mentor_mode")),
         )
+        harness_trace = self.harness.begin_turn(session_id=session_id, route=route.route)
         turn_telemetry: Dict[str, Any] = {
             "session_id": session_id,
             "route": route.route,
@@ -1375,15 +1378,35 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     "message": "Pronto — contexto preservado"}, ensure_ascii=False)
 
         runtime_modules: Dict[str, str] = {}
+        retrieval_context = f"{message}\n{scenario.to_prompt_block(600)}"
         for module_id in route.selected_modules:
             content = self.active_modules.get(module_id)
             if content:
-                runtime_modules[module_id] = self.module_loader.relevant_excerpt(
-                    content,
-                    f"{message}\n{scenario.to_prompt_block(600)}",
-                    max_chars=650,
+                cached_excerpt, cache_key = self.harness.cached_retrieval(
+                    namespace=f"procedural:{module_id}",
+                    payload=f"{content}\n---CONTEXT---\n{retrieval_context}",
                 )
+                if cached_excerpt is None:
+                    harness_trace.cache_misses += 1
+                    cached_excerpt = self.module_loader.relevant_excerpt(
+                        content,
+                        retrieval_context,
+                        max_chars=650,
+                    )
+                    self.harness.store_retrieval(key=cache_key, value=cached_excerpt)
+                else:
+                    harness_trace.cache_hits += 1
+                runtime_modules[module_id] = cached_excerpt
         turn_telemetry["selected_modules"] = sorted(runtime_modules)
+        harness_trace.memory = self.harness.memory_snapshot(
+            evidence_delta=evidence_delta.to_prompt_block(500),
+            scenario_context=scenario.to_prompt_block(500),
+            active_modules=runtime_modules,
+            project_context=project_context or "",
+            context_summary=ctx_summary or "",
+            history_count=len(history),
+        )
+        turn_telemetry["harness"] = harness_trace.to_dict()
 
         if route.route == "FAST":
             route_guidance = (
@@ -1502,6 +1525,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             return buffered_events, buffered_text
 
         try:
+            self.harness.record_model_attempt(harness_trace)
+            turn_telemetry["harness"] = harness_trace.to_dict()
             if client_type == 'claude':
                 gen = self._stream_claude_with_tools(
                     model_name, messages, system, workspace_path or '', call_ctr, history_out)
@@ -1526,8 +1551,17 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 evidence_delta_count=evidence_delta.count,
             )
 
-            if not validation.valid:
+            if (
+                not validation.valid
+                and self.harness.should_replan(
+                    harness_trace,
+                    validation_valid=validation.valid,
+                )
+            ):
                 replan_used = True
+                self.harness.record_replan(harness_trace)
+                self.harness.record_model_attempt(harness_trace)
+                turn_telemetry["harness"] = harness_trace.to_dict()
                 logger.info(
                     "chat.response.replan %s",
                     json.dumps(
@@ -1603,6 +1637,12 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     history_out[:] = replan_history
 
             if validation and not validation.valid:
+                self.harness.record_output_guardrails(
+                    harness_trace,
+                    validator_passed=False,
+                    validation_reasons=validation.reasons,
+                )
+                turn_telemetry["harness"] = harness_trace.to_dict()
                 turn_telemetry.update({
                     "response_source": "system_error",
                     "loop_guard": "replan_failed_validation",
@@ -1796,6 +1836,13 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         if full_text:
             scenario.record_model_response(full_text)
 
+        if validation:
+            self.harness.record_output_guardrails(
+                harness_trace,
+                validator_passed=validation.valid,
+                validation_reasons=validation.reasons,
+            )
+        turn_telemetry["harness"] = harness_trace.to_dict()
         turn_telemetry.update({
             "response_source": "model",
             "loop_guard": (
@@ -1905,6 +1952,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             "instruction_only_mode": bool(self.config.get("instruction_only_mode", True)),
             "supervised_mode": not self._tool_execution_allowed(),
             "tool_execution_allowed": self._tool_execution_allowed(),
+            "harness": self.harness.public_policy(),
+            "harness_retrieval_cache_entries": self.harness.retrieval_cache.size(),
             "config_dir": str(self.module_loader.config_dir),
             "modules": {
                 "mentor_kali_devtools": {
