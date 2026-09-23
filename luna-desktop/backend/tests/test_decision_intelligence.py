@@ -78,6 +78,23 @@ class DecisionIntelligenceTests(unittest.TestCase):
         self.assertLess(score.confidence, 0.6)
         self.assertGreater(score.uncertainty, 0.8)
 
+    def test_weak_construction_lowers_confidence_even_with_same_evidence(self) -> None:
+        strong = DecisionCandidate(
+            name="strong-model", evidence_support=0.85, information_gain=0.80,
+            discriminative_power=0.85, scope_fit=0.95, reversibility=0.95,
+            safety=0.95, cost=0.15, noise=0.10, novelty=0.65,
+            downstream_leverage=0.85, construction_coverage=0.92,
+            mechanism_linkage=0.94,
+        )
+        weak = DecisionCandidate(
+            name="weak-model", evidence_support=0.85, information_gain=0.80,
+            discriminative_power=0.85, scope_fit=0.95, reversibility=0.95,
+            safety=0.95, cost=0.15, noise=0.10, novelty=0.65,
+            downstream_leverage=0.85, construction_coverage=0.20,
+            mechanism_linkage=0.25,
+        )
+        self.assertGreater(score_candidate(strong).confidence, score_candidate(weak).confidence)
+
     def test_contradiction_penalty_reduces_claim_confidence(self) -> None:
         clean = evidence_confidence(
             direct_observation=0.95,
