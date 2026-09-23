@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from typing import Sequence, Mapping, Any
 
+from .kali_capability_router import capability_guidance
 from .kali_tool_dictionary import KALI_TOOL_DICTIONARY, get_tool_spec
 from .kali_tool_readiness import assess_tool_readiness
 from .offensive_strategy import nmap_context_guidance
@@ -117,6 +118,10 @@ def guidance_for_context(message: str, *, scenario=None, history: Sequence[Mappi
         strategic = nmap_context_guidance(combined_context)
         if strategic:
             chunks.append(strategic)
+
+    capability = capability_guidance(message, scenario=scenario, history=history)
+    if capability:
+        chunks.append(capability)
 
     readiness = assess_tool_readiness(message, scenario=scenario, history_text=history_text)
     if readiness.tool == tool and not readiness.ready:
