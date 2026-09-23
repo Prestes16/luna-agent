@@ -31,6 +31,18 @@ _ROLLBACK_MARKERS = (
 )
 
 
+_APT_MUTATION_RE = re.compile(
+    r"(?i)^\s*(?:sudo\s+)?apt(?:-get)?\b.*\b(?:install|remove|purge|upgrade|full-upgrade|dist-upgrade|autoremove)\b"
+)
+_APT_SIMULATION_RE = re.compile(
+    r"(?i)^\s*(?:sudo\s+)?apt(?:-get)?\b.*(?:^|\s)(?:-s|--simulate|--dry-run)(?:\s|$)"
+)
+_APT_PREFLIGHT_CONFIRMED_MARKERS = (
+    "dry-run confirmado", "dry run confirmado", "simulação confirmada",
+    "simulacao confirmada", "apt simulation confirmed",
+)
+
+
 def _candidate_commands(response: str) -> list[str]:
     commands = list(extract_commands(response))
     for block in _FENCE_RE.findall(response):
@@ -60,6 +72,10 @@ def _host_safety_reasons(message: str, response: str, scenario: Any) -> list[str
     reasons: list[str] = []
     response_lower = response.casefold()
     rollback_documented = any(marker in response_lower for marker in _ROLLBACK_MARKERS)
+    context_lower = context.casefold()
+    apt_preflight_confirmed = any(
+        marker in context_lower for marker in _APT_PREFLIGHT_CONFIRMED_MARKERS
+    )
 
     for command in _candidate_commands(response):
         assessment = assess_host_safety(command, context=context)
@@ -67,6 +83,12 @@ def _host_safety_reasons(message: str, response: str, scenario: Any) -> list[str
 
         if assessment.remote_pipe_execution:
             reasons.append("host_remote_pipe_to_shell")
+        if (
+            _APT_MUTATION_RE.search(command)
+            and not _APT_SIMULATION_RE.search(command)
+            and not apt_preflight_confirmed
+        ):
+            reasons.append("host_package_change_preflight_required")
         if assessment.system_tree_change:
             reasons.append("host_system_tree_recursive_mutation")
         if assessment.critical_storage and not assessment.safe_to_recommend_now:
@@ -131,6 +153,12 @@ def build_replan_instruction(validation, scenario_prompt: str, current_message: 
         additions.append(
             "não use curl|sh, wget|bash ou PowerShell download|IEX; primeiro baixe para um path "
             "factual, inspecione/hash e só então proponha execução separada se apropriado"
+        )
+    if "host_package_change_preflight_required" in reasons:
+        additions.append(
+            "no Kali/Debian, antes de apt/apt-get install/remove/upgrade proponha uma simulação "
+            "(-s/--simulate) com os mesmos pacotes e aguarde o resultado; não aplique a mutação no "
+            "mesmo passo"
         )
     if "host_system_tree_recursive_mutation" in reasons:
         additions.append(
