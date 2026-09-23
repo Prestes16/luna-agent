@@ -36,8 +36,8 @@ _SYSTEM_TREE_PATTERNS = (
     re.compile(r"(?i)\brm\b[^\n]*(?:-r|-rf|-fr)[^\n]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),
     re.compile(r"(?i)\b(?:chmod|chown)\b[^\n]*-R[^\n]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),
     re.compile(r"(?i)\bfind\s+/(?:\s|[^\n]*)-delete\b"),
-    re.compile(r"(?i)\bremove-item\b[^\n]*-(?:recurse|r)\b[^\n]*(?:[a-z]:\\(?:windows|program files|users)(?:\\|\s|$))"),
-    re.compile(r"(?i)\b(?:icacls|takeown)\b[^\n]*(?:[a-z]:\\(?:windows|program files|users))[^\n]*(?:/t|/r)\b"),
+    re.compile(r"(?i)\bremove-item\b[^\n]*-(?:recurse|r)\b[^\n]*(?:[a-z]:\\+(?:windows|program files|users)(?:\\+|\s|$))"),
+    re.compile(r"(?i)\b(?:icacls|takeown)\b[^\n]*(?:[a-z]:\\+(?:windows|program files|users))[^\n]*(?:/t|/r)\b"),
 )
 
 _FIREWALL_ROUTE_PATTERNS = (
