@@ -357,7 +357,7 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
 
 def host_safety_guidance(context: str) -> str:
     return (
-        "HOST SAFETY: the operator executes every command. For any privileged or state-changing "
+        "HOST SAFETY: the operator controls execution authority. For any privileged or state-changing "
         "action use PRECHECK -> ONE CHANGE -> VERIFY -> ROLLBACK/CONTINUE. Never pipe remote "
         "downloads directly into a shell. Never use recursive deletion/permission changes on "
         "system trees. Disk/partition/boot operations require an explicitly identified environment, "
