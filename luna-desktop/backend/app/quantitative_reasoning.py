@@ -1,0 +1,234 @@
+"""Quantitative reasoning for Luna: exact math first, physics when the mechanism requires it.
+
+This module is instruction-only. It supplies deterministic numerical helpers and
+compact domain guidance so cyber conclusions are tied to representation, units,
+bounds, rounding, conservation and measurable physical mechanisms.
+"""
+
+from __future__ import annotations
+
+import math
+from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+from typing import Iterable
+
+
+@dataclass(frozen=True)
+class QuantitativeProfile:
+    name: str
+    markers: tuple[str, ...]
+    checks: tuple[str, ...]
+    invariants: tuple[str, ...]
+
+
+QUANTITATIVE_PROFILES: tuple[QuantitativeProfile, ...] = (
+    QuantitativeProfile(
+        "blockchain_financial",
+        ("solana", "anchor", "spl", "token", "lamport", "usdc", "smart contract", "solidity", "fee", "vault"),
+        (
+            "integer/base-unit representation and decimal scale",
+            "checked overflow/underflow and intermediate width",
+            "multiply/divide order, rounding direction and dust",
+            "fee/split conservation across every state transition",
+            "probability/randomness mapping without modulo bias",
+        ),
+        (
+            "sum(inflows) = sum(outflows) + fees + retained state",
+            "no value is created or destroyed by rounding",
+            "authority/state transition cannot change arithmetic semantics",
+        ),
+    ),
+    QuantitativeProfile(
+        "integer_memory_binary",
+        ("overflow", "underflow", "integer", "u64", "u128", "i64", "signed", "unsigned", "pointer", "offset", "endian", "bit"),
+        (
+            "bit width, signedness and exact integer bounds",
+            "promotion/cast/truncation rules",
+            "address/offset/alignment arithmetic",
+            "endianness and bit-mask semantics",
+            "checked versus wrapping/saturating operations",
+        ),
+        (
+            "all intermediate values remain representable",
+            "casts preserve the intended mathematical value",
+            "index/address arithmetic stays inside the intended object",
+        ),
+    ),
+    QuantitativeProfile(
+        "probability_randomness_crypto",
+        ("probability", "probabilidade", "random", "randomness", "rng", "entropy", "nonce", "hash", "collision", "bias", "vrf", "crypto"),
+        (
+            "sample space and distribution",
+            "entropy/min-entropy and independence assumptions",
+            "modular arithmetic and finite-domain mapping",
+            "collision/birthday bounds and nonce uniqueness",
+            "bias, rejection sampling and adversarial influence",
+        ),
+        (
+            "probabilities sum to one over the defined sample space",
+            "security claims state their assumptions and bit-strength",
+            "uniform source to bounded output does not introduce hidden bias",
+        ),
+    ),
+    QuantitativeProfile(
+        "numeric_programming",
+        ("float", "double", "decimal", "precision", "rounding", "arredond", "fixed point", "fixed-point", "porcent", "percentage", "rate", "ratio"),
+        (
+            "number representation and precision",
+            "unit/dimension consistency",
+            "rounding mode and operation ordering",
+            "error propagation and boundary cases",
+            "monotonicity/conservation properties",
+        ),
+        (
+            "units remain dimensionally consistent",
+            "rounding error is bounded and cannot accumulate into forbidden state",
+            "comparison thresholds use the intended numeric domain",
+        ),
+    ),
+    QuantitativeProfile(
+        "network_signal_physics",
+        ("wifi", "wi-fi", "802.11", "radio", "rf", "rssi", "snr", "frequency", "frequência", "latency", "latência", "bandwidth", "throughput", "signal"),
+        (
+            "frequency, wavelength and propagation assumptions",
+            "bandwidth, SNR/noise and achievable information rate",
+            "latency decomposition and timing resolution",
+            "sampling/window size and measurement variance",
+            "units/logarithmic scales such as dB/dBm",
+        ),
+        (
+            "dimensions/units are consistent",
+            "measured effects exceed noise and resolution limits",
+            "correlation is not promoted to causation without a physical mechanism",
+        ),
+    ),
+    QuantitativeProfile(
+        "hardware_side_channel",
+        ("side channel", "side-channel", "timing attack", "power analysis", "emission", "em ", "voltage", "current", "thermal", "clock", "fault injection"),
+        (
+            "clock/time resolution and repeated-sample statistics",
+            "power/energy/current/voltage relationships",
+            "signal-to-noise and leakage model",
+            "physical coupling path and measurement bandwidth",
+            "confidence intervals/effect size before attribution",
+        ),
+        (
+            "a physical claim identifies a measurable coupling mechanism",
+            "effect size is distinguishable from measurement noise",
+            "units and acquisition conditions are explicit",
+        ),
+    ),
+)
+
+
+def select_quantitative_profile(context: str) -> QuantitativeProfile | None:
+    normalized = context.casefold()
+    ranked: list[tuple[int, int, QuantitativeProfile]] = []
+    for index, profile in enumerate(QUANTITATIVE_PROFILES):
+        hits = sum(marker in normalized for marker in profile.markers)
+        if hits:
+            ranked.append((hits, -index, profile))
+    if not ranked:
+        return None
+    ranked.sort(key=lambda item: (-item[0], -item[1]))
+    return ranked[0][2]
+
+
+def integer_bounds(bits: int, signed: bool) -> tuple[int, int]:
+    if bits <= 0:
+        raise ValueError("bits must be positive")
+    if signed:
+        high = (1 << (bits - 1)) - 1
+        low = -(1 << (bits - 1))
+        return low, high
+    return 0, (1 << bits) - 1
+
+
+def integer_margin(value: int, bits: int, signed: bool) -> int:
+    """Distance to the nearest representable boundary; negative means out of range."""
+    low, high = integer_bounds(bits, signed)
+    if value < low:
+        return value - low
+    if value > high:
+        return high - value
+    return min(value - low, high - value)
+
+
+def scale_decimal_exact(value: str, decimals: int) -> int:
+    """Convert a decimal string to base units without binary floating-point."""
+    if decimals < 0:
+        raise ValueError("decimals must be non-negative")
+    try:
+        decimal_value = Decimal(value)
+    except InvalidOperation as exc:
+        raise ValueError("invalid decimal value") from exc
+    scaled = decimal_value * (Decimal(10) ** decimals)
+    integral = scaled.to_integral_value()
+    if scaled != integral:
+        raise ValueError("value has more fractional precision than the scale permits")
+    return int(integral)
+
+
+def mul_div_floor(a: int, b: int, denominator: int) -> tuple[int, int]:
+    """Exact integer multiply/divide; returns (quotient, discarded remainder)."""
+    if denominator <= 0:
+        raise ValueError("denominator must be positive")
+    product = a * b
+    quotient, remainder = divmod(product, denominator)
+    return quotient, remainder
+
+
+def conservation_residual(inflows: Iterable[int], outflows: Iterable[int]) -> int:
+    """Zero means exact conservation in the same base unit."""
+    return sum(int(value) for value in inflows) - sum(int(value) for value in outflows)
+
+
+def shannon_entropy_bits(probabilities: Iterable[float]) -> float:
+    values = [float(p) for p in probabilities]
+    if not values or any(p < 0.0 or p > 1.0 for p in values):
+        raise ValueError("probabilities must be within [0,1]")
+    if not math.isclose(sum(values), 1.0, rel_tol=1e-9, abs_tol=1e-12):
+        raise ValueError("probabilities must sum to 1")
+    entropy = -sum(p * math.log2(p) for p in values if p > 0.0)
+    return round(entropy, 12)
+
+
+def birthday_collision_probability(samples: int, bits: int) -> float:
+    if samples < 0 or bits <= 0:
+        raise ValueError("samples must be non-negative and bits positive")
+    if samples < 2:
+        return 0.0
+    space = float(2 ** bits)
+    exponent = -(samples * (samples - 1)) / (2.0 * space)
+    return max(0.0, min(1.0, 1.0 - math.exp(exponent)))
+
+
+def wavelength_m(frequency_hz: float, propagation_speed_m_s: float = 299_792_458.0) -> float:
+    if frequency_hz <= 0.0 or propagation_speed_m_s <= 0.0:
+        raise ValueError("frequency and propagation speed must be positive")
+    return propagation_speed_m_s / frequency_hz
+
+
+def shannon_capacity_bps(bandwidth_hz: float, snr_linear: float) -> float:
+    if bandwidth_hz < 0.0 or snr_linear < 0.0:
+        raise ValueError("bandwidth and SNR must be non-negative")
+    return bandwidth_hz * math.log2(1.0 + snr_linear)
+
+
+def quantitative_guidance(context: str, max_chars: int = 850) -> str:
+    profile = select_quantitative_profile(context)
+    if not profile:
+        return ""
+    checks = "; ".join(profile.checks[:4])
+    invariants = "; ".join(profile.invariants[:2])
+    guidance = (
+        f"QUANTITATIVE REASONING domain={profile.name}: {checks}. Invariants: {invariants}. "
+        "Before a numeric/security conclusion, state the numeric domain/representation, units or "
+        "base units, bounds, operation order, rounding semantics and the invariant being tested. "
+        "Prefer integers/rationals/fixed-point over binary float for exact value flows. For nontrivial "
+        "math show formula -> substitution -> units -> bound/result; distinguish exact result from "
+        "approximation. For physical/timing/RF claims require a measurable mechanism, acquisition "
+        "conditions and noise/resolution limits. Treat arithmetic anomalies as hypotheses until the "
+        "operator supplies reproducible evidence."
+    )
+    return guidance[:max_chars]
