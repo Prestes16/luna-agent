@@ -8,6 +8,7 @@ with a SHA-256 attestation for each executable command.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from .command_ast import assess_nmap_strategy
@@ -124,6 +125,64 @@ def _host_safety_attestations(engine: Any, session_id: str, message: str, respon
     return output
 
 
+def build_response_execution_intents(
+    engine: Any,
+    session_id: str,
+    message: str,
+    response: str,
+) -> list[dict]:
+    """Build final intents from the exact operator-visible commands."""
+    scenario = engine.scenario_contexts.get(session_id)
+    context_parts = [message]
+    if scenario is not None:
+        for attr in ("target", "current_goal", "environment", "scope"):
+            value = getattr(scenario, attr, None)
+            if value:
+                context_parts.append(str(value))
+        context_parts.extend(
+            str(item) for item in (getattr(scenario, "observed_facts", []) or [])
+        )
+    context = "\n".join(context_parts)
+    normalized = context.casefold()
+    scope_confirmed = bool(getattr(scenario, "scope", None)) or any(
+        marker in normalized
+        for marker in (
+            "autorizado", "authorized", "ctf", "laboratório", "laboratorio",
+            "lab", "sandbox", "escopo confirmado", "scope confirmed",
+        )
+    )
+    operator_requested = operator_requested_execution(message)
+    rollback_ready = bool(
+        re.search(
+            r"(?i)\b(?:rollback|reverter|restaurar|desfazer|cleanup|limpeza)\b",
+            response,
+        )
+    )
+    verification_ready = bool(
+        re.search(
+            r"(?i)\b(?:verify|verificar|validar|confirmar|post-state|p[oó]s-estado|evid[eê]ncia)\b",
+            response,
+        )
+    )
+    scope_target = (
+        str(getattr(scenario, "target", "") or "") or None
+        if scenario is not None else None
+    )
+
+    return [
+        build_execution_intent(
+            command,
+            context=context,
+            operator_requested_execution=operator_requested,
+            scope_confirmed=scope_confirmed,
+            rollback_ready=rollback_ready,
+            verification_ready=verification_ready,
+            scope_target=scope_target,
+        ).to_dict()
+        for command in extract_commands(response)
+    ]
+
+
 def install_response_attestation(engine_cls: type) -> None:
     """Wrap LunaEngine.stream_agent once without changing the core engine file."""
     if getattr(engine_cls, "_response_attestation_installed", False):
@@ -165,20 +224,6 @@ def install_response_attestation(engine_cls: type) -> None:
                 attestations = command_attestations(message, visible_text)
                 operator_requested = operator_requested_execution(message)
                 scenario = self.scenario_contexts.get(sid)
-                intent_context_parts = [message]
-                if scenario is not None:
-                    for attr in ("target", "current_goal", "environment", "scope"):
-                        value = getattr(scenario, attr, None)
-                        if value:
-                            intent_context_parts.append(str(value))
-                intent_context = "\n".join(intent_context_parts)
-                scope_confirmed = any(
-                    marker in intent_context.casefold()
-                    for marker in (
-                        "autorizado", "authorized", "ctf", "laboratório", "laboratorio",
-                        "lab", "sandbox", "escopo confirmado", "scope confirmed",
-                    )
-                )
                 response_commands = extract_commands(visible_text)
                 execution_attestations = [
                     assess_command_execution(
@@ -190,21 +235,12 @@ def install_response_attestation(engine_cls: type) -> None:
                     ).to_dict()
                     for command in response_commands
                 ]
-                execution_intents = [
-                    build_execution_intent(
-                        command,
-                        context=intent_context,
-                        operator_requested_execution=operator_requested_execution,
-                        scope_confirmed=scope_confirmed,
-                        rollback_ready=False,
-                        verification_ready=True,
-                        scope_target=(
-                            str(getattr(scenario, "target", "") or "") or None
-                            if scenario is not None else None
-                        ),
-                    ).to_dict()
-                    for command in response_commands
-                ]
+                execution_intents = build_response_execution_intents(
+                    self,
+                    sid,
+                    message,
+                    visible_text,
+                )
                 strategy_attestations = _strategy_attestations(self, sid, message, visible_text)
                 host_safety_attestations = _host_safety_attestations(
                     self, sid, message, visible_text
