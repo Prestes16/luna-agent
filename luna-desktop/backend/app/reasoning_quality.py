@@ -33,7 +33,9 @@ _KNOWN_TOOLS = (
     "tshark", "rpcclient", "ldapsearch", "burpsuite", "mitmproxy", "mitmweb",
     "zaproxy", "wireshark", "proxychains4", "proxychains", "tor", "torsocks",
     "openvpn", "wg-quick", "wg", "yara", "capa", "floss", "rizin", "radare2",
-    "objdump", "readelf", "binwalk", "volatility3", "vol", "olevba", "apktool", "jadx",
+    "file", "sha256sum", "strings", "xxd", "objdump", "readelf", "binwalk",
+    "volatility3", "vol", "olevba", "apktool", "jadx", "wine", "java", "dotnet",
+    "mono", "wscript", "cscript",
 )
 _URL_RE = re.compile(r"https?://[^\s<>\]\)]+", re.IGNORECASE)
 
