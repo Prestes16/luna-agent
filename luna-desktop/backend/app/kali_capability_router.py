@@ -8,7 +8,6 @@ the local model sees only relevant capabilities.
 from __future__ import annotations
 
 import math
-import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -58,11 +57,27 @@ _ALTERNATIVE_MARKERS = (
 _WORD_BOUNDARY_MARKERS = {"tor", "vpn"}
 
 
+def _contains_word(value: str, word: str) -> bool:
+    haystack = value.casefold()
+    needle = word.casefold()
+    start = 0
+    while True:
+        index = haystack.find(needle, start)
+        if index < 0:
+            return False
+        before = haystack[index - 1] if index > 0 else ""
+        after_index = index + len(needle)
+        after = haystack[after_index] if after_index < len(haystack) else ""
+        before_is_word = bool(before) and (before.isalnum() or before == "_")
+        after_is_word = bool(after) and (after.isalnum() or after == "_")
+        if not before_is_word and not after_is_word:
+            return True
+        start = index + 1
+
+
 def _marker_present(normalized: str, marker: str) -> bool:
     if marker in _WORD_BOUNDARY_MARKERS:
-        return bool(
-            re.search(rf"(?<!\\w){re.escape(marker)}(?!\\w)", normalized)
-        )
+        return _contains_word(normalized, marker)
     return marker in normalized
 
 
