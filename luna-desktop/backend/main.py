@@ -5,6 +5,7 @@ Elite Autonomous AI Agent Backend
 """
 
 import os
+import base64
 import sys
 import logging
 import re
@@ -398,7 +399,7 @@ async def get_local_project_evidence(project_id: int, record_id: int):
 @app.get("/api/projects/{project_id}/evidence/{record_id}/verify")
 async def verify_local_project_evidence(project_id: int, record_id: int):
     try:
-        metadata, _raw = project_store.read_evidence_artifact(project_id, record_id)
+        metadata = project_store.get_evidence_artifact_metadata(project_id, record_id)
         return {
             "id": record_id,
             "sha256": metadata["sha256"],
@@ -533,6 +534,30 @@ async def chat_agent_stream(request: Request):
                         "mime": img.get("mime", "image/png"),
                     })
         images = validated or None
+
+    # Project-scoped chat images are durable report evidence. Preserve exact bytes
+    # before semantic interpretation so later reports can reference the original
+    # screenshot rather than a model reconstruction.
+    if project_match and images:
+        project_id = int(project_match.group(1))
+        for index, image in enumerate(images, start=1):
+            try:
+                raw = base64.b64decode(image["data"], validate=True)
+                project_store.add_evidence_artifact(
+                    project_id,
+                    data=raw,
+                    kind="chat-screenshot",
+                    media_type=image.get("mime", "image/png"),
+                    source=f"chat:{session_id}",
+                    description=f"visual evidence attached to chat turn image#{index}",
+                    sensitivity="normal",
+                )
+            except (ValueError, TypeError, ProjectValidationError, ProjectNotFoundError):
+                logger.info(
+                    "[chat] Visual evidence was not persisted for %s image#%s",
+                    session_id,
+                    index,
+                )
 
     if not message and not images:
         raise HTTPException(status_code=400, detail="message ou images é obrigatório")
