@@ -64,6 +64,7 @@ class TurnHarnessTrace:
     termination_reason: str = "pending"
     memory: MemoryPlaneSnapshot | None = None
     last_checkpoint_id: int | None = None
+    checkpoint_errors: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -221,14 +222,18 @@ class AgentHarness:
         store = self.checkpoint_store
         if store is None:
             return None
-        checkpoint = store.save(
-            thread_id=trace.session_id,
-            turn_id=trace.turn_id,
-            stage=stage,
-            state=state,
-            human_review_required=human_review_required,
-            parent_checkpoint_id=trace.last_checkpoint_id,
-        )
+        try:
+            checkpoint = store.save(
+                thread_id=trace.session_id,
+                turn_id=trace.turn_id,
+                stage=stage,
+                state=state,
+                human_review_required=human_review_required,
+                parent_checkpoint_id=trace.last_checkpoint_id,
+            )
+        except Exception as error:
+            trace.checkpoint_errors.append(type(error).__name__)
+            return None
         trace.last_checkpoint_id = checkpoint.checkpoint_id
         return checkpoint
 
