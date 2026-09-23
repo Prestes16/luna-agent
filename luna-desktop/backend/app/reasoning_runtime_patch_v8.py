@@ -32,7 +32,7 @@ _EXEC_RE = re.compile(
     r"feroxbuster|dirsearch|nikto|nuclei|sqlmap|wpscan|dig|nslookup|dnsenum|"
     r"dnsrecon|amass|subfinder|traceroute|ping|whatweb|httpx|enum4linux(?:-ng)?|"
     r"smbclient|netexec|crackmapexec|hydra|medusa|john|hashcat|searchsploit|"
-    r"msfconsole|python(?:3)?|pwsh|powershell|invoke-webrequest|iwr)\b",
+    r"sslscan|testssl|tcpdump|tshark|rpcclient|ldapsearch|msfconsole|python(?:3)?|pwsh|powershell|invoke-webrequest|iwr)\b",
     re.IGNORECASE,
 )
 
