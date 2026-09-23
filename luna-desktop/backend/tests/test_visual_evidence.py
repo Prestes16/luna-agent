@@ -5,6 +5,7 @@ import unittest
 from app.luna_engine import LunaEngine
 from app.visual_evidence import (
     build_visual_evidence_manifest,
+    model_supports_visual_reasoning,
     visual_evidence_guidance,
 )
 
@@ -30,6 +31,13 @@ class VisualEvidenceTests(unittest.TestCase):
         self.assertEqual(content[0]["type"], "image_url")
         self.assertTrue(content[0]["image_url"]["url"].startswith("data:image/png;base64,"))
         self.assertEqual(content[-1], {"type": "text", "text": "Leia esta captura."})
+
+    def test_visual_reasoning_requires_explicit_vision_capability(self) -> None:
+        self.assertTrue(model_supports_visual_reasoning(["completion", "vision", "tools"]))
+        self.assertTrue(model_supports_visual_reasoning(["VISION"]))
+        self.assertFalse(model_supports_visual_reasoning(["completion", "tools"]))
+        self.assertFalse(model_supports_visual_reasoning([]))
+        self.assertFalse(model_supports_visual_reasoning(None))
 
     def test_invalid_base64_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
