@@ -79,7 +79,7 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
     def test_runtime_prompt_carries_execution_authority_and_exploit_contract(self) -> None:
         from app.luna_engine import _build_system_prompt
 
-        prompt = _build_system_prompt(supervised_mode=True)
+        prompt = _build_system_prompt(None, supervised_mode=True)
         self.assertIn("L0 OBSERVE=AUTO", prompt)
         self.assertIn("L1 PROBE=ON_DEMAND", prompt)
         self.assertIn("L2 MUTATE", prompt)
