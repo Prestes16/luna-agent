@@ -35,6 +35,8 @@ _SYSTEM_TREE_PATTERNS = (
     re.compile(r"(?i)\brm\b[^\n]*(?:-r|-rf|-fr)[^\n]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),
     re.compile(r"(?i)\b(?:chmod|chown)\b[^\n]*-R[^\n]*(?:\s/\s*$|\s/(?:boot|etc|usr|var|home)(?:/|\s|$))"),
     re.compile(r"(?i)\bfind\s+/(?:\s|[^\n]*)-delete\b"),
+    re.compile(r"(?i)\bremove-item\b[^\n]*-(?:recurse|r)\b[^\n]*(?:[a-z]:\\(?:windows|program files|users)(?:\\|\s|$))"),
+    re.compile(r"(?i)\b(?:icacls|takeown)\b[^\n]*(?:[a-z]:\\(?:windows|program files|users))[^\n]*(?:/t|/r)\b"),
 )
 
 _FIREWALL_ROUTE_PATTERNS = (
@@ -43,6 +45,21 @@ _FIREWALL_ROUTE_PATTERNS = (
     re.compile(r"(?i)\bufw\s+(?:reset|disable)\b"),
     re.compile(r"(?i)\bip\s+(?:route|addr)\s+flush\b"),
     re.compile(r"(?i)\broute\s+(?:del|delete)\b"),
+    re.compile(r"(?i)\b(?:new-netroute|remove-netroute|set-dnsclientserveraddress)\b"),
+)
+
+_CONNECTIVITY_PATTERNS = (
+    re.compile(r"(?i)\bip\s+link\s+set\b[^\n]*\bdown\b"),
+    re.compile(r"(?i)\bnmcli\s+networking\s+off\b"),
+    re.compile(r"(?i)\bsystemctl\s+(?:stop|restart)\s+(?:networkmanager|networking|systemd-resolved|ssh|sshd)\b"),
+    re.compile(r"(?i)\bdisable-netadapter\b"),
+    re.compile(r"(?i)\bnetsh\s+interface\b[^\n]*\bdisabled\b"),
+)
+
+_SECURITY_CONTROL_PATTERNS = (
+    re.compile(r"(?i)\bset-mppreference\b[^\n]*-disablerealtimemonitoring\s+\$?true\b"),
+    re.compile(r"(?i)\b(?:sc(?:\.exe)?\s+stop|stop-service)\s+(?:windefend|mpssvc)\b"),
+    re.compile(r"(?i)\bset-netfirewallprofile\b[^\n]*-enabled\s+(?:false|0)\b"),
 )
 
 _SYSTEM_CONFIG_PATH_PATTERNS = (
@@ -75,7 +92,8 @@ _EXPLICIT_HIGH_IMPACT_MARKERS = (
     "formatar", "format", "particionar", "partition", "bootloader", "grub",
     "bcd", "wipe", "apagar disco", "limpar firewall", "flush firewall",
     "alterar rota", "mudar rota", "editar /etc", "alterar /etc",
-    "instalar", "install", "remover pacote", "remove package", "upgrade",
+    "desativar defender", "disable defender", "desativar firewall", "disable firewall",
+    "desativar adaptador", "disable adapter", "instalar", "install", "remover pacote", "remove package", "upgrade",
     "atualizar pacotes",
 )
 
@@ -92,6 +110,8 @@ class HostSafetyAssessment:
     boot_change: bool
     system_tree_change: bool
     network_control_change: bool
+    connectivity_change: bool
+    security_control_reduction: bool
     remote_pipe_execution: bool
     persistent_change: bool
     environment_confirmed: bool
@@ -131,6 +151,9 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
     boot_change = _matches_any(command, _BOOT_PATTERNS)
     system_tree_change = _matches_any(command, _SYSTEM_TREE_PATTERNS)
     network_control_change = _matches_any(command, _FIREWALL_ROUTE_PATTERNS)
+    connectivity_change = _matches_any(command, _CONNECTIVITY_PATTERNS)
+    security_control_reduction = _matches_any(command, _SECURITY_CONTROL_PATTERNS)
+    network_control_change = bool(network_control_change or connectivity_change)
     remote_pipe_execution = _matches_any(command, _REMOTE_PIPE_EXEC_PATTERNS)
     system_config_path = _matches_any(command, _SYSTEM_CONFIG_PATH_PATTERNS)
     config_write = _matches_any(command, _CONFIG_WRITE_PATTERNS)
@@ -155,8 +178,8 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
     )
     high_impact = any((
         critical_storage, boot_change, system_tree_change, network_control_change,
-        remote_pipe_execution, system_config_change, persistence_change,
-        persistent_change,
+        connectivity_change, security_control_reduction, remote_pipe_execution,
+        system_config_change, persistence_change, persistent_change,
     ))
     backup_or_snapshot_required = bool(
         critical_storage or boot_change or system_tree_change or system_config_change
@@ -176,6 +199,10 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
         reasons.append("system_tree_recursive_mutation")
     if network_control_change:
         reasons.append("network_control_plane_mutation")
+    if connectivity_change:
+        reasons.append("host_connectivity_mutation")
+    if security_control_reduction:
+        reasons.append("security_control_reduction")
     if system_config_change:
         reasons.append("system_configuration_mutation")
     if persistence_change:
@@ -196,8 +223,13 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
         and explicit_high_impact
         and (device_target_confirmed if critical_storage else True)
     )
+    security_gate = security_control_reduction and not (
+        environment_confirmed and protected_lab_confirmed and explicit_high_impact
+    )
     environmental_block = high_impact and not environment_confirmed
-    safe_to_recommend_now = not (hard_block or gated_block or environmental_block)
+    safe_to_recommend_now = not (
+        hard_block or gated_block or security_gate or environmental_block
+    )
 
     base_risk = 0.08
     base_risk += 0.92 if remote_pipe_execution else 0.0
@@ -205,6 +237,7 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
     base_risk += 0.82 if boot_change else 0.0
     base_risk += 0.90 if system_tree_change else 0.0
     base_risk += 0.55 if network_control_change else 0.0
+    base_risk += 0.72 if security_control_reduction else 0.0
     base_risk += 0.42 if persistent_change else 0.0
     base_risk += 0.22 if lifecycle.privilege_required else 0.0
     risk = min(1.0, base_risk)
@@ -239,6 +272,8 @@ def assess_host_safety(command: str, *, context: str = "") -> HostSafetyAssessme
         boot_change=boot_change,
         system_tree_change=system_tree_change,
         network_control_change=network_control_change,
+        connectivity_change=connectivity_change,
+        security_control_reduction=security_control_reduction,
         remote_pipe_execution=remote_pipe_execution,
         persistent_change=persistent_change,
         environment_confirmed=environment_confirmed,
