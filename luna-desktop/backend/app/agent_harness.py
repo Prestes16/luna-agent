@@ -27,6 +27,9 @@ class HarnessPolicy:
     max_tool_calls: int = 0  # instruction-only build
     human_approval_for_sensitive_actions: bool = True
     semantic_response_cache_enabled: bool = False
+    write_actions_require_idempotency_key: bool = True
+    retry_strategy: str = "exponential_backoff+jitter"
+    transport_retry_limit: int = 2
     retrieval_cache_ttl_seconds: int = 300
     retrieval_cache_max_entries: int = 256
 
@@ -238,5 +241,10 @@ class AgentHarness:
             "semantic_response_cache_enabled": (
                 self.policy.semantic_response_cache_enabled
             ),
+            "write_actions_require_idempotency_key": (
+                self.policy.write_actions_require_idempotency_key
+            ),
+            "retry_strategy": self.policy.retry_strategy,
+            "transport_retry_limit": self.policy.transport_retry_limit,
             "retrieval_cache_ttl_seconds": self.policy.retrieval_cache_ttl_seconds,
         }
