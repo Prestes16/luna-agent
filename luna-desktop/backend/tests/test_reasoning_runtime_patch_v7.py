@@ -68,6 +68,39 @@ class StrategyAwareNmapTests(unittest.TestCase):
         self.assertNotIn("nmap_overbroad_for_initial_recon", validation.reasons)
         self.assertNotIn("nmap_strategy_utility_below_threshold", validation.reasons)
 
+    def test_web_optimization_rejects_global_top_ports_heuristic(self) -> None:
+        scenario = ScenarioContext()
+        scenario.update("CTF autorizado no alvo https://wifhoodie.com.")
+        message = "Otimize esse scan Nmap para as portas de maior valor no contexto web."
+        delta = scenario.update(message)
+        validation = validate_model_response(
+            message=message,
+            response="```bash\nsudo nmap -sS --top-ports 50 wifhoodie.com\n```",
+            scenario=scenario,
+            evidence_delta_count=delta.count,
+        )
+        self.assertFalse(validation.valid)
+        self.assertIn("nmap_top_ports_generic_for_web_context", validation.reasons)
+
+    def test_web_optimization_accepts_contextual_explicit_port_vector(self) -> None:
+        scenario = ScenarioContext()
+        scenario.update("CTF autorizado no alvo https://wifhoodie.com.")
+        message = "Otimize esse scan Nmap para as portas de maior valor no contexto web."
+        delta = scenario.update(message)
+        response = (
+            "```bash\n"
+            "sudo nmap -sS -p 80,443,8000,8080,8443,9090,10000,3306,5432,1433,27017,6379,11211 "
+            "wifhoodie.com\n```"
+        )
+        validation = validate_model_response(
+            message=message,
+            response=response,
+            scenario=scenario,
+            evidence_delta_count=delta.count,
+        )
+        self.assertNotIn("nmap_top_ports_generic_for_web_context", validation.reasons)
+        self.assertNotIn("nmap_web_port_profile_low_coverage", validation.reasons)
+        self.assertTrue(validation.valid, validation.reasons)
     def test_explicit_syn_scan_has_higher_initial_utility_than_implicit(self) -> None:
         message = "Faça um scan nmap inicial no alvo https://wifhoodie.com."
         explicit = assess_nmap_strategy(message, parse_command("nmap -sS -sV wifhoodie.com"))
