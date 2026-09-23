@@ -33,7 +33,11 @@ from .malware_analysis import malware_guidance, malware_tooling_summary
 from .quantitative_reasoning import quantitative_fact_sheet, quantitative_guidance
 from .technical_capabilities import technical_guidance
 from .threat_response import threat_response_guidance
-from .visual_evidence import build_visual_evidence_manifest, visual_evidence_guidance
+from .visual_evidence import (
+    build_visual_evidence_manifest,
+    model_supports_visual_reasoning,
+    visual_evidence_guidance,
+)
 from .reasoning_pipeline import (
     build_replan_instruction,
     classify_complexity,
@@ -1372,7 +1376,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             capabilities = await _ollama_model_capabilities_async(vision_candidate)
             turn_telemetry["vision_model"] = vision_candidate or None
             turn_telemetry["vision_capabilities"] = sorted(capabilities)
-            if "vision" not in capabilities:
+            if not model_supports_visual_reasoning(capabilities):
                 turn_telemetry["loop_guard"] = "vision_model_not_ready"
                 self.turn_metadata[session_id] = dict(turn_telemetry)
                 yield json.dumps({
