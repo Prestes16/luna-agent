@@ -8,6 +8,7 @@ the local model sees only relevant capabilities.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Sequence
 
@@ -52,6 +53,17 @@ _ALTERNATIVE_MARKERS = (
     "mais algum", "mais alguma", "outra ferramenta", "outras ferramentas",
     "outra opção", "outra opcao", "alternativa", "alternativas",
 )
+
+
+_WORD_BOUNDARY_MARKERS = {"tor", "vpn"}
+
+
+def _marker_present(normalized: str, marker: str) -> bool:
+    if marker in _WORD_BOUNDARY_MARKERS:
+        return bool(
+            re.search(rf"(?<!\\w){re.escape(marker)}(?!\\w)", normalized)
+        )
+    return marker in normalized
 
 
 _PRIVACY_TOOL_PROFILES: dict[str, tuple[str, ...]] = {
@@ -108,7 +120,7 @@ def _family_scores(context: str) -> dict[str, float]:
     normalized = context.casefold()
     result: dict[str, float] = {}
     for family, markers in _FAMILY_MARKERS.items():
-        hits = sum(marker in normalized for marker in markers)
+        hits = sum(_marker_present(normalized, marker) for marker in markers)
         if hits:
             result[family] = min(1.0, 0.35 + 0.18 * hits)
     return result
@@ -138,7 +150,7 @@ def rank_capabilities(
     history_lower = history_text.casefold()
     has_target = bool(getattr(scenario, "target", None)) if scenario is not None else False
     alternative_request = any(
-        marker in message_lower for marker in _ALTERNATIVE_MARKERS
+        _marker_present(message_lower, marker) for marker in _ALTERNATIVE_MARKERS
     )
 
     for name, spec in KALI_TOOL_DICTIONARY.items():
@@ -182,7 +194,7 @@ def capability_guidance(
     history: Sequence[Mapping[str, Any]] = (),
 ) -> str:
     normalized = message.casefold()
-    if not any(marker in normalized for marker in _SELECTION_MARKERS):
+    if not any(_marker_present(normalized, marker) for marker in _SELECTION_MARKERS):
         return ""
     candidates = rank_capabilities(
         message,
