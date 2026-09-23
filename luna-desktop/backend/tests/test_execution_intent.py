@@ -128,6 +128,28 @@ class ExecutionIntentTests(unittest.TestCase):
         self.assertEqual(intent.authority, BLOCKED)
         self.assertIn("target_scope_mismatch", intent.reasons)
 
+    def test_unknown_tool_semantics_fail_closed(self) -> None:
+        intent = build_execution_intent(
+            "customtool --do-something",
+            context="Kali VM laboratório autorizado",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+        )
+        self.assertEqual(intent.authority, BLOCKED)
+        self.assertEqual(intent.authority_level, L3_HIGH_IMPACT)
+        self.assertIn("unknown_tool_semantics_fail_closed", intent.reasons)
+
+    def test_generic_interpreter_execution_is_high_impact(self) -> None:
+        intent = build_execution_intent(
+            "python3 -c 'print(1)'",
+            context="Kali VM laboratório autorizado",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+        )
+        self.assertEqual(intent.authority_level, L3_HIGH_IMPACT)
+        self.assertEqual(intent.authority, APPROVAL_REQUIRED)
+        self.assertIn("high_impact_semantic", intent.reasons)
+
     def test_readiness_improves_when_scope_and_operator_are_bound(self) -> None:
         pending = build_execution_intent("nmap -sV 10.10.10.5")
         bound = build_execution_intent(
