@@ -278,16 +278,16 @@ def _build_system_prompt(
         lines.append(f"Workspace informado (somente contexto): {workspace_path}")
 
     if user_context:
-        lines.extend(("", "Contexto ativo informado pelo usuário:", redact_sensitive_text(user_context)[:350]))
+        lines.extend(("", "Contexto ativo informado pelo usuário:", user_context[:350]))
 
     if project_context:
-        lines.extend(("", "Contexto local do projeto:", redact_sensitive_text(project_context)[:500]))
+        lines.extend(("", "Contexto local do projeto:", project_context[:500]))
 
     if scenario_context:
         lines.extend(("", scenario_context[:700]))
 
     if context_summary:
-        lines.extend(("", "Resumo comprimido da sessão:", redact_sensitive_text(context_summary)[:450]))
+        lines.extend(("", "Resumo comprimido da sessão:", context_summary[:450]))
 
     for module_id, module_content in (active_modules or {}).items():
         lines.extend(
@@ -723,14 +723,12 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             if role == 'tool':
                 m_copy = dict(m)
                 content = m_copy.get('content', '')
-                if isinstance(content, str):
-                    content = redact_sensitive_text(content)
                 m_copy['content'] = self._truncate_for_history(content)
                 cleaned.append(m_copy)
             elif role == 'assistant':
                 m_copy = dict(m)
                 if isinstance(m_copy.get('content'), str):
-                    m_copy['content'] = redact_sensitive_text(m_copy['content'])
+                    m_copy['content'] = m_copy['content']
                 # Also truncate tool_call arguments in assistant messages if huge
                 if 'tool_calls' in m_copy:
                     trunc_tcs = []
@@ -746,8 +744,6 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 cleaned.append(m_copy)
             else:
                 m_copy = dict(m)
-                if isinstance(m_copy.get('content'), str):
-                    m_copy['content'] = redact_sensitive_text(m_copy['content'])
                 cleaned.append(m_copy)
 
         if session_id not in self.histories:
@@ -758,8 +754,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         """Fallback: save simple text turn (used when history_out not populated)."""
         if session_id not in self.histories:
             self.histories[session_id] = []
-        self.histories[session_id].append({"role": "user", "content": redact_sensitive_text(user)})
-        self.histories[session_id].append({"role": "assistant", "content": redact_sensitive_text(assistant)})
+        self.histories[session_id].append({"role": "user", "content": user})
+        self.histories[session_id].append({"role": "assistant", "content": assistant})
         self.histories[session_id] = self.histories[session_id][-40:]
 
     # ── SSE event helpers ─────────────────────────────────────────────────────
