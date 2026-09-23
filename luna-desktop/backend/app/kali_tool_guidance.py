@@ -13,6 +13,7 @@ from typing import Sequence, Mapping, Any
 from .kali_capability_router import capability_guidance
 from .kali_tool_dictionary import KALI_TOOL_DICTIONARY, get_tool_spec
 from .kali_tool_readiness import assess_tool_readiness
+from .network_privacy import privacy_guidance, privacy_intent, privacy_tooling_summary
 from .offensive_strategy import nmap_context_guidance
 
 
@@ -107,7 +108,10 @@ def guidance_for_context(message: str, *, scenario=None, history: Sequence[Mappi
     normalized = message.casefold()
     history_text = _history_text(history)
     capability = capability_guidance(message, scenario=scenario, history=history)
-    selection_request = bool(capability) or any(
+    scenario_prompt = scenario.to_prompt_block(650) if scenario is not None else ""
+    combined_context = f"{message}\n{scenario_prompt}\n{history_text}"
+    privacy = privacy_guidance(combined_context)
+    selection_request = bool(capability) or bool(privacy) or any(
         marker in normalized for marker in _SELECTION_MARKERS
     )
 
@@ -122,16 +126,16 @@ def guidance_for_context(message: str, *, scenario=None, history: Sequence[Mappi
         tool = requested_kali_tool(history_text)
 
     if not tool:
-        return capability
+        chunks = [item for item in (capability, privacy) if item]
+        if privacy:
+            chunks.append("PRIVACY TOOLING: " + privacy_tooling_summary())
+        return " ".join(chunks)
 
     spec = get_tool_spec(tool)
     base_guidance = _TOOL_GUIDANCE.get(tool) or (spec.prompt() if spec else "")
     chunks = [f"TOOL CONTRACT [{tool}]: {base_guidance}"]
     if spec:
         chunks.append("LINUX TOOL DICTIONARY: " + spec.prompt())
-
-    scenario_prompt = scenario.to_prompt_block(650) if scenario is not None else ""
-    combined_context = f"{message}\n{scenario_prompt}\n{history_text}"
 
     if tool == "nmap":
         strategic = nmap_context_guidance(combined_context)
@@ -140,6 +144,9 @@ def guidance_for_context(message: str, *, scenario=None, history: Sequence[Mappi
 
     if capability:
         chunks.append(capability)
+    if privacy:
+        chunks.append(privacy)
+        chunks.append("PRIVACY TOOLING: " + privacy_tooling_summary())
 
     readiness = assess_tool_readiness(message, scenario=scenario, history_text=history_text)
     if readiness.tool == tool and not readiness.ready:
