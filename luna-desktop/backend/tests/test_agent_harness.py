@@ -1,6 +1,10 @@
+import tempfile
+import time
 import unittest
+from pathlib import Path
 
 from app.agent_harness import AgentHarness, ExactTTLCache, HarnessPolicy
+from app.harness_checkpoints import CheckpointStore
 
 
 class AgentHarnessTests(unittest.TestCase):
@@ -52,6 +56,47 @@ class AgentHarnessTests(unittest.TestCase):
         self.assertEqual(cache.get(key), "excerpt")
         self.assertEqual(cache.invalidate_namespace("procedural:mentor"), 1)
         self.assertIsNone(cache.get(key))
+
+    def test_checkpoint_store_supports_resume_history_and_time_travel(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = CheckpointStore(Path(tmp) / "checkpoints.sqlite3", ttl_days=30)
+            harness = AgentHarness(checkpoint_store=store)
+            trace = harness.begin_turn(session_id="thread-a", route="ANALYZE")
+
+            first = harness.checkpoint(
+                trace,
+                stage="context_ready",
+                state={"route": "ANALYZE", "evidence_delta_count": 2},
+            )
+            second = harness.checkpoint(
+                trace,
+                stage="validation",
+                state={"valid": False, "reasons": ["needs_replan"]},
+            )
+
+            self.assertIsNotNone(first)
+            self.assertIsNotNone(second)
+            self.assertEqual(second.parent_checkpoint_id, first.checkpoint_id)
+            self.assertEqual(harness.latest_checkpoint("thread-a").stage, "validation")
+            history = harness.checkpoint_history("thread-a")
+            self.assertEqual([item.stage for item in history], ["validation", "context_ready"])
+            replay = store.get(first.checkpoint_id)
+            self.assertEqual(replay.state["evidence_delta_count"], 2)
+
+    def test_checkpoint_ttl_prunes_expired_rows(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            store = CheckpointStore(Path(tmp) / "checkpoints.sqlite3", ttl_days=1)
+            old = time.time() - (3 * 86_400)
+            store.save(
+                thread_id="thread-old",
+                turn_id="turn-old",
+                stage="completed",
+                state={"ok": True},
+                now=old,
+            )
+            self.assertEqual(store.count(), 1)
+            self.assertEqual(store.prune_expired(now=time.time()), 1)
+            self.assertEqual(store.count(), 0)
 
     def test_output_guardrail_trace_records_termination(self) -> None:
         harness = AgentHarness()
