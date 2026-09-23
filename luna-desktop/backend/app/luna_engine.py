@@ -20,6 +20,7 @@ from anthropic import AsyncAnthropic
 from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
 from .kali_tool_guidance import guidance_for_context
+from .technical_capabilities import technical_guidance
 from .reasoning_pipeline import (
     build_replan_instruction,
     classify_complexity,
@@ -36,6 +37,11 @@ logger = logging.getLogger(__name__)
 # ── Ollama local endpoint ─────────────────────────────────────────────────────
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434/v1")
 OLLAMA_API_ROOT = OLLAMA_BASE_URL.removesuffix("/v1").rstrip("/")
+
+# This build is deliberately instruction-only. The model may generate commands,
+# code and configuration for the operator, but it never receives host-execution
+# tools. Changing this behavior requires a deliberate code change and new tests.
+INSTRUCTION_ONLY_BUILD = True
 
 # Modelos Ollama recomendados — usuário precisa ter feito `ollama pull <model>`
 _OLLAMA_DEFAULT_MODEL = "luna-cyber-fast"
@@ -341,12 +347,19 @@ class LunaEngine:
             "mentor_mode": _env_flag("LUNA_MENTOR_MODE", True),
             "reasoning_mode": "FAST",
             "native_reasoning_effort": _env_flag("LUNA_NATIVE_REASONING_EFFORT", False),
+            "instruction_only_mode": True,
             "tool_execution_enabled": False,
             "reflection_enabled": False, # Self-Reflection loop (task #15)
         }
         self.module_loader = ModuleLoader()
         self.active_modules = self.module_loader.load_enabled(
             ["mentor_kali_devtools"] if self.config["mentor_mode"] else []
+        )
+
+    def _tool_execution_allowed(self) -> bool:
+        """Hard invariant for the current build: model tools never execute on the host."""
+        return False if INSTRUCTION_ONLY_BUILD else bool(
+            self.config.get("tool_execution_enabled", False)
         )
 
     # ── Client reinitialization (called after API keys update via IPC) ────────
@@ -806,7 +819,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         """
         supervised_local = (
             client is self.ollama_client
-            and not self.config.get("tool_execution_enabled")
+            and not self._tool_execution_allowed()
         )
         if supervised_local:
             # A real system role keeps runtime facts above Modelfile few-shot examples.
@@ -843,7 +856,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             }
             if self.config.get("temperature") is not None:
                 request_kwargs["temperature"] = self.config["temperature"]
-            if self.config.get("tool_execution_enabled"):
+            if self._tool_execution_allowed():
                 request_kwargs["tools"] = TOOL_DEFINITIONS
                 request_kwargs["tool_choice"] = "auto"
 
@@ -950,6 +963,14 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 break
 
             # ── Execute tool calls ──────────────────────────────────────────
+            if not self._tool_execution_allowed():
+                logger.error(
+                    "Blocked unexpected model tool call in instruction-only build: %s",
+                    [item.get("name", "") for item in tool_calls_buf.values()],
+                )
+                msgs.append({"role": "assistant", "content": text_buf or ""})
+                break
+
             # Add assistant message with tool_calls to history
             assistant_msg: Dict[str, Any] = {"role": "assistant", "content": text_buf or None}
             assistant_tool_calls = []
@@ -1045,7 +1066,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 "system": system,
                 "messages": msgs,
             }
-            if self.config.get("tool_execution_enabled"):
+            if self._tool_execution_allowed():
                 request_kwargs["tools"] = TOOL_DEFINITIONS_CLAUDE
 
             async with self.claude_client.messages.stream(**request_kwargs) as stream:
@@ -1074,6 +1095,14 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
 
             if not tool_use_blocks:
                 # Done — save final assistant text to simple history
+                simple_history.append({"role": "assistant", "content": text_content})
+                break
+
+            if not self._tool_execution_allowed():
+                logger.error(
+                    "Blocked unexpected Claude tool call in instruction-only build: %s",
+                    [getattr(block, "name", "") for block in tool_use_blocks],
+                )
                 simple_history.append({"role": "assistant", "content": text_content})
                 break
 
@@ -1375,6 +1404,10 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         if tool_guidance:
             route_instruction += " " + tool_guidance
 
+        capability_context = technical_guidance(message)
+        if capability_context:
+            route_instruction += " " + capability_context
+
         system = _build_system_prompt(
             workspace_path,
             context_summary=ctx_summary,
@@ -1384,7 +1417,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             route_instruction=route_instruction,
             project_context=project_context,
             active_modules=runtime_modules,
-            supervised_mode=not self.config.get("tool_execution_enabled", False),
+            supervised_mode=not self._tool_execution_allowed(),
         )
         # Monta content — inclui imagens se fornecidas
         user_content = self._build_vision_content(message, images, client_type)
@@ -1809,7 +1842,9 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             "ollama_base_url": OLLAMA_BASE_URL,
             "default_model": self.config["default_model"],
             "zero_cloud_mode": bool(self.config["zero_cloud_mode"]),
-            "supervised_mode": not bool(self.config["tool_execution_enabled"]),
+            "instruction_only_mode": bool(self.config.get("instruction_only_mode", True)),
+            "supervised_mode": not self._tool_execution_allowed(),
+            "tool_execution_allowed": self._tool_execution_allowed(),
             "config_dir": str(self.module_loader.config_dir),
             "modules": {
                 "mentor_kali_devtools": {
