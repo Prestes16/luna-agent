@@ -18,6 +18,29 @@ PROJECT_TYPES = frozenset({"app", "bounty", "solana", "script", "research", "oth
 PROJECT_COLORS = frozenset({"cyan", "purple", "green", "orange", "red"})
 MESSAGE_ROLES = frozenset({"user", "luna", "system"})
 _SAFE_NAME = re.compile(r"^[^\x00-\x1f<>:\"/\\|?*]{1,100}$")
+_TERM_RE = re.compile(r"(?u)\b[\w./:+-]{3,}\b")
+_TERM_STOP = frozenset({
+    "para", "com", "sem", "uma", "uns", "das", "dos", "que", "the", "and",
+    "this", "that", "from", "como", "qual", "quais", "onde", "quando", "sobre",
+})
+
+
+def _terms(value: str) -> set[str]:
+    return {
+        item.casefold()
+        for item in _TERM_RE.findall(value or "")
+        if item.casefold() not in _TERM_STOP
+    }
+
+
+def _relevance(value: str, query_terms: set[str]) -> float:
+    if not query_terms:
+        return 0.0
+    value_terms = _terms(value)
+    if not value_terms:
+        return 0.0
+    overlap = len(value_terms & query_terms)
+    return overlap / max(1, len(query_terms))
 
 
 def _now() -> str:
@@ -268,6 +291,87 @@ class ProjectStore:
                 facts.append(fact)
                 self._write_json(self._data_dir(project_id) / "facts.json", facts)
             return facts
+
+    def retrieval_context(
+        self,
+        project_id: int,
+        query: str,
+        *,
+        semantic_top_k: int = 5,
+        episodic_top_k: int = 4,
+    ) -> str:
+        """Query-focused local memory: durable facts + recent relevant episodes.
+
+        This is a deterministic lexical/recency retrieval layer over the current
+        JSON store. It intentionally does not pretend to be an embedding/vector
+        backend; the interface can be swapped later without changing the runtime.
+        """
+        query = self._validate_text(query, "query", 20_000, required=True)
+        semantic_top_k = max(1, min(int(semantic_top_k), 12))
+        episodic_top_k = max(1, min(int(episodic_top_k), 12))
+
+        with self._lock:
+            data = self._load_index()
+            project = dict(self._find(data, project_id))
+            facts = list(self.list_facts(project_id))
+            messages = list(self.list_messages(project_id))
+
+        query_terms = _terms(query)
+
+        ranked_facts = [
+            (_relevance(fact, query_terms), index, fact)
+            for index, fact in enumerate(facts)
+        ]
+        relevant_facts = [
+            fact
+            for score, _index, fact in sorted(
+                ranked_facts,
+                key=lambda item: (item[0], item[1]),
+                reverse=True,
+            )
+            if score > 0
+        ][:semantic_top_k]
+        if not relevant_facts:
+            relevant_facts = facts[-semantic_top_k:]
+
+        episodes = [
+            item for item in messages
+            if not item.get("is_compressed") and item.get("role") in MESSAGE_ROLES
+        ][-32:]
+        ranked_episodes = []
+        total = max(1, len(episodes))
+        for index, item in enumerate(episodes):
+            content = str(item.get("content", ""))
+            semantic_score = _relevance(content, query_terms)
+            recency_score = (index + 1) / total
+            score = (semantic_score * 0.82) + (recency_score * 0.18)
+            ranked_episodes.append((score, index, item))
+        selected_episodes = [
+            item
+            for _score, _index, item in sorted(
+                ranked_episodes,
+                key=lambda row: (row[0], row[1]),
+                reverse=True,
+            )[:episodic_top_k]
+        ]
+        selected_episodes.sort(key=lambda item: str(item.get("timestamp", "")))
+
+        lines = [
+            f"PROJECT MEMORY: {project.get('name', '')}",
+            f"type={project.get('project_type', 'other')}",
+            "backend=local-json; retrieval=lexical+recency; vector_backend=not_enabled",
+        ]
+        if relevant_facts:
+            lines.append("SEMANTIC DURABLE FACTS:")
+            lines.extend(f"- {fact}" for fact in relevant_facts)
+        if selected_episodes:
+            lines.append("EPISODIC RECENT/RELEVANT:")
+            for item in selected_episodes:
+                timestamp = str(item.get("timestamp", ""))[:25]
+                role = str(item.get("role", "system"))
+                content = " ".join(str(item.get("content", "")).split())[:360]
+                lines.append(f"- [{timestamp}] {role}: {content}")
+        return "\n".join(lines)[:4_500]
 
     def context(self, project_id: int) -> str:
         with self._lock:
