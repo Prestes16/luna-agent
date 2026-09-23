@@ -26,6 +26,21 @@ class HostSafetyPolicyTests(unittest.TestCase):
         self.assertFalse(item.safe_to_recommend_now)
         self.assertIn("remote_content_piped_to_shell", item.reasons)
 
+    def test_destructive_temp_path_must_be_operator_confirmed(self) -> None:
+        item = assess_host_safety(
+            "rm -rf /tmp/luna-test",
+            context="Quero limpar arquivos temporários, mas não informei path.",
+        )
+        self.assertFalse(item.destructive_target_confirmed)
+        self.assertFalse(item.safe_to_recommend_now)
+        self.assertIn("destructive_target_not_confirmed", item.reasons)
+
+    def test_destructive_temp_path_can_be_scoped_when_exactly_confirmed(self) -> None:
+        item = assess_host_safety(
+            "rm -rf /tmp/luna-test",
+            context="Quero remover exatamente /tmp/luna-test.",
+        )
+        self.assertTrue(item.destructive_target_confirmed)
     def test_recursive_system_tree_removal_is_blocked(self) -> None:
         item = assess_host_safety("sudo rm -rf /etc")
         self.assertTrue(item.system_tree_change)
