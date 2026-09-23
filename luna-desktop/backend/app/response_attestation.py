@@ -13,6 +13,7 @@ from typing import Any
 from .command_ast import assess_nmap_strategy
 from .command_execution import assess_command_execution
 from .command_policy import parse_effective_command
+from .execution_intent import build_execution_intent
 from .host_safety import assess_host_safety
 from .kali_tool_readiness import assess_tool_readiness
 from .network_privacy import privacy_intent, score_privacy_routes
@@ -42,7 +43,7 @@ def _replace_latest_assistant_history(engine: Any, session_id: str, content: str
     history = engine.histories.get(session_id) or []
     for item in reversed(history):
         if item.get("role") == "assistant" and isinstance(item.get("content"), str):
-            item["content"] = redact_sensitive_text(content)
+            item["content"] = content
             return
 
 
@@ -163,21 +164,50 @@ def install_response_attestation(engine_cls: type) -> None:
                 reasons = event.get("validation_reasons") or ()
                 score = score_response_quality(message, visible_text, reasons)
                 attestations = command_attestations(message, visible_text)
+                operator_requested_execution = any(
+                    marker in message.casefold()
+                    for marker in (
+                        "execute", "executar", "rode", "rodar", "aplique",
+                        "configure", "configurar", "instale", "inicie", "teste",
+                        "testar", "valide", "validar", "explore", "explorar",
+                    )
+                )
+                scenario = self.scenario_contexts.get(sid)
+                intent_context_parts = [message]
+                if scenario is not None:
+                    for attr in ("target", "current_goal", "environment"):
+                        value = getattr(scenario, attr, None)
+                        if value:
+                            intent_context_parts.append(str(value))
+                intent_context = "\n".join(intent_context_parts)
+                scope_confirmed = any(
+                    marker in intent_context.casefold()
+                    for marker in (
+                        "autorizado", "authorized", "ctf", "laboratório", "laboratorio",
+                        "lab", "sandbox", "escopo confirmado", "scope confirmed",
+                    )
+                )
+                response_commands = extract_commands(visible_text)
                 execution_attestations = [
                     assess_command_execution(
                         command,
-                        operator_requested_execution=any(
-                            marker in message.casefold()
-                            for marker in (
-                                "execute", "executar", "rode", "rodar", "aplique",
-                                "configure", "configurar", "instale", "inicie",
-                            )
-                        ),
+                        operator_requested_execution=operator_requested_execution,
                         tool_execution_enabled=bool(
                             self.config.get("tool_execution_enabled", False)
                         ),
                     ).to_dict()
-                    for command in extract_commands(visible_text)
+                    for command in response_commands
+                ]
+                execution_intents = [
+                    build_execution_intent(
+                        command,
+                        context=intent_context,
+                        operator_requested_execution=operator_requested_execution,
+                        scope_confirmed=scope_confirmed,
+                        rollback_ready=False,
+                        verification_ready=True,
+                    ).to_dict()
+                    for command in response_commands
                 ]
                 strategy_attestations = _strategy_attestations(self, sid, message, visible_text)
                 host_safety_attestations = _host_safety_attestations(
@@ -214,6 +244,14 @@ def install_response_attestation(engine_cls: type) -> None:
                         }
                         for item in execution_attestations
                     ],
+                    "execution_intents": [
+                        {
+                            key: value
+                            for key, value in item.items()
+                            if key != "command"
+                        }
+                        for item in execution_intents
+                    ],
                     "strategy_attestations": strategy_attestations,
                     "host_safety_attestations": host_safety_attestations,
                     "privacy_attestation": privacy_attestation,
@@ -238,6 +276,13 @@ def install_response_attestation(engine_cls: type) -> None:
                             all(item.get("execution_ready", False) for item in execution_attestations)
                             if execution_attestations
                             else None
+                        ),
+                        "execution_authorities": [
+                            item.get("authority") for item in execution_intents
+                        ],
+                        "execution_risk_max": (
+                            max(float(item.get("risk_index", 0.0)) for item in execution_intents)
+                            if execution_intents else None
                         ),
                         "host_safety_ok": (
                             all(item.get("safe_to_recommend_now", False) for item in host_safety_attestations)
