@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from pathlib import Path, PureWindowsPath
 from typing import Any
 
+from .evidence_vault import EvidenceVault
 from .memory_plane import MemoryPlane
 
 
@@ -65,6 +66,7 @@ class ProjectStore:
         self._index = self.root / "index.json"
         self._lock = threading.RLock()
         self.memory_plane = MemoryPlane(self.root / ".memory" / "memory.sqlite3")
+        self.evidence_vault = EvidenceVault(self.root / ".evidence")
         if not self._index.exists():
             self._write_json(self._index, {"version": 1, "projects": []})
 
@@ -235,6 +237,68 @@ class ProjectStore:
             if target.exists():
                 shutil.rmtree(target)
             self.memory_plane.delete_project(project_id)
+            self.evidence_vault.delete_project(project_id)
+
+    def add_evidence_artifact(
+        self,
+        project_id: int,
+        *,
+        data: bytes,
+        kind: str,
+        media_type: str,
+        source: str,
+        original_name: str = "",
+        description: str = "",
+        sensitivity: str = "normal",
+        observed_at: str | None = None,
+    ) -> dict[str, Any]:
+        with self._lock:
+            data_index = self._load_index()
+            self._find(data_index, project_id)
+        record = self.evidence_vault.store(
+            project_id=project_id,
+            data=data,
+            kind=kind,
+            media_type=media_type,
+            source=source,
+            original_name=original_name,
+            description=description,
+            sensitivity=sensitivity,
+            observed_at=observed_at,
+        )
+        return record.to_dict()
+
+    def list_evidence_artifacts(
+        self,
+        project_id: int,
+        *,
+        limit: int = 200,
+    ) -> list[dict[str, Any]]:
+        with self._lock:
+            data_index = self._load_index()
+            self._find(data_index, project_id)
+        return [
+            item.to_dict()
+            for item in self.evidence_vault.list_project(project_id, limit=limit)
+        ]
+
+    def read_evidence_artifact(self, project_id: int, record_id: int) -> tuple[dict[str, Any], bytes]:
+        with self._lock:
+            data_index = self._load_index()
+            self._find(data_index, project_id)
+        record = self.evidence_vault.get(record_id, project_id=project_id)
+        if record is None:
+            raise ProjectNotFoundError(
+                f"Evidência {record_id} não encontrada no projeto {project_id}"
+            )
+        raw = self.evidence_vault.read_bytes(record_id, project_id=project_id)
+        return record.to_dict(), raw
+
+    def verify_evidence_artifact(self, project_id: int, record_id: int) -> bool:
+        with self._lock:
+            data_index = self._load_index()
+            self._find(data_index, project_id)
+        return self.evidence_vault.verify(record_id, project_id=project_id)
 
     def list_messages(self, project_id: int) -> list[dict[str, Any]]:
         with self._lock:
