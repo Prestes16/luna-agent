@@ -204,8 +204,7 @@ def _build_system_prompt(
     """Build only the small, session-specific context missing from the Modelfile."""
 
     lines = [
-        "CONTEXTO DINÂMICO DE RUNTIME",
-        f"Data/hora local: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+        "RUNTIME HARNESS — PREFIXO ESTÁVEL",
         (
             "Modo: copiloto supervisionado; o operador executa comandos."
             if supervised_mode
@@ -257,6 +256,9 @@ def _build_system_prompt(
             "Pedido de um comando: entregue exatamente um comando; explicação mínima."
         ),
         "Somente resposta final; nunca exponha chain-of-thought.",
+        "",
+        "CONTEXTO DINÂMICO DE RUNTIME",
+        f"Data/hora local: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
     ]
 
     if route_instruction:
@@ -294,7 +296,7 @@ def _build_system_prompt(
 class LunaEngine:
     """Luna's core multi-model AI engine with tool-calling loop."""
 
-    MAX_TOOL_ITERATIONS   = 40   # deep project analysis: read 25+ files, full audit loops
+    MAX_TOOL_ITERATIONS   = 1 if INSTRUCTION_ONLY_BUILD else 8
     COMPRESS_THRESHOLD    = 8    # messages (4 turns) before compression
     COMPRESS_KEEP_RECENT  = 4    # messages (2 turns) kept verbatim
     COMPRESS_MAX_CHARS    = 8_000
@@ -1872,7 +1874,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                         "first_token_ms", "elapsed_ms", "total_elapsed_ms",
                         "finish_reason", "validator_passed", "replan_used",
                         "attempt_efforts", "replan_reasoning_effort",
-                        "attempt_results",
+                        "attempt_results", "harness",
                         "effective_reasoning_effort", "effort_fallback_reason",
                     )
                 },
