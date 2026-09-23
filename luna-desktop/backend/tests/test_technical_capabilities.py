@@ -33,7 +33,8 @@ class TechnicalCapabilityTests(unittest.TestCase):
         guidance = technical_guidance(
             "Crie um script PowerShell para auditar configuração Windows.",
         )
-        self.assertIn("instruction-only", guidance)
+        self.assertIn("supervised-copilot baseline", guidance)
+        self.assertIn("model tool loop locked", guidance)
         self.assertIn("complete operator-reviewable code/config/tests", guidance)
         self.assertIn("Never claim execution", guidance)
         self.assertLessEqual(len(guidance), 1200)
