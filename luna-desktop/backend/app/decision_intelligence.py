@@ -25,6 +25,8 @@ class DecisionCandidate:
     noise: float
     novelty: float
     downstream_leverage: float
+    construction_coverage: float = 1.0
+    mechanism_linkage: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -58,11 +60,11 @@ def score_candidate(candidate: DecisionCandidate) -> DecisionScore:
     pull the score down. Cost and noise are exponential penalties.
 
     U = E^1.25 * IG^1.55 * D^1.35 * S^1.20 * R^1.10 * H^1.15 *
-        N^0.45 * L^0.90 * exp(-(0.80*C + 0.95*Z))
+        N^0.45 * L^0.90 * K^1.40 * M^1.25 * exp(-(0.80*C + 0.95*Z))
 
     E=evidence support, IG=expected information gain, D=discriminative power,
     S=scope fit, R=reversibility, H=safety, N=novelty, L=downstream leverage,
-    C=cost, Z=noise.
+    K=construction coverage, M=mechanism linkage, C=cost, Z=noise.
     """
     evidence = _clip(candidate.evidence_support)
     info = _clip(candidate.information_gain)
@@ -74,6 +76,8 @@ def score_candidate(candidate: DecisionCandidate) -> DecisionScore:
     noise = _clip(candidate.noise)
     novelty = _clip(candidate.novelty)
     leverage = _clip(candidate.downstream_leverage)
+    construction = _clip(candidate.construction_coverage)
+    mechanism = _clip(candidate.mechanism_linkage)
 
     positive = (
         evidence ** 1.25
@@ -84,6 +88,8 @@ def score_candidate(candidate: DecisionCandidate) -> DecisionScore:
         * safety ** 1.15
         * max(novelty, 0.05) ** 0.45
         * max(leverage, 0.05) ** 0.90
+        * max(construction, 0.05) ** 1.40
+        * max(mechanism, 0.05) ** 1.25
     )
     penalty = math.exp(-(0.80 * cost + 0.95 * noise))
     utility = positive * penalty
@@ -147,7 +153,9 @@ def decision_guidance(context: str) -> str:
         "For each plausible next step, reason over evidence support, expected information gain, "
         "discriminative power between competing hypotheses, scope fit, reversibility, host safety, "
         "noise, cost, novelty and downstream leverage. Prefer the action with the highest useful "
-        "information per unit risk/cost, not the most aggressive action. When uncertainty is high, "
+        "information per unit risk/cost, not the most aggressive action. Construction coverage and "
+        "mechanism linkage are first-class factors: understand how the relevant component is built "
+        "and which invariant the test targets. When uncertainty is high, "
         "choose a discriminator that can falsify at least one important hypothesis. After the "
         "operator returns evidence, update confidence rather than defending the previous theory. "
         "Never convert an inference into a fact. Final reports must separate observed evidence, "
