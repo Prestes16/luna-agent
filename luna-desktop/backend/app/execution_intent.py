@@ -257,10 +257,16 @@ def build_execution_intent(
     semantic_mutation = _semantic_remote_mutation(command)
     high_impact_semantic = _is_high_impact_command(command, tool)
     normalized_scope_target = _normalize_scope_target(scope_target)
-    target_bound = bool(target) and (
-        normalized_scope_target is None
-        or target.casefold() == normalized_scope_target.casefold()
-    )
+    target_required = bool(active_probe or semantic_mutation or target)
+    if target_required:
+        target_bound = bool(target) and (
+            normalized_scope_target is None
+            or target.casefold() == normalized_scope_target.casefold()
+        )
+    else:
+        # Purely local actions bind to the confirmed execution environment/host,
+        # not to a remote network target.
+        target_bound = True
 
     if lifecycle.destructive or host.host_impact in {"blocked", "critical"} or high_impact_semantic:
         level = L3_HIGH_IMPACT
@@ -339,10 +345,11 @@ def build_execution_intent(
         reasons.append("high_impact_semantic")
     if level != L0_OBSERVE and not scope_confirmed:
         reasons.append("scope_not_confirmed")
-    if level != L0_OBSERVE and not target:
+    if level != L0_OBSERVE and target_required and not target:
         reasons.append("target_not_bound")
     elif (
         level != L0_OBSERVE
+        and target_required
         and normalized_scope_target is not None
         and target
         and target.casefold() != normalized_scope_target.casefold()
