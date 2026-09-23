@@ -77,6 +77,12 @@ _FOLLOWUP_MARKERS = (
     "continue", "próximo", "proximo", "maior valor", "principais portas",
 )
 
+_SELECTION_MARKERS = (
+    "qual ferramenta", "qual tool", "o que usar", "melhor ferramenta", "melhor app",
+    "outras ferramentas", "outras possibilidades", "mais algum", "mais alguma",
+    "alternativa", "alternativas", "interceptar", "interceptação", "interceptacao",
+)
+
 
 def requested_kali_tool(message: str) -> str | None:
     normalized = message.casefold()
@@ -98,12 +104,25 @@ def _history_text(history: Sequence[Mapping[str, Any]]) -> str:
 
 def guidance_for_context(message: str, *, scenario=None, history: Sequence[Mapping[str, Any]] = ()) -> str:
     """Return compact tool guidance using current turn plus recent factual context."""
-    tool = requested_kali_tool(message)
+    normalized = message.casefold()
     history_text = _history_text(history)
-    if not tool and any(marker in message.casefold() for marker in _FOLLOWUP_MARKERS):
+    capability = capability_guidance(message, scenario=scenario, history=history)
+    selection_request = bool(capability) or any(
+        marker in normalized for marker in _SELECTION_MARKERS
+    )
+
+    tool = requested_kali_tool(message)
+    # A recommendation/alternative question starts a fresh tool-selection turn.
+    # Do not silently inherit Gobuster/Nmap/etc. merely because "agora" appears.
+    if (
+        not tool
+        and not selection_request
+        and any(marker in normalized for marker in _FOLLOWUP_MARKERS)
+    ):
         tool = requested_kali_tool(history_text)
+
     if not tool:
-        return ""
+        return capability
 
     spec = get_tool_spec(tool)
     base_guidance = _TOOL_GUIDANCE.get(tool) or (spec.prompt() if spec else "")
@@ -119,7 +138,6 @@ def guidance_for_context(message: str, *, scenario=None, history: Sequence[Mappi
         if strategic:
             chunks.append(strategic)
 
-    capability = capability_guidance(message, scenario=scenario, history=history)
     if capability:
         chunks.append(capability)
 
@@ -131,6 +149,13 @@ def guidance_for_context(message: str, *, scenario=None, history: Sequence[Mappi
                 "HYDRA RULE: enquanto os pré-requisitos estiverem ausentes, não gere comando. "
                 "Peça serviço/módulo, fonte de usuário e fonte de senha; em formulário web peça "
                 "também endpoint/campos/marcador de falha. Não dê exemplos com paths inventados."
+            )
+        if tool in {"gobuster", "ffuf"} and "wordlist" in readiness.missing:
+            chunks.append(
+                "WORDLIST READINESS: não invente filename como commonwords.txt nem assuma que "
+                "SecLists/dirb está instalado. Explique que é preciso um path factual; ofereça "
+                "como próximo passo localizar/confirmar wordlists instaladas no Kali ou usar a "
+                "lista fornecida pelo laboratório."
             )
 
     return " ".join(chunks)
