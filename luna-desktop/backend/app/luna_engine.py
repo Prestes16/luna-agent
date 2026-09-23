@@ -236,7 +236,7 @@ def _build_system_prompt(
     ]
 
     if route_instruction:
-        lines.extend(("", route_instruction[:650]))
+        lines.extend(("", route_instruction[:1_600]))
 
     if evidence_delta:
         lines.extend(("", evidence_delta[:800]))
