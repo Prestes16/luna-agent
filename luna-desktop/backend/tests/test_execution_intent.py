@@ -79,6 +79,29 @@ class ExecutionIntentTests(unittest.TestCase):
         self.assertEqual(intent.authority_level, L3_HIGH_IMPACT)
         self.assertEqual(intent.authority, BLOCKED)
 
+    def test_curl_post_is_classified_by_semantics_not_tool_name(self) -> None:
+        intent = build_execution_intent(
+            "curl -X POST -d 'enabled=true' https://target.test/api/config",
+            context="CTF autorizado",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+        )
+        self.assertEqual(intent.authority_level, L2_MUTATE)
+        self.assertEqual(intent.authority, APPROVAL_REQUIRED)
+        self.assertTrue(intent.mutates_state)
+        self.assertIn("semantic_remote_mutation", intent.reasons)
+
+    def test_nmap_exploit_script_is_high_impact_semantic(self) -> None:
+        intent = build_execution_intent(
+            "nmap --script exploit 10.10.10.5",
+            context="CTF autorizado em Kali",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+        )
+        self.assertEqual(intent.authority_level, L3_HIGH_IMPACT)
+        self.assertEqual(intent.authority, APPROVAL_REQUIRED)
+        self.assertIn("high_impact_semantic", intent.reasons)
+
     def test_readiness_improves_when_scope_and_operator_are_bound(self) -> None:
         pending = build_execution_intent("nmap -sV 10.10.10.5")
         bound = build_execution_intent(
