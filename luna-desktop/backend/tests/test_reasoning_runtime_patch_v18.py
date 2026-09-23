@@ -43,6 +43,12 @@ class ExactArithmeticValidatorTests(unittest.TestCase):
         self.assertFalse(validation.valid)
         self.assertIn("rounding_loss_not_bounded", validation.reasons)
 
+    def test_incorrect_i128_limit_is_rejected(self) -> None:
+        validation = self._validate(
+            "O limite de i128 relevante é 9223372036854775807."
+        )
+        self.assertFalse(validation.valid)
+        self.assertIn("wrong_i128_bound", validation.reasons)
     def test_bounded_rounding_statement_is_not_blocked(self) -> None:
         validation = self._validate(
             "O floor descarta remainder/10000; a perda é <1 base unit por cálculo."
