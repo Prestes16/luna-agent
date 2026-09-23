@@ -21,6 +21,7 @@ import json
 import re
 import sqlite3
 import threading
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -168,8 +169,18 @@ class MemoryPlane:
         connection.execute("PRAGMA synchronous=NORMAL")
         return connection
 
+    @contextmanager
+    def _connection(self):
+        """Transaction scope that always closes SQLite handles, including on Windows."""
+        connection = self._connect()
+        try:
+            with connection:
+                yield connection
+        finally:
+            connection.close()
+
     def _initialize(self) -> None:
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             connection.executescript(
                 """
                 CREATE TABLE IF NOT EXISTS memory_records (
@@ -347,7 +358,7 @@ class MemoryPlane:
             dedupe_key=dedupe_key,
         )
 
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             existing = connection.execute(
                 "SELECT * FROM memory_records WHERE project_id = ? AND source_hash = ?",
                 (project_id, source_hash),
@@ -415,7 +426,7 @@ class MemoryPlane:
             return self._record_from_row(row)
 
     def get(self, record_id: int) -> Optional[MemoryRecord]:
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             row = connection.execute(
                 "SELECT * FROM memory_records WHERE id = ?",
                 (int(record_id),),
@@ -445,7 +456,7 @@ class MemoryPlane:
             params.extend(normalized_kinds)
         params.append(limit)
 
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             rows = connection.execute(
                 f"""
                 SELECT * FROM memory_records
@@ -490,7 +501,7 @@ class MemoryPlane:
                 params.extend(normalized_kinds)
             params.append(limit)
             try:
-                with self._lock, self._connect() as connection:
+                with self._lock, self._connection() as connection:
                     rows = connection.execute(
                         f"""
                         SELECT r.*, bm25(memory_fts) AS rank
@@ -597,7 +608,7 @@ class MemoryPlane:
 
     def delete_project(self, project_id: int) -> int:
         project_id = self._validate_project_id(project_id)
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             rows = connection.execute(
                 "SELECT id FROM memory_records WHERE project_id = ?",
                 (project_id,),
@@ -624,7 +635,7 @@ class MemoryPlane:
             project_id = self._validate_project_id(project_id)
             where = " WHERE project_id = ?"
             params = (project_id,)
-        with self._lock, self._connect() as connection:
+        with self._lock, self._connection() as connection:
             count = int(
                 connection.execute(
                     f"SELECT COUNT(*) FROM memory_records{where}",
