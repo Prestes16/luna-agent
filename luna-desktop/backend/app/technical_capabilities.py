@@ -56,10 +56,27 @@ CAPABILITIES: tuple[TechnicalCapability, ...] = (
         ("enumeration plans", "PowerShell helpers", "LDAP queries", "evidence parsers"),
     ),
     TechnicalCapability(
-        "exploit_dev",
-        ("exploit", "buffer overflow", "rop", "heap", "stack", "gdb", "pwndbg", "fuzz", "crash"),
-        ("memory safety", "calling conventions", "debugging", "fuzzing and crash triage"),
-        ("minimal PoCs for authorized labs", "fuzz harnesses", "crash reproducers", "debug scripts"),
+        "exploit_validation",
+        (
+            "exploit", "exploração", "exploracao", "poc", "proof of concept",
+            "prova de conceito", "comprovar achado", "validar achado", "reproducer",
+            "rce", "auth bypass", "idor", "ssrf", "sql injection", "xss", "privesc",
+            "buffer overflow", "rop", "heap", "stack", "gdb", "pwndbg", "fuzz", "crash",
+        ),
+        (
+            "exploitability proof across Web/API, privilege boundaries, protocols, binaries and Web3",
+            "memory safety, calling conventions, debugging and crash triage",
+            "precondition and success-predicate design",
+            "minimal reproducible proof construction",
+            "evidence capture, cleanup and report-grade reproduction",
+        ),
+        (
+            "minimal PoCs/exploit reproducers for authorized targets",
+            "fuzz harnesses and crash reproducers",
+            "request/response or transaction proof scripts",
+            "evidence capture manifests",
+            "debug scripts and cleanup/rollback steps",
+        ),
     ),
     TechnicalCapability(
         "reverse_engineering",
@@ -170,11 +187,12 @@ def technical_guidance(message: str, max_chars: int = 1_200) -> str:
         return ""
     body = " | ".join(capability.prompt() for capability in selected)
     guidance = (
-        "TECHNICAL CAPABILITY CONTEXT (instruction-only): "
+        "TECHNICAL CAPABILITY CONTEXT (supervised-copilot baseline): "
         + body
         + ". Explain exact prerequisites and syntax; when asked to build something, provide complete "
-        "operator-reviewable code/config/tests rather than vague pseudocode. Never claim execution or "
-        "verification unless the operator supplied the result. Prefer reusable small components and "
+        "operator-reviewable code/config/tests rather than vague pseudocode. For exploit validation, "
+        "prefer the smallest evidence-bound reproducer with an explicit success predicate. Never claim "
+        "execution or verification unless an execution result exists. Prefer reusable small components and "
         "explicit validation/rollback steps for system changes."
     )
     return guidance[:max_chars]
