@@ -224,6 +224,75 @@ KALI_TOOL_DICTIONARY: dict[str, KaliToolSpec] = {
         ),
         ("capture source",),
     ),
+    "proxychains4": KaliToolSpec(
+        "proxychains4", "privacy", "TCP-capable application command",
+        "application-level proxy chaining through a factual proxy configuration",
+        (
+            "do not assume config path, SOCKS port or proxy_dns state; detect them locally",
+            "raw sockets and UDP are not transparently proxyable through proxychains",
+            "never claim anonymity; validate application egress and DNS behavior",
+        ),
+        ("proxy configuration", "application command"),
+    ),
+    "proxychains": KaliToolSpec(
+        "proxychains", "privacy", "TCP-capable application command",
+        "application-level proxy chaining through a factual proxy configuration",
+        (
+            "prefer the installed binary name detected on the system",
+            "raw sockets and UDP are not transparently proxyable",
+            "verify DNS handling instead of assuming it",
+        ),
+        ("proxy configuration", "application command"),
+    ),
+    "tor": KaliToolSpec(
+        "tor", "privacy", "local Tor service/SOCKS listener",
+        "TCP-oriented privacy routing through the Tor network",
+        (
+            "confirm service state and SOCKS listener instead of assuming a port",
+            "do not treat Tor as UDP/raw-socket transport",
+            "never promise non-traceability",
+        ),
+        ("service state", "SOCKS listener"),
+    ),
+    "torsocks": KaliToolSpec(
+        "torsocks", "privacy", "TCP application command",
+        "Tor routing wrapper for compatible TCP applications",
+        (
+            "verify the local Tor listener first",
+            "do not use it for raw sockets or UDP",
+            "validate egress per application",
+        ),
+        ("Tor listener", "application command"),
+    ),
+    "openvpn": KaliToolSpec(
+        "openvpn", "privacy", "operator-provided VPN profile",
+        "system-level VPN tunnel for TCP/UDP-capable workloads",
+        (
+            "profile path and credentials must be operator-provided or observed",
+            "verify route, DNS, IPv4 and IPv6 behavior after connection",
+            "do not silently fall back to direct traffic",
+        ),
+        ("VPN profile",),
+    ),
+    "wg-quick": KaliToolSpec(
+        "wg-quick", "privacy", "operator-provided WireGuard interface/profile",
+        "system-level WireGuard tunnel management",
+        (
+            "interface/profile name must be factual",
+            "verify route, DNS, IPv4 and IPv6 behavior",
+            "kill-switch rules must be explicit and reversible",
+        ),
+        ("WireGuard interface/profile",),
+    ),
+    "wg": KaliToolSpec(
+        "wg", "privacy", "WireGuard interface",
+        "WireGuard state inspection and tunnel diagnostics",
+        (
+            "interface name must be factual",
+            "do not expose or persist private keys in prompts or logs",
+        ),
+        ("WireGuard interface",),
+    ),
 }
 
 
