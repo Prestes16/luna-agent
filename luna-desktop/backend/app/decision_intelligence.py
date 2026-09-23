@@ -94,10 +94,15 @@ def score_candidate(candidate: DecisionCandidate) -> DecisionScore:
     penalty = math.exp(-(0.80 * cost + 0.95 * noise))
     utility = positive * penalty
 
-    # Confidence is intentionally evidence-led; a high-utility action can still
-    # carry low confidence if the current facts are weak.
+    # Confidence is evidence-led and construction-aware. A plausible action must
+    # not look highly certain when the mechanism or system model is weak.
     confidence = _clip(
-        0.52 * evidence + 0.18 * scope + 0.16 * discriminative + 0.14 * safety
+        0.38 * evidence
+        + 0.12 * scope
+        + 0.12 * discriminative
+        + 0.10 * safety
+        + 0.14 * construction
+        + 0.14 * mechanism
     )
     uncertainty = binary_entropy(confidence)
 
