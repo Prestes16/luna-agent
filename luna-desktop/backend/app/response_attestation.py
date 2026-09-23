@@ -13,6 +13,7 @@ from typing import Any
 from .command_ast import assess_nmap_strategy
 from .command_policy import parse_effective_command
 from .kali_tool_readiness import assess_tool_readiness
+from .network_privacy import privacy_intent, score_privacy_routes
 from .offensive_strategy import assess_nmap_port_strategy
 from .operational_transform import transform_response_commands
 from .reasoning_pipeline import redact_sensitive_text
@@ -76,6 +77,33 @@ def _strategy_attestations(engine: Any, session_id: str, message: str, response:
         })
     return metrics
 
+def _privacy_attestation(engine: Any, session_id: str, message: str) -> dict | None:
+    scenario = engine.scenario_contexts.get(session_id)
+    context_parts = [message]
+    if scenario is not None:
+        for attr in ("target", "current_goal", "environment"):
+            value = getattr(scenario, attr, None)
+            if value:
+                context_parts.append(str(value))
+    context = "\n".join(context_parts)
+    if not privacy_intent(context):
+        return None
+
+    ranked = score_privacy_routes(context)
+    return {
+        "top_profile": ranked[0].profile.name if ranked else None,
+        "candidates": [
+            {
+                "profile": item.profile.name,
+                "utility": item.utility,
+                "mismatch_penalty": item.mismatch_penalty,
+                "reasons": list(item.reasons),
+            }
+            for item in ranked[:4]
+        ],
+    }
+
+
 def install_response_attestation(engine_cls: type) -> None:
     """Wrap LunaEngine.stream_agent once without changing the core engine file."""
     if getattr(engine_cls, "_response_attestation_installed", False):
@@ -117,6 +145,7 @@ def install_response_attestation(engine_cls: type) -> None:
                 attestations = command_attestations(message, visible_text)
                 strategy_attestations = _strategy_attestations(self, sid, message, visible_text)
                 readiness = assess_tool_readiness(message, scenario=self.scenario_contexts.get(sid))
+                privacy_attestation = _privacy_attestation(self, sid, message)
 
                 safe_attestations = []
                 for item in attestations:
@@ -139,6 +168,7 @@ def install_response_attestation(engine_cls: type) -> None:
                     ),
                     "command_attestations": safe_attestations,
                     "strategy_attestations": strategy_attestations,
+                    "privacy_attestation": privacy_attestation,
                     "tool_readiness": {
                         "tool": readiness.tool,
                         "ready": readiness.ready,
@@ -156,6 +186,11 @@ def install_response_attestation(engine_cls: type) -> None:
                         "quality_band": _quality_band(score.total),
                         "target_verified": event.get("target_verified"),
                         "operational_transform_applied": bool(mutations),
+                        "privacy_profile": (
+                            privacy_attestation.get("top_profile")
+                            if isinstance(privacy_attestation, dict)
+                            else None
+                        ),
                     })
 
                 yield json.dumps(event, ensure_ascii=False)
