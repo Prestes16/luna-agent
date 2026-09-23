@@ -31,6 +31,19 @@ class MalwareRuntimeGuardTests(unittest.TestCase):
         )
         self.assertNotIn("malware_direct_execution_without_isolated_sandbox", validation.reasons)
 
+    def test_wine_sample_execution_without_sandbox_is_rejected(self) -> None:
+        validation = self._validate(
+            "Quero analisar o malware sample.exe no host.",
+            "```bash\nwine sample.exe\n```",
+        )
+        self.assertIn("malware_direct_execution_without_isolated_sandbox", validation.reasons)
+
+    def test_relative_binary_execution_without_sandbox_is_rejected(self) -> None:
+        validation = self._validate(
+            "Quero analisar este malware sample.",
+            "```bash\n./sample\n```",
+        )
+        self.assertIn("malware_direct_execution_without_isolated_sandbox", validation.reasons)
     def test_ransomware_decryption_guarantee_is_rejected(self) -> None:
         validation = self._validate(
             "Analise este ransomware e avalie se existe recuperação.",
