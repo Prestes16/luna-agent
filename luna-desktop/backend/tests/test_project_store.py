@@ -78,7 +78,40 @@ class ProjectStoreTests(unittest.TestCase):
         self.assertIn("USDC SPL", context)
         self.assertIn("EPISODIC RECENT/RELEVANT:", context)
         self.assertIn("amount u64", context)
+        self.assertIn("backend=local-sqlite", context)
         self.assertIn("vector_backend=not_enabled", context)
+        self.assertIn("semantic_response_cache=off", context)
+        self.assertIn("project_store:facts.json", context)
+
+    def test_memory_plane_keeps_llm_output_out_of_durable_facts_and_redacts_secrets(self) -> None:
+        self.store.create_project({
+            "name": "Memory Integrity",
+            "project_type": "bounty",
+            "color": "red",
+        })
+        self.store.add_fact(1, "GET /admin retornou 403.")
+        self.store.add_message(1, {
+            "role": "luna",
+            "content": "Authorization: Bearer raw-secret-token\nRCE confirmada em /admin.",
+            "model": "luna-cyber-fast",
+        })
+
+        persisted = self.store.list_messages(1)[0]["content"]
+        self.assertNotIn("raw-secret-token", persisted)
+        self.assertIn("[REDACTED]", persisted)
+
+        records = self.store.memory_plane.list_records(1, limit=20)
+        fact_records = [item for item in records if item.kind == "operator_fact"]
+        model_records = [item for item in records if item.evidence_level == "model_output"]
+        self.assertEqual(len(fact_records), 1)
+        self.assertEqual(len(model_records), 1)
+        self.assertEqual(model_records[0].kind, "episode")
+
+        context = self.store.retrieval_context(1, "admin RCE")
+        semantic = context.split("EPISODIC RECENT/RELEVANT:", 1)[0]
+        self.assertIn("GET /admin retornou 403.", semantic)
+        self.assertNotIn("RCE confirmada", semantic)
+        self.assertIn("RCE confirmada", context)
 
     def test_compression_preserves_recent_messages(self) -> None:
         self.store.create_project({"name": "Contexto", "project_type": "research", "color": "green"})
