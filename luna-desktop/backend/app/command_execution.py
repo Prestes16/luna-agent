@@ -22,6 +22,9 @@ _READ_ONLY_TOOLS = {
     "ip", "ss", "netstat", "route", "resolvectl", "systemctl", "journalctl",
     "ps", "pgrep", "nmap", "dig", "nslookup", "host", "curl", "wget", "httpx",
     "whatweb", "sslscan", "testssl", "tshark", "tcpdump", "wg",
+    "file", "sha256sum", "strings", "xxd", "readelf", "objdump", "yara", "capa",
+    "floss", "rizin", "radare2", "binwalk", "volatility3", "vol", "olevba",
+    "apktool", "jadx",
 }
 
 _TRANSIENT_MUTATORS = {
