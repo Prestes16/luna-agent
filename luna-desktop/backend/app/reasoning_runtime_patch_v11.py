@@ -53,6 +53,13 @@ def _privacy_reasons(message: str, response: str, scenario: Any) -> list[str]:
     if _DIRECT_FALLBACK_RE.search(response):
         reasons.append("privacy_direct_fallback_suggested")
 
+    for path in _CONFIG_PATHS:
+        if path in response_lower and path not in factual_context:
+            reasons.append("privacy_unobserved_config_path")
+            break
+    if _SOCKS_ENDPOINT_RE.search(response) and not _SOCKS_ENDPOINT_RE.search(factual_context):
+        reasons.append("privacy_unobserved_socks_endpoint")
+
     commands = extract_commands(response)
     for command in commands:
         try:
@@ -67,14 +74,6 @@ def _privacy_reasons(message: str, response: str, scenario: Any) -> list[str]:
         if wrapped_by_privacy and "nmap" in lowered:
             if any(flag in lowered for flag in ("-ss", "-su")):
                 reasons.append("privacy_raw_socket_proxy_mismatch")
-
-        command_lower = command.casefold()
-        for path in _CONFIG_PATHS:
-            if path in command_lower and path not in factual_context:
-                reasons.append("privacy_unobserved_config_path")
-                break
-        if _SOCKS_ENDPOINT_RE.search(command) and not _SOCKS_ENDPOINT_RE.search(factual_context):
-            reasons.append("privacy_unobserved_socks_endpoint")
 
     if re.search(r"(?is)tor.{0,50}(?:suporta|transporta|proxy).{0,30}(?:udp|raw socket)", response):
         reasons.append("privacy_transport_overclaim")
