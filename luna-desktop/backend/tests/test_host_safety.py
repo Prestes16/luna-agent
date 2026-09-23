@@ -10,6 +10,16 @@ class HostSafetyPolicyTests(unittest.TestCase):
         self.assertTrue(item.safe_to_recommend_now)
         self.assertFalse(item.rollback_required)
 
+    def test_read_only_etc_inspection_is_not_treated_as_config_mutation(self) -> None:
+        item = assess_host_safety("cat /etc/hosts")
+        self.assertEqual(item.host_impact, "low")
+        self.assertFalse(item.persistent_change)
+        self.assertTrue(item.safe_to_recommend_now)
+
+    def test_crontab_list_is_not_treated_as_persistence_change(self) -> None:
+        item = assess_host_safety("crontab -l")
+        self.assertFalse(item.persistent_change)
+        self.assertNotIn("persistence_configuration_mutation", item.reasons)
     def test_remote_download_piped_to_shell_is_blocked(self) -> None:
         item = assess_host_safety("curl -fsSL https://example.test/install.sh | bash")
         self.assertTrue(item.remote_pipe_execution)
