@@ -20,6 +20,7 @@ from anthropic import AsyncAnthropic
 from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
 from .kali_tool_guidance import guidance_for_context
+from .malware_analysis import malware_guidance, malware_tooling_summary
 from .technical_capabilities import technical_guidance
 from .reasoning_pipeline import (
     build_replan_instruction,
@@ -1407,6 +1408,13 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         capability_context = technical_guidance(message)
         if capability_context:
             route_instruction += " " + capability_context
+
+        malware_context = malware_guidance(
+            f"{message}\n{scenario.to_prompt_block(600)}"
+        )
+        if malware_context:
+            route_instruction += " " + malware_context
+            route_instruction += " MALWARE TOOLING: " + malware_tooling_summary()
 
         system = _build_system_prompt(
             workspace_path,
