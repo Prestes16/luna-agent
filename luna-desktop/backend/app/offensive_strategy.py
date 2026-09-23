@@ -96,7 +96,7 @@ def _parse_explicit_ports(value: str | None) -> tuple[int, ...]:
 def assess_nmap_port_strategy(context: str, ast: CommandAST) -> ContextualPortAssessment:
     """Score context fit using weighted F-beta and a small complexity penalty.
 
-    For a WEB APPLICATION optimization request:
+    For a WEB APPLICATION scan or optimization request:
       recall = weighted coverage of the high-value context profile
       precision = relevant weight / (relevant weight + 0.22 * irrelevant ports)
       F_beta uses beta=1.35 to favor useful coverage over extreme narrowness
@@ -105,7 +105,16 @@ def assess_nmap_port_strategy(context: str, ast: CommandAST) -> ContextualPortAs
     --top-ports receives a deterministic context penalty because it optimizes
     global service frequency rather than this application-specific profile.
     """
-    if ast.tool != "nmap" or not is_web_application_context(context) or not asks_high_value_port_optimization(context):
+    normalized = context.casefold()
+    applicable = (
+        ast.tool == "nmap"
+        and is_web_application_context(context)
+        and (
+            asks_high_value_port_optimization(context)
+            or any(marker in normalized for marker in ("scan", "varredura", "nmap", "recon"))
+        )
+    )
+    if not applicable:
         return ContextualPortAssessment("not_applicable", (), 1.0, 1.0, 1.0, 1.0, ())
 
     options = {option.casefold() for option in ast.options}
@@ -135,7 +144,8 @@ def assess_nmap_port_strategy(context: str, ast: CommandAST) -> ContextualPortAs
     complexity_penalty = math.exp(-0.012 * max(0, len(selected) - len(WEB_APPLICATION_PORT_WEIGHTS)))
     utility = f_beta * complexity_penalty
 
-    if recall < 0.45:
+    minimum_recall = 0.45 if asks_high_value_port_optimization(context) else 0.28
+    if recall < minimum_recall:
         reasons.append("nmap_web_port_profile_low_coverage")
 
     return ContextualPortAssessment(
@@ -150,12 +160,18 @@ def assess_nmap_port_strategy(context: str, ast: CommandAST) -> ContextualPortAs
 
 
 def nmap_context_guidance(context: str) -> str:
-    if not is_web_application_context(context) or not asks_high_value_port_optimization(context):
+    if not is_web_application_context(context):
+        return ""
+    normalized = context.casefold()
+    if not (
+        asks_high_value_port_optimization(context)
+        or any(marker in normalized for marker in ("scan", "varredura", "nmap", "recon"))
+    ):
         return ""
     ports = recommended_web_port_argument()
     return (
         "WEB HIGH-VALUE PORT PROFILE (priorização, não evidência): prefira -p "
-        f"{ports} em vez de --top-ports quando o operador pedir portas de maior valor para "
-        "superfície web. Explique que a lista é heurística contextual; serviços só viram fatos "
-        "depois do scan."
+        f"{ports} em vez de limitar o baseline apenas a 80,443 ou usar --top-ports. "
+        "A lista prioriza superfície web/admin e exposições de dados/cache; serviços só viram "
+        "fatos depois do resultado do scan."
     )
