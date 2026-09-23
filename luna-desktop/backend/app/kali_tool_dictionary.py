@@ -293,6 +293,26 @@ KALI_TOOL_DICTIONARY: dict[str, KaliToolSpec] = {
         ),
         ("WireGuard interface",),
     ),
+    "file": KaliToolSpec(
+        "file", "malware", "specimen/file", "file-format and magic classification",
+        ("operate on a preserved specimen copy", "classification is evidence, not family attribution"),
+        ("specimen",),
+    ),
+    "sha256sum": KaliToolSpec(
+        "sha256sum", "malware", "specimen/file", "cryptographic hashing for evidence identity",
+        ("hash before modifying or unpacking the specimen",),
+        ("specimen",),
+    ),
+    "strings": KaliToolSpec(
+        "strings", "malware", "specimen/file", "printable-string triage",
+        ("strings are leads and require contextual validation",),
+        ("specimen",),
+    ),
+    "xxd": KaliToolSpec(
+        "xxd", "malware", "specimen/file", "hexadecimal byte inspection",
+        ("preserve offsets and original bytes when documenting evidence",),
+        ("specimen",),
+    ),
     "yara": KaliToolSpec(
         "yara", "malware", "specimen/file/directory", "signature-based malware triage",
         (
