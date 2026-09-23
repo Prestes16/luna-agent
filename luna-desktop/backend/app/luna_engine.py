@@ -229,6 +229,13 @@ def _build_system_prompt(
             "artefato se o operador não pediu explicitamente persistência."
         ),
         (
+            "Administração de comandos: DISCOVER/PREFLIGHT -> PLAN -> EXECUTE -> VERIFY -> "
+            "ROLLBACK/CONTINUE. Execute ou proponha somente uma mudança de estado por vez; "
+            "não encadeie mutações ainda não verificadas. Diferencie ação somente-leitura, "
+            "mudança transitória, mudança persistente, privilégio e comando interativo. "
+            "Mudança persistente/privilegiada exige confirmação explícita e rollback factual."
+        ),
+        (
             "Se o operador pedir somente um comando, entregue o comando executável de forma "
             "direta; explicações extras devem ser mínimas e tecnicamente necessárias."
         ),
