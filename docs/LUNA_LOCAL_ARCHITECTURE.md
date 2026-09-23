@@ -103,6 +103,13 @@ Redaction remains appropriate only for explicitly non-evidentiary telemetry/fing
 copies or when the operator requests a sanitized export. Evidence used for reproduction,
 reporting, correlation or validation retains its exact value.
 
+### Binary/report evidence vault
+
+Textual truth/memory and raw report artifacts are separate concerns. Raw screenshots,
+logs, protocol transcripts, debugger output and other attachments are stored byte-for-byte
+in a local content-addressed evidence vault with SHA-256, byte length, provenance metadata
+and project scope. Project chat images are captured before visual interpretation.
+
 ### Cache policy
 
 Semantic response cache remains **OFF**.
@@ -160,10 +167,10 @@ Do not add these without a measured need:
 
 ## Operator-controlled tool execution plane
 
-The current build remains instruction-only until the supervised execution gate is
-implemented and tested. The target architecture is not autonomous auditing: Luna is a
-copilot that may execute tools on demand inside operator-defined scope, while the operator
-retains control over target, objective and escalation of authority.
+The model-facing tool loop remains hard-locked, while a separate supervised executor is
+implemented behind an explicit operator gate and is disabled by default. Luna is not an
+autonomous auditor: it may execute selected tools on demand inside operator-defined scope,
+while the operator retains control over target, objective and escalation of authority.
 
 Execution freedom is granted per capability/policy rather than globally.
 
@@ -196,6 +203,7 @@ The detailed L0-L3 authority model, nonlinear execution-risk math, exploit/PoC
 proof contract, visual-evidence integrity contract and future Kali knowledge
 ingestion design are frozen in `docs/LUNA_SUPERVISED_COPILOT_V1.md`.
 
-The execution-intent model is implemented and testable while real host/tool
-execution remains disabled. This separation is deliberate: policy is proven
-before the executor is granted authority.
+The execution-intent model and supervised executor are implemented and testable.
+The executor is disabled by default; L0/L1 and L2/L3 are independently gated, and
+the legacy/model tool loop remains disabled. This separation keeps model generation,
+authority, execution and evidence capture independently testable.
