@@ -19,7 +19,6 @@ from .kali_tool_readiness import assess_tool_readiness
 from .network_privacy import privacy_intent, score_privacy_routes
 from .offensive_strategy import assess_nmap_port_strategy
 from .operational_transform import transform_response_commands
-from .reasoning_pipeline import redact_sensitive_text
 from .reasoning_quality import score_response_quality
 from .reasoning_runtime_patch_v8 import command_attestations, extract_commands
 
