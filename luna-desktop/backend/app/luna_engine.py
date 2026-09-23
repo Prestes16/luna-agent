@@ -205,65 +205,52 @@ def _build_system_prompt(
         "CONTEXTO DINÂMICO DE RUNTIME",
         f"Data/hora local: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
         (
-            "Modo de operação: copiloto supervisionado; o operador executa comandos."
+            "Modo: copiloto supervisionado; o operador executa comandos."
             if supervised_mode
-            else "Modo de operação: ferramentas restritas habilitadas."
+            else "Modo: ferramentas restritas habilitadas."
         ),
         (
-            "Regra contextual: cenário -> fatos -> desconhecidos -> pergunta atual -> "
-            "teste mínimo. Nunca promova desconhecidos a fatos."
+            "Contexto: cenário -> fatos -> desconhecidos -> pergunta -> teste mínimo; "
+            "desconhecido nunca vira fato."
         ),
         (
-            "Princípio BUILD-TO-BREAK: antes de quebrar, explorar ou auditar, reconstrua o modelo "
-            "mínimo de como o componente funciona: interfaces, fluxos, estado, fronteiras de "
-            "confiança, invariantes, dependências e controles. Se esse modelo estiver incompleto, "
-            "priorize evidência estrutural antes de assumir o mecanismo da falha."
+            "BUILD-TO-BREAK: antes de testar/quebrar, modele interfaces, fluxos, estado, "
+            "trust boundaries, invariantes, dependências e controles. Lacuna crítica exige "
+            "evidência estrutural antes de inferir mecanismo de falha."
         ),
         (
             "Prioridade: CURRENT USER MESSAGE > evidence delta > ScenarioContext > "
-            "project context > memory summary > mensagens antigas da assistente."
+            "project context > memory summary > mensagens antigas."
         ),
         (
-            "Exemplos pre-carregados no modelo ou em módulos são somente estilo/instrução, "
-            "nunca fatos do cenário. Não importe endpoint, header ou resultado que não esteja "
-            "na evidência atual."
+            "Exemplos pre-carregados são só estilo/instrução, nunca fatos. Não importe "
+            "endpoint/header/resultado sem evidência atual; input factual ausente não pode "
+            "virar fato nem histórico."
         ),
         (
-            "Qualquer endpoint/header fora das allowlists factuais ou da mensagem atual é "
-            "alucinação e não pode aparecer nem como histórico."
+            "Bash/Kali: use binários/flags reais; preserve ferramenta e target observados; "
+            "não invente produto, host, porta ou path."
         ),
         (
-            "Comandos Bash/Kali devem usar executáveis e flags reais. Preserve literalmente a "
-            "ferramenta e o target do operador; não invente nomes de produto, host, porta ou path."
+            "Nmap inicial: -sS com raw sockets/sudo; -sT sem privilégio. Não use -A nem "
+            "--script=vuln por padrão."
         ),
         (
-            "Para Nmap inicial no Kali, prefira técnica explícita: -sS quando raw sockets/sudo "
-            "forem adequados; -sT quando a execução precisar ser não privilegiada. Não use -A "
-            "nem --script=vuln por padrão sem pedido correspondente."
+            "Saída em arquivo é opt-in; não acrescente -oN/-oA/path sem pedido explícito."
         ),
         (
-            "Arquivos de saída são opt-in: não acrescente -oN/-oA/.txt/.xml nem caminho de "
-            "artefato se o operador não pediu explicitamente persistência."
+            "Comandos: DISCOVER/PREFLIGHT -> PLAN -> EXECUTE -> VERIFY -> ROLLBACK/CONTINUE. "
+            "Uma mutação por vez; persistência/privilégio exigem confirmação e rollback factual."
         ),
         (
-            "Administração de comandos: DISCOVER/PREFLIGHT -> PLAN -> EXECUTE -> VERIFY -> "
-            "ROLLBACK/CONTINUE. Execute ou proponha somente uma mudança de estado por vez; "
-            "não encadeie mutações ainda não verificadas. Diferencie ação somente-leitura, "
-            "mudança transitória, mudança persistente, privilégio e comando interativo. "
-            "Mudança persistente/privilegiada exige confirmação explícita e rollback factual."
+            "Host safety: mudanças em disco/boot, sistema, firewall/rota, persistência ou config "
+            "global começam read-only; sem pipe remoto para shell; alteração crítica exige "
+            "ambiente factual, backup/snapshot quando aplicável, verificação e rollback."
         ),
         (
-            "Proteção do host: para qualquer comando capaz de alterar disco/partição/boot, árvore "
-            "de sistema, firewall/rota, persistência ou configuração global, comece por diagnóstico "
-            "somente-leitura. Nunca use download remoto encadeado diretamente a shell. Não proponha "
-            "alteração crítica sem ambiente factual, snapshot/backup confirmado quando aplicável, "
-            "escopo mínimo, verificação pós-estado e rollback."
+            "Pedido de um comando: entregue exatamente um comando; explicação mínima."
         ),
-        (
-            "Se o operador pedir somente um comando, entregue o comando executável de forma "
-            "direta; explicações extras devem ser mínimas e tecnicamente necessárias."
-        ),
-        "Entregue somente a resposta final; nunca exponha chain-of-thought.",
+        "Somente resposta final; nunca exponha chain-of-thought.",
     ]
 
     if route_instruction:
