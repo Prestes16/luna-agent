@@ -33,6 +33,11 @@ from .host_safety import host_safety_guidance
 from .kali_tool_guidance import guidance_for_context
 from .malware_analysis import malware_guidance, malware_tooling_summary
 from .quantitative_reasoning import quantitative_fact_sheet, quantitative_guidance
+from .supervised_executor import (
+    ExecutionApproval,
+    SupervisedExecutionPolicy,
+    SupervisedExecutor,
+)
 from .technical_capabilities import technical_guidance
 from .threat_response import threat_response_guidance
 from .visual_evidence import (
@@ -449,12 +454,48 @@ class LunaEngine:
             "native_reasoning_effort": _env_flag("LUNA_NATIVE_REASONING_EFFORT", False),
             "instruction_only_mode": True,
             "tool_execution_enabled": False,
+            "supervised_executor_enabled": _env_flag("LUNA_SUPERVISED_EXECUTOR", False),
+            "supervised_allow_l0": _env_flag("LUNA_EXEC_ALLOW_L0", True),
+            "supervised_allow_l1": _env_flag("LUNA_EXEC_ALLOW_L1", True),
+            "supervised_allow_l2": _env_flag("LUNA_EXEC_ALLOW_L2", False),
+            "supervised_allow_l3": _env_flag("LUNA_EXEC_ALLOW_L3", False),
+            "supervised_timeout_seconds": _env_int(
+                "LUNA_EXEC_TIMEOUT_SECONDS", 120, 1, 900
+            ),
+            "supervised_max_output_bytes": _env_int(
+                "LUNA_EXEC_MAX_OUTPUT_BYTES", 2 * 1024 * 1024, 1024, 16 * 1024 * 1024
+            ),
             "reflection_enabled": False, # Self-Reflection loop (task #15)
         }
         self.module_loader = ModuleLoader()
         self.active_modules = self.module_loader.load_enabled(
             ["mentor_kali_devtools"] if self.config["mentor_mode"] else []
         )
+        self.supervised_executor = SupervisedExecutor(
+            self._build_supervised_execution_policy()
+        )
+
+    def _build_supervised_execution_policy(self) -> SupervisedExecutionPolicy:
+        return SupervisedExecutionPolicy(
+            enabled=bool(self.config.get("supervised_executor_enabled", False)),
+            allow_l0=bool(self.config.get("supervised_allow_l0", True)),
+            allow_l1=bool(self.config.get("supervised_allow_l1", True)),
+            allow_l2=bool(self.config.get("supervised_allow_l2", False)),
+            allow_l3=bool(self.config.get("supervised_allow_l3", False)),
+            timeout_seconds=max(
+                1, min(900, int(self.config.get("supervised_timeout_seconds", 120)))
+            ),
+            max_output_bytes=max(
+                1024,
+                min(
+                    16 * 1024 * 1024,
+                    int(self.config.get("supervised_max_output_bytes", 2 * 1024 * 1024)),
+                ),
+            ),
+        )
+
+    def _refresh_supervised_executor_policy(self) -> None:
+        self.supervised_executor.policy = self._build_supervised_execution_policy()
 
     def _tool_execution_allowed(self) -> bool:
         """Hard invariant for the current build: model tools never execute on the host."""
@@ -2253,6 +2294,75 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         context = self.scenario_contexts.get(conversation_id)
         return context.to_dict() if context else {}
 
+    def preview_supervised_command(
+        self,
+        command: str,
+        *,
+        conversation_id: str = "default",
+        operator_request_text: str = "",
+        rollback_ready: bool = False,
+        verification_ready: bool = True,
+    ) -> Dict[str, Any]:
+        scenario = self.scenario_contexts.get(conversation_id)
+        context = operator_request_text
+        if scenario is not None:
+            context = (
+                f"{operator_request_text}\n{scenario.to_prompt_block(1200)}"
+                if operator_request_text
+                else scenario.to_prompt_block(1200)
+            )
+        intent = self.supervised_executor.preview(
+            command,
+            context=context,
+            operator_requested_execution=operator_requested_execution(
+                operator_request_text
+            ),
+            scope_confirmed=bool(getattr(scenario, "scope", None)),
+            rollback_ready=rollback_ready,
+            verification_ready=verification_ready,
+            scope_target=(
+                str(getattr(scenario, "target", "") or "") or None
+                if scenario is not None else None
+            ),
+        )
+        return intent.to_dict()
+
+    async def execute_supervised_command(
+        self,
+        command: str,
+        *,
+        conversation_id: str = "default",
+        operator_request_text: str,
+        approval: ExecutionApproval | None = None,
+        rollback_ready: bool = False,
+        verification_ready: bool = True,
+    ) -> Dict[str, Any]:
+        """Execute only through the independent supervised-executor policy.
+
+        This method is intentionally not exposed as an LLM tool. A desktop/API
+        operator action must call it explicitly.
+        """
+        scenario = self.scenario_contexts.get(conversation_id)
+        context = operator_request_text
+        if scenario is not None:
+            context = f"{operator_request_text}\n{scenario.to_prompt_block(1400)}"
+        result = await self.supervised_executor.execute(
+            command,
+            context=context,
+            operator_requested_execution=operator_requested_execution(
+                operator_request_text
+            ),
+            scope_confirmed=bool(getattr(scenario, "scope", None)),
+            rollback_ready=rollback_ready,
+            verification_ready=verification_ready,
+            scope_target=(
+                str(getattr(scenario, "target", "") or "") or None
+                if scenario is not None else None
+            ),
+            approval=approval,
+        )
+        return result.to_dict()
+
     def get_local_diagnostics(self) -> Dict[str, Any]:
         self._ollama_available = _ollama_is_available_sync()
         return {
@@ -2263,6 +2373,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             "instruction_only_mode": bool(self.config.get("instruction_only_mode", True)),
             "supervised_mode": not self._tool_execution_allowed(),
             "tool_execution_allowed": self._tool_execution_allowed(),
+            "supervised_executor": self.supervised_executor.public_policy(),
             "harness": self.harness.public_policy(),
             "harness_retrieval_cache_entries": self.harness.retrieval_cache.size(),
             "config_dir": str(self.module_loader.config_dir),
@@ -2284,3 +2395,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             self.active_modules = self.module_loader.load_enabled(
                 ["mentor_kali_devtools"] if self.config["mentor_mode"] else []
             )
+        if any(
+            key.startswith("supervised_")
+            for key in cfg
+        ):
+            self._refresh_supervised_executor_policy()
