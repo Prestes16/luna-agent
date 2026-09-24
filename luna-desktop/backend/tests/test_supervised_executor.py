@@ -366,5 +366,28 @@ class SupervisedExecutorTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(runner.calls, [])
 
 
+    def test_approval_ttl_rejects_out_of_bounds_instead_of_clamping(self) -> None:
+        with self.assertRaises(ValueError):
+            ExecutionApproval.issue(
+                command="id",
+                target=None,
+                authority_level="L0_OBSERVE",
+                ttl_seconds=0,
+            )
+        with self.assertRaises(ValueError):
+            ExecutionApproval.issue(
+                command="id",
+                target=None,
+                authority_level="L0_OBSERVE",
+                ttl_seconds=901,
+            )
+        with self.assertRaises(ValueError):
+            ExecutionApproval.issue(
+                command="id",
+                target=None,
+                authority_level="L0_OBSERVE",
+                ttl_seconds=True,
+            )
+
 if __name__ == "__main__":
     unittest.main()
