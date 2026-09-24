@@ -32,6 +32,7 @@ from .execution_backends import (
     SSHExecutionConfig,
     build_ssh_runner,
     resolve_ssh_binary,
+    ssh_local_file_issues,
 )
 from .execution_intent import (
     APPROVAL_REQUIRED,
@@ -564,6 +565,11 @@ class LunaEngine:
             if not resolved_ssh:
                 raise ValueError(
                     "configured OpenSSH client was not found; set LUNA_KALI_SSH_BINARY"
+                )
+            file_issues = ssh_local_file_issues(config)
+            if file_issues:
+                raise ValueError(
+                    "invalid local SSH file configuration: " + ", ".join(file_issues)
                 )
             self.supervised_executor._runner = build_ssh_runner(config)
             self.supervised_executor.backend_name = "kali-ssh"
