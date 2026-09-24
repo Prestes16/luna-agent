@@ -1097,6 +1097,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 # 1536 visible tokens. Keep this bounded well below the configured
                 # 4096 max while allowing a complete final answer.
                 max_tokens = max(max_tokens, 2_048)
+            is_ollama = client is self.ollama_client
             request_kwargs: Dict[str, Any] = {
                 "model": model_name,
                 "messages": msgs,
@@ -1120,7 +1121,6 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             chunk_count = 0
             finish_reason: Optional[str] = None
             request_failed = False
-            is_ollama = client is self.ollama_client
             if turn_telemetry is not None:
                 turn_telemetry["llm_called"] = True
                 turn_telemetry["request_count"] = int(turn_telemetry.get("request_count", 0)) + 1
