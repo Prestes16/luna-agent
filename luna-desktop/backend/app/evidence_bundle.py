@@ -11,10 +11,14 @@ transactions and screenshots. Exact bytes are preserved and hashed.
 from __future__ import annotations
 
 import hashlib
-import math
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Iterable
+
+from .quantitative_reasoning import (
+    wilson_score_interval as _wilson_score_interval,
+    zero_failure_probability_upper_bound as _zero_failure_probability_upper_bound,
+)
 
 
 def _now() -> str:
@@ -100,36 +104,20 @@ def build_evidence_artifact(
     )
 
 
-def wilson_interval(successes: int, trials: int, *, z: float = 1.959963984540054) -> ReproducibilityMetrics:
-    """Wilson score interval for a binomial reproducibility experiment.
-
-    This is an uncertainty interval for the observed success fraction, not a claim
-    about exploitability on populations or environments that were not tested.
-    """
-    if isinstance(successes, bool) or isinstance(trials, bool):
-        raise ValueError("successes/trials must be integers")
-    successes = int(successes)
-    trials = int(trials)
-    if trials < 1 or successes < 0 or successes > trials:
-        raise ValueError("require 0 <= successes <= trials and trials >= 1")
-    if not math.isfinite(z) or z <= 0:
-        raise ValueError("z must be finite and positive")
-
-    p = successes / trials
-    z2 = z * z
-    denom = 1.0 + z2 / trials
-    center = (p + z2 / (2.0 * trials)) / denom
-    margin = (
-        z
-        * math.sqrt((p * (1.0 - p) + z2 / (4.0 * trials)) / trials)
-        / denom
-    )
+def wilson_interval(
+    successes: int,
+    trials: int,
+    *,
+    z: float = 1.959963984540054,
+) -> ReproducibilityMetrics:
+    """Report wrapper over the shared deterministic quantitative math."""
+    low, high = _wilson_score_interval(successes, trials, z=z)
     return ReproducibilityMetrics(
         successes=successes,
         trials=trials,
-        success_rate=round(p, 8),
-        wilson_low=round(max(0.0, center - margin), 8),
-        wilson_high=round(min(1.0, center + margin), 8),
+        success_rate=round(successes / trials, 10),
+        wilson_low=low,
+        wilson_high=high,
     )
 
 
@@ -138,22 +126,7 @@ def zero_failure_probability_upper_bound(
     *,
     alpha: float = 0.05,
 ) -> float:
-    """Exact one-sided binomial upper bound after observing zero failures.
-
-    If zero failures are observed in n independent Bernoulli trials, this returns
-    the failure-probability upper bound p such that (1-p)^n = alpha.
-    It is a calibration aid for the tested repetitions, not evidence that future
-    trials or different targets are identically distributed.
-    """
-    if isinstance(trials, bool):
-        raise ValueError("trials must be an integer")
-    trials = int(trials)
-    if trials < 1:
-        raise ValueError("trials must be >= 1")
-    if not math.isfinite(alpha) or not (0.0 < alpha < 1.0):
-        raise ValueError("alpha must satisfy 0 < alpha < 1")
-    return round(1.0 - math.pow(alpha, 1.0 / trials), 10)
-
+    return _zero_failure_probability_upper_bound(trials, alpha=alpha)
 
 def build_proof_evidence_bundle(
     *,
