@@ -5,7 +5,7 @@ from app.command_policy import assess_command_policy, effective_tool
 from app.luna_engine import LunaEngine  # noqa: F401
 from app.operational_transform import transform_response_commands
 from app.reasoning_pipeline import validate_model_response
-from app.reasoning_runtime_patch_v8 import command_attestations
+from app.reasoning_runtime_patch_v8 import command_attestations, extract_commands
 from app.scenario_context import ScenarioContext
 
 
@@ -154,6 +154,23 @@ class OperationalCommandPolicyTests(unittest.TestCase):
         self.assertEqual(mutations, [])
         self.assertIn("example.com", transformed)
 
+
+    def test_standalone_command_extraction_preserves_exact_command(self) -> None:
+        command = "nmap -sV 10.10.10.5"
+        self.assertEqual(extract_commands(command), [command])
+
+    def test_standalone_command_extraction_ignores_plain_tool_prose(self) -> None:
+        self.assertEqual(
+            extract_commands("nmap é uma boa ferramenta para enumeração."),
+            [],
+        )
+
+    def test_standalone_command_extraction_handles_operator_visible_followup_text(self) -> None:
+        response = "nmap -sV 10.10.10.5\nDepois verificar a resposta."
+        self.assertEqual(
+            extract_commands(response),
+            ["nmap -sV 10.10.10.5"],
+        )
 
 if __name__ == "__main__":
     unittest.main()
