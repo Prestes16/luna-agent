@@ -26,6 +26,7 @@ from .agent_harness import AgentHarness
 from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
 from .construction_reasoning import construction_guidance
+from .cyber_prompt_kernel import compile_cyber_kernel
 from .decision_intelligence import decision_guidance
 from .evidence_bundle import evidence_bundle_guidance
 from .exploit_proof import exploit_proof_guidance
@@ -300,6 +301,8 @@ def _build_system_prompt(
     project_context: Optional[str] = None,
     active_modules: Optional[Dict[str, str]] = None,
     supervised_mode: bool = True,
+    current_message: Optional[str] = None,
+    cyber_kernel_v1_enabled: bool = False,
 ) -> str:
     """Build only the small, session-specific context missing from the Modelfile."""
 
@@ -360,11 +363,28 @@ def _build_system_prompt(
 
     ]
 
+    if cyber_kernel_v1_enabled:
+        compilation = compile_cyber_kernel(
+            current_message or "",
+            supervised_mode=supervised_mode,
+        )
+        lines = [
+            compilation.text,
+            "",
+            "CONTEXTO DINÂMICO DE RUNTIME",
+            f"Data/hora local: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
+        ]
+
+    route_cap = 1_800 if cyber_kernel_v1_enabled else 2_700
+    evidence_cap = 650 if cyber_kernel_v1_enabled else 800
+    scenario_cap = 550 if cyber_kernel_v1_enabled else 700
+    module_cap = 450 if cyber_kernel_v1_enabled else 650
+
     if route_instruction:
-        lines.extend(("", route_instruction[:2_700]))
+        lines.extend(("", route_instruction[:route_cap]))
 
     if evidence_delta:
-        lines.extend(("", evidence_delta[:800]))
+        lines.extend(("", evidence_delta[:evidence_cap]))
 
     if workspace_path:
         lines.append(f"Workspace informado (somente contexto): {workspace_path}")
@@ -376,7 +396,7 @@ def _build_system_prompt(
         lines.extend(("", "Contexto local do projeto:", project_context[:500]))
 
     if scenario_context:
-        lines.extend(("", scenario_context[:700]))
+        lines.extend(("", scenario_context[:scenario_cap]))
 
     if context_summary:
         lines.extend(("", "Resumo comprimido da sessão:", context_summary[:450]))
@@ -386,7 +406,7 @@ def _build_system_prompt(
             (
                 "",
                 f"Módulo ativo: {module_id}",
-                module_content[:650],
+                module_content[:module_cap],
             )
         )
 
@@ -470,6 +490,7 @@ class LunaEngine:
             "temperature": _env_float("LUNA_TEMPERATURE", 0.0, 0.0, 2.0),
             "top_p": _env_float("LUNA_TOP_P", 0.7, 0.0, 1.0),
             "seed": _env_int("LUNA_SEED", 42, 0, 2_147_483_647),
+            "cyber_kernel_v1": _env_flag("LUNA_CYBER_KERNEL_V1", False),
             "max_tokens": _env_int("LUNA_MAX_TOKENS", 512, 64, 4_096),
             "zero_cloud_mode": _env_flag("LUNA_ZERO_CLOUD", True),
             "mentor_mode": _env_flag("LUNA_MENTOR_MODE", True),
@@ -1811,6 +1832,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             project_context=project_context,
             active_modules=runtime_modules,
             supervised_mode=not self._tool_execution_allowed(),
+            current_message=message,
+            cyber_kernel_v1_enabled=bool(self.config.get("cyber_kernel_v1", False)),
         )
         # Monta content — inclui imagens se fornecidas
         user_content = self._build_vision_content(message, images, client_type)
@@ -2609,6 +2632,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             "default_model": self.config["default_model"],
             "zero_cloud_mode": bool(self.config["zero_cloud_mode"]),
             "instruction_only_mode": bool(self.config.get("instruction_only_mode", True)),
+            "cyber_kernel_v1": bool(self.config.get("cyber_kernel_v1", False)),
             "supervised_mode": not self._tool_execution_allowed(),
             "tool_execution_allowed": self._tool_execution_allowed(),
             "supervised_executor": self.supervised_executor.public_policy(),
