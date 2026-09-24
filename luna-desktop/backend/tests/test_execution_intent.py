@@ -230,6 +230,9 @@ class ExecutionIntentTests(unittest.TestCase):
         )
         self.assertEqual(intent.authority_level, L2_MUTATE)
         self.assertEqual(intent.authority, APPROVAL_REQUIRED)
+        self.assertTrue(intent.mutates_state)
+        self.assertTrue(intent.rollback_required)
+        self.assertGreater(intent.risk_index, 0.3)
 
 
 if __name__ == "__main__":
