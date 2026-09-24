@@ -148,6 +148,33 @@ class SupervisedExecutionApiTests(unittest.TestCase):
             response.json()["reasons"],
         )
 
+    def test_supervised_config_rejects_wrong_types_and_bounds(self) -> None:
+        wrong_bool = self.client.post(
+            "/api/config",
+            json={"supervised_executor_enabled": "true"},
+        )
+        self.assertEqual(wrong_bool.status_code, 422)
+
+        wrong_timeout = self.client.post(
+            "/api/config",
+            json={"supervised_timeout_seconds": 0},
+        )
+        self.assertEqual(wrong_timeout.status_code, 422)
+
+        valid = self.client.post(
+            "/api/config",
+            json={
+                "supervised_executor_enabled": True,
+                "supervised_timeout_seconds": 30,
+                "supervised_max_output_bytes": 4096,
+            },
+        )
+        self.assertEqual(valid.status_code, 200)
+        policy = self.engine.supervised_executor.public_policy()
+        self.assertTrue(policy["enabled"])
+        self.assertEqual(policy["timeout_seconds"], 30)
+        self.assertEqual(policy["max_output_bytes"], 4096)
+
     def test_generic_config_does_not_enable_l3(self) -> None:
         response = self.client.post(
             "/api/config",
