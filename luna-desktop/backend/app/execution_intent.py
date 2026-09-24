@@ -325,7 +325,12 @@ def build_execution_intent(
         high_impact_semantic or registry_level == L3_HIGH_IMPACT
     )
     normalized_scope_target = _normalize_scope_target(scope_target)
-    target_required = bool(active_probe or semantic_mutation or target)
+    target_required = bool(
+        active_probe
+        or semantic_mutation
+        or target
+        or registry_level == L1_PROBE
+    )
     if target_required:
         target_bound = bool(target) and (
             normalized_scope_target is None
