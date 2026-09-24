@@ -271,6 +271,28 @@ class ScenarioAndRouterTests(unittest.TestCase):
             malformed_continuation.reasons,
         )
 
+    def test_next_test_with_new_current_evidence_is_not_blocked_as_stale_continuation(self) -> None:
+        context = ScenarioContext()
+        message = """Target http://127.0.0.1:8080
+GET /api/me
+HTTP/1.1 200 OK
+String observada no bundle: /api/admin/users
+Forneça exatamente um comando como próximo teste.
+"""
+        delta = context.update(message)
+        self.assertGreater(delta.count, 0)
+        self.assertTrue(context.action_history)
+        self.assertIsNone(context.pending_question)
+
+        validation = validate_model_response(
+            message=message,
+            response="curl -i http://127.0.0.1:8080/api/admin/users",
+            scenario=context,
+            evidence_delta_count=delta.count,
+        )
+
+        self.assertNotIn("no_observed_pending_action", validation.reasons)
+
     def test_observed_admin_role_may_be_explained_without_mutating_it(self) -> None:
         context = ScenarioContext()
         context.update(OLD_CONTEXT)
