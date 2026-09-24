@@ -229,6 +229,18 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("executor supervisionado sob demanda", prompt)
         self.assertIn("loop de ferramentas do modelo permanece bloqueado", prompt)
 
+    async def test_async_ollama_probe_runs_sync_probe_off_event_loop(self) -> None:
+        from app.luna_engine import _ollama_is_available_async
+
+        with patch(
+            "app.luna_engine._ollama_is_available_sync",
+            return_value=True,
+        ) as sync_probe:
+            available = await _ollama_is_available_async()
+
+        self.assertTrue(available)
+        sync_probe.assert_called_once_with()
+
     async def test_ollama_unavailable_never_falls_back_to_cloud(self) -> None:
         with (
             patch("app.luna_engine._ollama_is_available_sync", return_value=False),
@@ -299,19 +311,6 @@ class ModuleLoaderTests(unittest.TestCase):
             self.assertIsNotNone(content)
             self.assertIsNone(loader.load_module("../escape"))
             self.assertIn("Selecione", loader.extract_section(content or "", "INITIATOR") or "")
-
-
-    async def test_async_ollama_probe_runs_sync_probe_off_event_loop(self) -> None:
-        from app.luna_engine import _ollama_is_available_async
-
-        with patch(
-            "app.luna_engine._ollama_is_available_sync",
-            return_value=True,
-        ) as sync_probe:
-            available = await _ollama_is_available_async()
-
-        self.assertTrue(available)
-        sync_probe.assert_called_once_with()
 
 if __name__ == "__main__":
     unittest.main()
