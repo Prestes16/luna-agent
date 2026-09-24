@@ -65,6 +65,40 @@ def extract_commands(response: str) -> list[str]:
 
     if not commands:
         commands.extend(match.group(1).strip().strip("`") for match in _INLINE_CURL_RE.finditer(response))
+
+    if not commands:
+        action_tools = {
+            "systemctl", "wg", "wg-quick", "openvpn", "apt", "apt-get", "dnf",
+            "yum", "pacman", "rm", "rmdir", "shred", "chmod", "chown", "mount",
+            "umount", "nft", "iptables", "ufw", "firewall-cmd", "nmcli",
+        }
+        target_like = re.compile(
+            r"(?i)(?:^-{1,2}\S+|https?://|(?:\d{1,3}\.){3}\d{1,3}|"
+            r"(?:[a-z0-9-]+\.)+[a-z]{2,63}$|[/\\]|=)"
+        )
+        for raw_line in response.splitlines():
+            compact = raw_line.strip()
+            if compact.startswith(("- ", "* ")):
+                compact = compact[2:].lstrip()
+            if compact.startswith("$ "):
+                compact = compact[2:].lstrip()
+            if compact.startswith("PS> "):
+                compact = compact[4:].lstrip()
+            compact = compact.strip("`").strip()
+            if not compact or compact.startswith("#") or not _EXEC_RE.match(compact):
+                continue
+            try:
+                tokens = shlex.split(compact, posix=True)
+            except ValueError:
+                tokens = compact.split()
+            if not tokens:
+                continue
+            tool_index = 1 if tokens[0].casefold() == "sudo" and len(tokens) > 1 else 0
+            tool = tokens[tool_index].casefold() if tool_index < len(tokens) else ""
+            args = tokens[tool_index + 1:]
+            if tool in action_tools or any(target_like.search(token) for token in args):
+                commands.append(compact)
+
     return list(dict.fromkeys(commands))
 
 
