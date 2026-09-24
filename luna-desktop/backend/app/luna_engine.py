@@ -28,7 +28,11 @@ from .construction_reasoning import construction_guidance
 from .decision_intelligence import decision_guidance
 from .evidence_bundle import evidence_bundle_guidance
 from .exploit_proof import exploit_proof_guidance
-from .execution_backends import SSHExecutionConfig, build_ssh_runner
+from .execution_backends import (
+    SSHExecutionConfig,
+    build_ssh_runner,
+    resolve_ssh_binary,
+)
 from .execution_intent import (
     APPROVAL_REQUIRED,
     build_execution_intent,
@@ -556,13 +560,21 @@ class LunaEngine:
 
         try:
             config = SSHExecutionConfig.from_env()
+            resolved_ssh = resolve_ssh_binary(config)
+            if not resolved_ssh:
+                raise ValueError(
+                    "configured OpenSSH client was not found; set LUNA_KALI_SSH_BINARY"
+                )
             self.supervised_executor._runner = build_ssh_runner(config)
             self.supervised_executor.backend_name = "kali-ssh"
             self._execution_backend_error = None
             self._execution_backend_public = {
                 "kind": "kali-ssh",
                 "ready": True,
-                "ssh": config.public_dict(),
+                "ssh": {
+                    **config.public_dict(),
+                    "client_resolved": True,
+                },
             }
         except (TypeError, ValueError) as error:
             # Fail closed. If Kali SSH was requested, never fall back to the Windows host.
