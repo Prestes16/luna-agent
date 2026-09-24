@@ -484,6 +484,9 @@ class LunaEngine:
             self._build_supervised_execution_policy()
         )
         self.execution_approval_store = ExecutionApprovalStore()
+        # Optional synchronous callback installed by the local API layer to persist
+        # exact stdout/stderr bytes into a project evidence vault.
+        self.execution_evidence_sink = None
 
     def _build_supervised_execution_policy(self) -> SupervisedExecutionPolicy:
         return SupervisedExecutionPolicy(
@@ -2429,7 +2432,33 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             ),
             approval=approval,
         )
+
+        evidence_records: list[dict[str, Any]] = []
+        evidence_storage_errors: list[str] = []
+        if (
+            result.status == "executed"
+            and self.execution_evidence_sink is not None
+            and result.raw_evidence
+        ):
+            for kind, raw in result.raw_evidence:
+                try:
+                    stored = self.execution_evidence_sink(
+                        conversation_id,
+                        result.command_sha256,
+                        kind,
+                        raw,
+                        result.completed_at,
+                    )
+                    if isinstance(stored, dict):
+                        evidence_records.append(stored)
+                except Exception as storage_error:
+                    evidence_storage_errors.append(
+                        f"{type(storage_error).__name__}: {storage_error}"
+                    )
+
         output = result.to_dict()
+        output["evidence_records"] = evidence_records
+        output["evidence_storage_errors"] = evidence_storage_errors
         if invalid_approval_token and output.get("status") == "denied":
             output["denial_reasons"] = list(dict.fromkeys([
                 *output.get("denial_reasons", []),
