@@ -143,14 +143,9 @@ def build_response_execution_intents(
             str(item) for item in (getattr(scenario, "observed_facts", []) or [])
         )
     context = "\n".join(context_parts)
-    normalized = context.casefold()
-    scope_confirmed = bool(getattr(scenario, "scope", None)) or any(
-        marker in normalized
-        for marker in (
-            "autorizado", "authorized", "ctf", "laboratório", "laboratorio",
-            "lab", "sandbox", "escopo confirmado", "scope confirmed",
-        )
-    )
+    # Scope authority comes from ScenarioContext's explicit scope state, not from
+    # loose substring matching in arbitrary prose.
+    scope_confirmed = bool(getattr(scenario, "scope", None))
     operator_requested = operator_requested_execution(message)
     rollback_ready = bool(
         re.search(
