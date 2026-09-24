@@ -95,6 +95,26 @@ _TOOL_HIGH_IMPACT_PATTERNS = (
     re.compile(r"(?i)\b(?:nc|netcat|ncat)\b[^\n]*\s-e\s"),
 )
 
+_ARTIFACT_EXECUTION_MARKERS = (
+    "poc", "proof of concept", "prova de conceito", "exploit", "reproducer",
+    "comprovar achado", "validar achado", "reproduzir vulnerabilidade", "crash",
+)
+
+
+def _explicit_artifact_execution(tool: str, context: str) -> bool:
+    """Recognize an operator-scoped PoC/reproducer artifact as L3, never as unknown-safe."""
+    normalized_tool = str(tool or "").strip()
+    pathish = (
+        normalized_tool.startswith(("./", "../", "/"))
+        or "\\" in normalized_tool
+        or normalized_tool.casefold().endswith((".exe", ".elf", ".bin"))
+    )
+    if not pathish:
+        return False
+    normalized_context = str(context or "").casefold()
+    return any(marker in normalized_context for marker in _ARTIFACT_EXECUTION_MARKERS)
+
+
 
 @dataclass(frozen=True)
 class ExecutionIntent:
@@ -275,7 +295,8 @@ def build_execution_intent(
     target = _target_from_command(command)
     active_probe = tool in _ACTIVE_PROBE_TOOLS
     semantic_mutation = _semantic_remote_mutation(command)
-    high_impact_semantic = _is_high_impact_command(command, tool)
+    artifact_execution = _explicit_artifact_execution(tool, context)
+    high_impact_semantic = _is_high_impact_command(command, tool) or artifact_execution
     known_observe = tool in _LOCAL_OBSERVE_TOOLS
     known_semantics = bool(
         known_observe
@@ -378,6 +399,8 @@ def build_execution_intent(
         reasons.append("semantic_remote_mutation")
     if high_impact_semantic:
         reasons.append("high_impact_semantic")
+    if artifact_execution:
+        reasons.append("explicit_poc_artifact_execution")
     if level != L0_OBSERVE and not scope_confirmed:
         reasons.append("scope_not_confirmed")
     if level != L0_OBSERVE and target_required and not target:
