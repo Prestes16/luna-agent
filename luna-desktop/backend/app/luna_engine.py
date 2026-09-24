@@ -272,6 +272,14 @@ def _env_int(name: str, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, value))
 
 
+def _env_float(name: str, default: float, minimum: float, maximum: float) -> float:
+    try:
+        value = float(os.getenv(name, str(default)))
+    except ValueError:
+        return default
+    return max(minimum, min(maximum, value))
+
+
 _SEC_KEYWORDS = [
     'vulnerability', 'vulnerabilidade', 'exploit', 'xss', 'injection', 'overflow',
     'reentrancy', 'reentrância', 'audit', 'auditoria', 'pentest', 'bounty',
@@ -457,7 +465,11 @@ class LunaEngine:
         self.config = {
             "default_model": os.getenv("LUNA_MODEL", _OLLAMA_DEFAULT_MODEL),
             "vision_model": os.getenv("LUNA_VISION_MODEL", "").strip(),
-            "temperature": None,
+            # OpenAI-compatible Ollama defaults temperature/top_p to 1.0 when
+            # omitted, so send our deterministic local baseline explicitly.
+            "temperature": _env_float("LUNA_TEMPERATURE", 0.0, 0.0, 2.0),
+            "top_p": _env_float("LUNA_TOP_P", 0.7, 0.0, 1.0),
+            "seed": _env_int("LUNA_SEED", 42, 0, 2_147_483_647),
             "max_tokens": _env_int("LUNA_MAX_TOKENS", 512, 64, 4_096),
             "zero_cloud_mode": _env_flag("LUNA_ZERO_CLOUD", True),
             "mentor_mode": _env_flag("LUNA_MENTOR_MODE", True),
@@ -1081,7 +1093,10 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             elif route_name == "ANALYZE":
                 max_tokens = max(max_tokens, 1_024)
             elif route_name == "DEEP":
-                max_tokens = max(max_tokens, 1_536)
+                # Structured audit/benchmark turns can legitimately need more than
+                # 1536 visible tokens. Keep this bounded well below the configured
+                # 4096 max while allowing a complete final answer.
+                max_tokens = max(max_tokens, 2_048)
             request_kwargs: Dict[str, Any] = {
                 "model": model_name,
                 "messages": msgs,
@@ -1093,6 +1108,9 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             }
             if self.config.get("temperature") is not None:
                 request_kwargs["temperature"] = self.config["temperature"]
+            if is_ollama:
+                request_kwargs["top_p"] = float(self.config.get("top_p", 0.7))
+                request_kwargs["seed"] = int(self.config.get("seed", 42))
             if self._tool_execution_allowed():
                 request_kwargs["tools"] = TOOL_DEFINITIONS
                 request_kwargs["tool_choice"] = "auto"
@@ -1116,6 +1134,9 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                             "model": model_name,
                             "reasoning_effort": reasoning_effort or "none",
                             "max_tokens": max_tokens,
+                            "temperature": request_kwargs.get("temperature"),
+                            "top_p": request_kwargs.get("top_p"),
+                            "seed": request_kwargs.get("seed"),
                             "request_index": (turn_telemetry or {}).get("request_count", 1),
                         },
                         ensure_ascii=False,
@@ -1813,6 +1834,19 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     continue
             return buffered_events, buffered_text
 
+        def apply_generation_completion_guard(result):
+            """A length stop is an incomplete generation, not a trustworthy final answer."""
+            if turn_telemetry.get("finish_reason") != "length":
+                return result
+            reasons = tuple(dict.fromkeys((*result.reasons, "generation_truncated")))
+            return type(result)(
+                valid=False,
+                reasons=reasons,
+                loop_guard="replan_required",
+                proposed_action_fingerprint=result.proposed_action_fingerprint,
+                command_count=result.command_count,
+            )
+
         async def collect_generation_with_transport_retry(
             generator_factory,
             *,
@@ -1898,6 +1932,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 scenario=scenario,
                 evidence_delta_count=evidence_delta.count,
             )
+                validation = apply_generation_completion_guard(validation)
+            validation = apply_generation_completion_guard(validation)
             self.harness.checkpoint(
                 harness_trace,
                 stage="validation",
@@ -2065,9 +2101,13 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                         ensure_ascii=False,
                     ),
                 )
+                truncated = "generation_truncated" in set(validation.reasons)
                 yield json.dumps({
                     "type": "error",
                     "message": (
+                        "A resposta do modelo atingiu o limite de geração mesmo após "
+                        "replanejamento; nenhuma saída parcial foi exibida."
+                        if truncated else
                         "O modelo local não produziu uma resposta factual validável após "
                         "uma tentativa de replanejamento. Nenhuma resposta insegura foi exibida."
                     ),
