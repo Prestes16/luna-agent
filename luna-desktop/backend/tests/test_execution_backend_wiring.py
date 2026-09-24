@@ -29,6 +29,7 @@ class ExecutionBackendWiringTests(unittest.TestCase):
         with (
             patch("app.luna_engine._ollama_is_available_sync", return_value=False),
             patch("app.luna_engine.resolve_ssh_binary", return_value=r"C:\\Windows\\System32\\OpenSSH\\ssh.exe"),
+            patch("app.luna_engine.ssh_local_file_issues", return_value=()),
             patch.dict(os.environ, env, clear=False),
         ):
             engine = LunaEngine()
