@@ -270,8 +270,9 @@ def classify_complexity(
 ) -> RouteDecision:
     normalized = message.casefold()
     lines = [line for line in message.splitlines() if line.strip()]
-    endpoints = {match.group(1).casefold() for match in _ENDPOINT_RE.finditer(message)}
-    endpoints.update(_observed_route_paths(message))
+    # Count only canonicalized observed routes. Combining raw method matches with
+    # canonical paths double-counted prose punctuation variants such as /api/me.
+    endpoints = _observed_route_paths(message)
     status_count = len(_HTTP_STATUS_RE.findall(message))
     has_code = bool(re.search(r"```|\bif\s*\(|\bdef\s+|\bclass\s+|=>|\{\s*$", message, re.MULTILINE))
     has_http = status_count > 0 or bool(endpoints)
