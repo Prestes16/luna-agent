@@ -52,6 +52,36 @@ actions must carry an exact, expiring grant bound to command SHA-256, authority 
 and target. Shell control operators are rejected and execution uses argv, never
 `shell=True`.
 
+## Execution backend and operator UI
+
+Approved execution is routed independently from the model. The default backend is the
+backend host process runner. For the isolated Kali VM, execution can be bound to OpenSSH
+without enabling the LLM tool loop:
+
+```text
+LUNA_EXEC_BACKEND=kali-ssh
+LUNA_KALI_SSH_HOST=<Kali address>
+LUNA_KALI_SSH_USER=<Kali user>
+LUNA_KALI_SSH_PORT=22
+LUNA_KALI_SSH_IDENTITY=<local private-key path>
+LUNA_KALI_SSH_KNOWN_HOSTS=<local known_hosts path>
+LUNA_KALI_SSH_HOST_KEY_POLICY=strict
+```
+
+If `kali-ssh` is requested but its identity/host configuration is invalid, Luna fails
+closed and does **not** fall back to executing the command on Windows. Public diagnostics
+expose only whether identity/known-host files are configured, never their local paths.
+
+The desktop chat receives the exact validated execution actions from response metadata.
+The operator sees the exact command, L0-L3 class, authority, target and risk index. A button
+click is the current-turn on-demand request. Approval-required actions perform a separate,
+short-lived approval exchange; rollback-required actions require the operator to confirm
+that the rollback/cleanup plan has been reviewed before process start. Destructive or
+persistent actions require an additional explicit confirmation.
+
+The executor independently recomputes the intent immediately before execution, so UI
+metadata is informative but is never the authority.
+
 ## L0–L3 authority semantics
 
 ### L0 OBSERVE
