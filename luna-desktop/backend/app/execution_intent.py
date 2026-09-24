@@ -316,6 +316,14 @@ def build_execution_intent(
         or lifecycle.persistent_change
         or lifecycle.destructive
     )
+    effective_mutation = bool(
+        lifecycle.mutates_state
+        or semantic_mutation
+        or registry_level == L2_MUTATE
+    )
+    effective_high_impact = bool(
+        high_impact_semantic or registry_level == L3_HIGH_IMPACT
+    )
     normalized_scope_target = _normalize_scope_target(scope_target)
     target_required = bool(active_probe or semantic_mutation or target)
     if target_required:
@@ -341,6 +349,12 @@ def build_execution_intent(
 
     if registry_level and _LEVEL_RANK[registry_level] > _LEVEL_RANK[level]:
         level = registry_level
+
+    effective_rollback_required = bool(
+        host.rollback_required
+        or level == L2_MUTATE
+        or lifecycle.persistent_change
+    )
 
     if not known_semantics:
         authority = BLOCKED
@@ -385,13 +399,13 @@ def build_execution_intent(
         lifecycle=lifecycle,
         host=host,
         active_probe=active_probe,
-        semantic_mutation=semantic_mutation,
-        high_impact_semantic=high_impact_semantic,
+        semantic_mutation=effective_mutation,
+        high_impact_semantic=effective_high_impact,
     )
     readiness = _readiness_index(
         scope_confirmed=scope_confirmed or level == L0_OBSERVE,
         operator_requested=operator_requested_execution or level == L0_OBSERVE,
-        rollback_ready=rollback_ready or not host.rollback_required,
+        rollback_ready=rollback_ready or not effective_rollback_required,
         target_bound=target_bound or level == L0_OBSERVE,
         verification_ready=verification_ready,
         authority_level=level,
@@ -441,10 +455,10 @@ def build_execution_intent(
         expected_effect=expected_effect,
         evidence_expected=evidence,
         privilege_required=lifecycle.privilege_required,
-        mutates_state=lifecycle.mutates_state or semantic_mutation,
+        mutates_state=effective_mutation,
         persistent_change=lifecycle.persistent_change,
         destructive=lifecycle.destructive,
-        rollback_required=host.rollback_required,
+        rollback_required=effective_rollback_required,
         verification_required=lifecycle.verification_required or level != L0_OBSERVE,
         risk_index=risk,
         readiness_index=readiness,
