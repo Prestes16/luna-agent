@@ -55,6 +55,7 @@ class ExecutionApproval:
     authority_level: str
     issued_at: float
     expires_at: float
+    scope_key: str | None = None
     allow_destructive: bool = False
     allow_persistent_change: bool = False
 
@@ -66,6 +67,7 @@ class ExecutionApproval:
         target: str | None,
         authority_level: str,
         ttl_seconds: int = 120,
+        scope_key: str | None = None,
         allow_destructive: bool = False,
         allow_persistent_change: bool = False,
         now: float | None = None,
@@ -78,17 +80,27 @@ class ExecutionApproval:
             authority_level=authority_level,
             issued_at=current,
             expires_at=current + ttl,
+            scope_key=str(scope_key) if scope_key is not None else None,
             allow_destructive=bool(allow_destructive),
             allow_persistent_change=bool(allow_persistent_change),
         )
 
-    def matches(self, intent: ExecutionIntent, command: str, *, now: float | None = None) -> bool:
+    def matches(
+        self,
+        intent: ExecutionIntent,
+        command: str,
+        *,
+        now: float | None = None,
+        scope_key: str | None = None,
+    ) -> bool:
         current = float(time.time() if now is None else now)
         if current > self.expires_at:
             return False
         if self.command_sha256 != command_sha256(command):
             return False
         if self.authority_level != intent.authority_level:
+            return False
+        if self.scope_key is not None and self.scope_key != scope_key:
             return False
         if (self.target or None) != (intent.target or None):
             return False
@@ -299,6 +311,7 @@ class SupervisedExecutor:
         command: str,
         approval: ExecutionApproval | None,
         now: float | None,
+        approval_scope_key: str | None,
     ) -> tuple[str, ...]:
         reasons: list[str] = []
         if not self.policy.enabled:
@@ -315,7 +328,12 @@ class SupervisedExecutor:
         if intent.authority == APPROVAL_REQUIRED:
             if approval is None:
                 reasons.append("operator_approval_missing")
-            elif not approval.matches(intent, command, now=now):
+            elif not approval.matches(
+                intent,
+                command,
+                now=now,
+                scope_key=approval_scope_key,
+            ):
                 reasons.append("operator_approval_mismatch_or_expired")
 
         if intent.authority == ON_DEMAND and "operator_execution_not_requested" in intent.reasons:
@@ -336,6 +354,7 @@ class SupervisedExecutor:
         verification_ready: bool = True,
         scope_target: str | None = None,
         approval: ExecutionApproval | None = None,
+        approval_scope_key: str | None = None,
         now: float | None = None,
     ) -> SupervisedExecutionResult:
         intent = self.preview(
@@ -353,6 +372,7 @@ class SupervisedExecutor:
             command=command,
             approval=approval,
             now=now,
+            approval_scope_key=approval_scope_key,
         )
         if denials:
             return SupervisedExecutionResult(
