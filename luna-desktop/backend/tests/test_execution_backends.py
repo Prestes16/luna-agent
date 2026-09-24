@@ -1,3 +1,4 @@
+import shlex
 import unittest
 
 from app.execution_backends import (
@@ -43,7 +44,15 @@ class ExecutionBackendTests(unittest.TestCase):
         )
         remote = argv[-1]
         self.assertIn("'Authorization: Bearer TEST TOKEN'", remote)
-        self.assertIn("'https://target.test/api'", remote)
+        self.assertEqual(
+            shlex.split(remote),
+            [
+                "curl",
+                "-H",
+                "Authorization: Bearer TEST TOKEN",
+                "https://target.test/api",
+            ],
+        )
         self.assertIn("StrictHostKeyChecking=accept-new", argv)
 
     def test_ssh_identity_and_known_hosts_are_explicit(self) -> None:
