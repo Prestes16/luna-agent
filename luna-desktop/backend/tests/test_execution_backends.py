@@ -4,6 +4,7 @@ from app.execution_backends import (
     SSHExecutionConfig,
     build_ssh_process_argv,
     resolve_ssh_binary,
+    ssh_local_file_issues,
 )
 
 
@@ -134,6 +135,24 @@ class ExecutionBackendTests(unittest.TestCase):
             argv[0],
             r"C:\\Windows\\System32\\OpenSSH\\ssh.exe",
         )
+
+    def test_configured_missing_identity_is_reported(self) -> None:
+        config = SSHExecutionConfig(
+            host="10.0.0.2",
+            user="kali",
+            identity_file=r"Z:\\definitely-missing\\id_ed25519",
+        )
+        self.assertIn("identity_file_not_found", ssh_local_file_issues(config))
+
+    def test_public_config_does_not_expose_explicit_ssh_binary_path(self) -> None:
+        config = SSHExecutionConfig(
+            host="10.0.0.2",
+            user="kali",
+            ssh_binary=r"C:\\Windows\\System32\\OpenSSH\\ssh.exe",
+        )
+        public = config.public_dict()
+        self.assertEqual(public["ssh_binary"].casefold(), "ssh.exe")
+        self.assertNotIn("System32", str(public))
 
 if __name__ == "__main__":
     unittest.main()
