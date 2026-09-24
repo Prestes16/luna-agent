@@ -66,11 +66,16 @@ LUNA_KALI_SSH_PORT=22
 LUNA_KALI_SSH_IDENTITY=<local private-key path>
 LUNA_KALI_SSH_KNOWN_HOSTS=<local known_hosts path>
 LUNA_KALI_SSH_HOST_KEY_POLICY=strict
+LUNA_KALI_SSH_CONNECT_TIMEOUT=10
 ```
 
-If `kali-ssh` is requested but its identity/host configuration is invalid, Luna fails
-closed and does **not** fall back to executing the command on Windows. Public diagnostics
-expose only whether identity/known-host files are configured, never their local paths.
+If `kali-ssh` is requested but its host/user/port/timeout/policy configuration is invalid,
+Luna fails closed and does **not** fall back to executing the command on Windows. Numeric
+SSH settings are parsed strictly: malformed ports/timeouts are rejected rather than silently
+clamped or replaced with defaults. `BatchMode=yes` keeps the execution path non-interactive;
+authentication must therefore be available through the configured identity or the local
+OpenSSH agent/default key mechanism. Public diagnostics expose only whether identity/known-host
+files are configured, never their local paths.
 
 The desktop chat receives the exact validated execution actions from response metadata.
 The operator sees the exact command, L0-L3 class, authority, target and risk index. A button
@@ -191,7 +196,10 @@ p_upper = 1 - alpha^(1/n)
 ```
 
 These are report-calibration tools, not assumptions that exploit trials are
-independent or stationary in the real target.
+independent or stationary in the real target. The formulas have one deterministic
+implementation authority in `quantitative_reasoning.py`; exploit-proof and evidence-bundle
+layers only wrap that implementation so report values cannot drift because two modules
+rounded or implemented the same formula differently.
 
 ### Report evidence
 
