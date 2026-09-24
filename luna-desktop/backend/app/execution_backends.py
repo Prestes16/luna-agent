@@ -20,8 +20,10 @@ import ipaddress
 import os
 import re
 import shlex
+import shutil
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
+from pathlib import Path
 
 from .supervised_executor import RunnerResult
 
@@ -43,6 +45,7 @@ class SSHExecutionConfig:
     known_hosts_file: str = ""
     host_key_policy: str = "strict"
     connect_timeout_seconds: int = 10
+    ssh_binary: str = "ssh"
 
     @classmethod
     def from_env(
@@ -82,6 +85,7 @@ class SSHExecutionConfig:
             connect_timeout_seconds=parse_int(
                 "LUNA_KALI_SSH_CONNECT_TIMEOUT", 10, 1, 120
             ),
+            ssh_binary=str(env.get("LUNA_KALI_SSH_BINARY", "ssh") or "ssh"),
         ).validated()
 
     def validated(self) -> "SSHExecutionConfig":
@@ -113,12 +117,16 @@ class SSHExecutionConfig:
 
         identity = str(self.identity_file or "").strip()
         known_hosts = str(self.known_hosts_file or "").strip()
+        ssh_binary = str(self.ssh_binary or "ssh").strip()
         for name, value in (
             ("identity_file", identity),
             ("known_hosts_file", known_hosts),
+            ("ssh_binary", ssh_binary),
         ):
             if "\x00" in value or "\r" in value or "\n" in value:
                 raise ValueError(f"invalid {name}")
+        if not ssh_binary:
+            raise ValueError("invalid ssh_binary")
 
         return SSHExecutionConfig(
             host=host,
@@ -128,6 +136,7 @@ class SSHExecutionConfig:
             known_hosts_file=known_hosts,
             host_key_policy=policy,
             connect_timeout_seconds=connect_timeout,
+            ssh_binary=ssh_binary,
         )
 
     def public_dict(self) -> dict:
@@ -135,6 +144,18 @@ class SSHExecutionConfig:
         data["identity_file"] = bool(data["identity_file"])
         data["known_hosts_file"] = bool(data["known_hosts_file"])
         return data
+
+
+def resolve_ssh_binary(config: SSHExecutionConfig) -> str | None:
+    """Resolve the configured OpenSSH client without executing it."""
+    cfg = config.validated()
+    resolved = shutil.which(cfg.ssh_binary)
+    if resolved:
+        return resolved
+    candidate = Path(cfg.ssh_binary).expanduser()
+    if candidate.is_file():
+        return str(candidate.resolve())
+    return None
 
 
 def build_ssh_process_argv(
@@ -147,7 +168,7 @@ def build_ssh_process_argv(
 
     remote_command = shlex.join(remote_argv)
     ssh_argv: list[str] = [
-        "ssh",
+        cfg.ssh_binary,
         "-o",
         "BatchMode=yes",
         "-o",
