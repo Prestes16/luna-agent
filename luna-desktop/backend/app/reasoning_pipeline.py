@@ -633,7 +633,7 @@ def build_replan_instruction(
     if "apenas um comando" in normalized_current or "somente um comando" in normalized_current:
         corrections.append("forneça exatamente um comando curl, somente com -i e -H")
     observed_statuses = list(dict.fromkeys(re.findall(r"\b(?:401|403|200)\b", current_message)))
-    observed_paths = list(dict.fromkeys(_PATH_RE.findall(current_message)))
+    observed_paths = sorted(_observed_route_paths(current_message))
     evidence_terms = [*observed_statuses, *observed_paths]
     if "role" in normalized_current:
         evidence_terms.append("role")
