@@ -225,5 +225,17 @@ class SupervisedExecutionApiTests(unittest.TestCase):
         self.assertFalse(self.engine.config["supervised_allow_l3"])
 
 
+    def test_approval_ttl_out_of_bounds_is_rejected(self) -> None:
+        command = "sudo nmap -sS 10.10.10.5"
+        response = self.client.post(
+            "/api/execution/approve",
+            json={
+                **self._body(command),
+                "operator_confirmed": True,
+                "ttl_seconds": 901,
+            },
+        )
+        self.assertEqual(response.status_code, 422)
+
 if __name__ == "__main__":
     unittest.main()
