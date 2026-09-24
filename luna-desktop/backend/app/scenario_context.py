@@ -298,6 +298,60 @@ class ScenarioContext:
     def mark_explained(self, concept: str) -> None:
         self.explained_concepts.add(concept)
 
+    def record_supervised_execution(
+        self,
+        *,
+        command: str,
+        backend: str,
+        command_sha256: str,
+        exit_code: int | None,
+        stdout: str = "",
+        stderr: str = "",
+    ) -> EvidenceDelta:
+        """Record an executed command as observed evidence for the next reasoning turn.
+
+        Raw bytes remain authoritative in the evidence vault; ScenarioContext stores
+        bounded excerpts so the model can immediately correlate the result.
+        """
+        delta: list[str] = []
+        command_text = str(command or "").strip()
+        backend_text = str(backend or "unknown").strip()
+        digest = str(command_sha256 or "").strip()
+        action_fp = action_fingerprint(command_text) or _fingerprint(command_text)
+
+        self.last_action = command_text[:800] if command_text else "supervised execution"
+        self.last_action_fingerprint = action_fp
+        _append_unique(self.action_history, action_fp, limit=12)
+
+        result_line = (
+            f"Supervised execution observed: backend={backend_text}; "
+            f"exit_code={exit_code}; command_sha256={digest}"
+        )
+        self._add_fact(result_line, delta)
+
+        if stdout:
+            self._add_fact(
+                f"Supervised stdout excerpt: {_compact(stdout, 1200)}",
+                delta,
+            )
+        if stderr:
+            self._add_fact(
+                f"Supervised stderr excerpt: {_compact(stderr, 1200)}",
+                delta,
+            )
+
+        self.last_result = result_line
+        self.last_result_fingerprint = _fingerprint(
+            " | ".join(delta) if delta else result_line
+        )
+        self.no_evidence_declared = False
+        self._recompute_unknowns()
+        unique_delta = tuple(dict.fromkeys(delta))
+        return EvidenceDelta(
+            facts=unique_delta,
+            fingerprints=tuple(_fingerprint(fact) for fact in unique_delta),
+        )
+
     def record_model_response(self, response: str) -> None:
         proposed = action_fingerprint(response)
         if proposed:
