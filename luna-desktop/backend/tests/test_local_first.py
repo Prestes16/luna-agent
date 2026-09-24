@@ -123,6 +123,13 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
             )
 
         engine.supervised_executor._runner = fake_runner
+        stored = []
+
+        def evidence_sink(conversation_id, command_sha256, kind, raw, observed_at):
+            stored.append((conversation_id, command_sha256, kind, raw, observed_at))
+            return {"kind": kind, "byte_length": len(raw)}
+
+        engine.execution_evidence_sink = evidence_sink
         denied = await engine.execute_supervised_command(
             "nmap -sV 10.10.10.5",
             conversation_id="exec-run",
@@ -142,6 +149,10 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(allowed["intent"]["authority"], "ON_DEMAND")
         self.assertEqual(allowed["stdout"], "80/tcp open http\n")
         self.assertEqual(len(allowed["evidence"]), 1)
+        self.assertEqual(len(allowed["evidence_records"]), 1)
+        self.assertEqual(stored[0][0], "exec-run")
+        self.assertEqual(stored[0][2], "stdout")
+        self.assertEqual(stored[0][3], b"80/tcp open http\n")
         self.assertFalse(engine._tool_execution_allowed())
         self.assertEqual(len(calls), 1)
 
