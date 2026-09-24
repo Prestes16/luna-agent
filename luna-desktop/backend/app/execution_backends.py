@@ -17,10 +17,11 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import os
 import re
 import shlex
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from pathlib import Path
 
 from .supervised_executor import RunnerResult
 
@@ -42,6 +43,46 @@ class SSHExecutionConfig:
     known_hosts_file: str = ""
     host_key_policy: str = "strict"
     connect_timeout_seconds: int = 10
+
+    @classmethod
+    def from_env(
+        cls,
+        environ: Mapping[str, str] | None = None,
+    ) -> "SSHExecutionConfig":
+        """Parse the Kali SSH contract strictly.
+
+        Invalid configured numeric values are rejected instead of silently clamped
+        or replaced with defaults. That keeps execution backend selection fail-closed.
+        """
+        env = os.environ if environ is None else environ
+
+        def parse_int(name: str, default: int, minimum: int, maximum: int) -> int:
+            raw = str(env.get(name, "") or "").strip()
+            if not raw:
+                return default
+            try:
+                value = int(raw, 10)
+            except ValueError as exc:
+                raise ValueError(f"invalid {name}") from exc
+            if not minimum <= value <= maximum:
+                raise ValueError(
+                    f"{name} must be between {minimum} and {maximum}"
+                )
+            return value
+
+        return cls(
+            host=str(env.get("LUNA_KALI_SSH_HOST", "") or ""),
+            user=str(env.get("LUNA_KALI_SSH_USER", "") or ""),
+            port=parse_int("LUNA_KALI_SSH_PORT", 22, 1, 65535),
+            identity_file=str(env.get("LUNA_KALI_SSH_IDENTITY", "") or ""),
+            known_hosts_file=str(env.get("LUNA_KALI_SSH_KNOWN_HOSTS", "") or ""),
+            host_key_policy=str(
+                env.get("LUNA_KALI_SSH_HOST_KEY_POLICY", "strict") or "strict"
+            ),
+            connect_timeout_seconds=parse_int(
+                "LUNA_KALI_SSH_CONNECT_TIMEOUT", 10, 1, 120
+            ),
+        ).validated()
 
     def validated(self) -> "SSHExecutionConfig":
         host = str(self.host or "").strip()
