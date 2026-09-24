@@ -161,6 +161,16 @@ def operator_requested_execution(text: str) -> bool:
 
 
 def _target_from_command(command: str) -> str | None:
+    tokens = _tokens(command)
+    ignored_values: set[str] = set()
+    file_value_flags = {
+        "-l", "--list", "-w", "--wordlist", "-o", "--output",
+        "-config", "--config", "--input", "--input-file",
+    }
+    for index, token in enumerate(tokens[:-1]):
+        if token.casefold() in file_value_flags:
+            ignored_values.add(tokens[index + 1].strip("'\"").casefold())
+
     url = re.search(r"(?i)\bhttps?://[^\s'\"<>]+", command)
     if url:
         try:
@@ -178,7 +188,9 @@ def _target_from_command(command: str) -> str | None:
         command,
     )
     if domain:
-        return domain.group(0)
+        candidate = domain.group(0)
+        if candidate.casefold() not in ignored_values:
+            return candidate
     return None
 
 
