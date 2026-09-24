@@ -54,7 +54,8 @@ class CommandExecutionPolicyTests(unittest.TestCase):
             tool_execution_enabled=False,
         )
         self.assertFalse(item.execution_ready)
-        self.assertIn("tool_execution_disabled", item.reasons)
+        self.assertIn("model_tool_loop_disabled", item.reasons)
+        self.assertNotIn("tool_execution_disabled", item.reasons)
 
     def test_enabled_safe_command_can_be_execution_ready(self) -> None:
         item = assess_command_execution(
