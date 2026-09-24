@@ -402,5 +402,49 @@ KALI_TOOL_DICTIONARY: dict[str, KaliToolSpec] = {
 }
 
 
+_EXECUTION_BASELINE_BY_FAMILY: dict[str, str] = {
+    "network": "L1_PROBE",
+    "web": "L1_PROBE",
+    "dns": "L1_PROBE",
+    "tls": "L1_PROBE",
+    "windows": "L1_PROBE",
+    "directory": "L1_PROBE",
+    "packet_capture": "L1_PROBE",
+    "authentication": "L3_HIGH_IMPACT",
+    "web_proxy": "L2_MUTATE",
+    "privacy": "L2_MUTATE",
+    "offline": "L0_OBSERVE",
+    "malware": "L0_OBSERVE",
+    "reverse_engineering": "L0_OBSERVE",
+    "forensics": "L0_OBSERVE",
+}
+
+_EXECUTION_BASELINE_OVERRIDES: dict[str, str] = {
+    # Read-only WireGuard inspection is distinct from wg-quick tunnel mutation.
+    "wg": "L0_OBSERVE",
+    # Wrappers can execute arbitrary nested applications; keep them approval-bound.
+    "proxychains": "L2_MUTATE",
+    "proxychains4": "L2_MUTATE",
+    "torsocks": "L2_MUTATE",
+}
+
+
 def get_tool_spec(name: str | None) -> KaliToolSpec | None:
     return KALI_TOOL_DICTIONARY.get((name or "").casefold())
+
+
+def execution_baseline_for_tool(name: str | None) -> str | None:
+    """Return the conservative L0-L3 baseline for a registered Kali tool.
+
+    This is a baseline only. Command-specific flags, privilege, mutation and
+    host-safety analysis may always escalate the final intent.
+    """
+    normalized = (name or "").casefold()
+    if not normalized:
+        return None
+    if normalized in _EXECUTION_BASELINE_OVERRIDES:
+        return _EXECUTION_BASELINE_OVERRIDES[normalized]
+    spec = get_tool_spec(normalized)
+    if spec is None:
+        return None
+    return _EXECUTION_BASELINE_BY_FAMILY.get(spec.family)
