@@ -38,6 +38,24 @@ export function makeLogId(): string {
 
 const _MAX_LOG_LINES = 500
 
+export interface ExecutionAction {
+  command: string
+  tool?: string
+  target?: string | null
+  capability?: string
+  authority_level: 'L0_OBSERVE' | 'L1_PROBE' | 'L2_MUTATE' | 'L3_HIGH_IMPACT' | string
+  authority: 'AUTO' | 'ON_DEMAND' | 'APPROVAL_REQUIRED' | 'BLOCKED' | string
+  risk_index?: number
+  readiness_index?: number
+  privilege_required?: boolean
+  mutates_state?: boolean
+  persistent_change?: boolean
+  destructive?: boolean
+  rollback_required?: boolean
+  verification_required?: boolean
+  reasons?: string[]
+}
+
 export interface Message {
   id: string
   role: 'user' | 'luna' | 'system'
@@ -45,6 +63,7 @@ export interface Message {
   timestamp: number
   model?: string
   toolCalls?: ToolCallEvent[]
+  executionActions?: ExecutionAction[]
   isStreaming?: boolean
   images?: Array<{ dataUrl: string; name: string }>
 }
