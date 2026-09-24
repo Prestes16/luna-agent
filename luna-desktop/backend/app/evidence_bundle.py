@@ -133,6 +133,28 @@ def wilson_interval(successes: int, trials: int, *, z: float = 1.959963984540054
     )
 
 
+def zero_failure_probability_upper_bound(
+    trials: int,
+    *,
+    alpha: float = 0.05,
+) -> float:
+    """Exact one-sided binomial upper bound after observing zero failures.
+
+    If zero failures are observed in n independent Bernoulli trials, this returns
+    the failure-probability upper bound p such that (1-p)^n = alpha.
+    It is a calibration aid for the tested repetitions, not evidence that future
+    trials or different targets are identically distributed.
+    """
+    if isinstance(trials, bool):
+        raise ValueError("trials must be an integer")
+    trials = int(trials)
+    if trials < 1:
+        raise ValueError("trials must be >= 1")
+    if not math.isfinite(alpha) or not (0.0 < alpha < 1.0):
+        raise ValueError("alpha must satisfy 0 < alpha < 1")
+    return round(1.0 - math.pow(alpha, 1.0 / trials), 10)
+
+
 def build_proof_evidence_bundle(
     *,
     target: str,
@@ -182,6 +204,7 @@ def evidence_bundle_guidance() -> str:
         "EVIDENCE BUNDLE: preserve exact raw artifacts and SHA-256 each item; bind target "
         "and success predicate before validation; hash the exact command/PoC invocation; "
         "capture logs/screenshots/transcripts needed for the report. For repeated trials, "
-        "record successes/trials and compute the Wilson interval deterministically; do not "
+        "record successes/trials and compute the Wilson interval deterministically; after zero "
+        "observed failures, use the exact one-sided binomial upper bound when relevant. Do not "
         "present a success fraction as certainty outside the tested environment."
     )
