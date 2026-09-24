@@ -136,7 +136,9 @@ def _ollama_probe_endpoint() -> tuple[str, int, float]:
     is_loopback = host.casefold() in {"localhost", "127.0.0.1", "::1"}
     # Avoid dual-stack localhost stalls on Windows while keeping custom endpoints supported.
     connect_host = "127.0.0.1" if host.casefold() == "localhost" else host
-    timeout = 0.25 if is_loopback else 0.75
+    # Loopback refusal/success should be immediate; keep this below asyncio's
+    # slow-callback threshold so synchronous engine construction does not stall tests/UI.
+    timeout = 0.05 if is_loopback else 0.25
     return connect_host, port, timeout
 
 
