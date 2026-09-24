@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 
 from app.execution_intent import BLOCKED, ON_DEMAND
-from app.response_attestation import build_response_execution_intents
+from app.response_attestation import build_response_execution_actions, build_response_execution_intents
 
 
 class ResponseExecutionIntentTests(unittest.TestCase):
@@ -28,6 +28,20 @@ class ResponseExecutionIntentTests(unittest.TestCase):
         self.assertEqual(intents[0]["authority"], ON_DEMAND)
         self.assertEqual(intents[0]["target"], "10.10.10.5")
         self.assertGreater(intents[0]["readiness_index"], 0.8)
+
+    def test_execution_action_preserves_exact_operator_visible_command(self) -> None:
+        engine = self._engine(target="10.10.10.5", scope="CTF autorizado")
+        response = "nmap -sV 10.10.10.5"
+        actions = build_response_execution_actions(
+            engine,
+            "s",
+            "Luna, rode esse nmap no alvo autorizado.",
+            response,
+        )
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(actions[0]["command"], response)
+        self.assertEqual(actions[0]["authority"], ON_DEMAND)
+        self.assertEqual(actions[0]["target"], "10.10.10.5")
 
     def test_visible_command_with_target_mismatch_is_blocked(self) -> None:
         engine = self._engine(target="10.10.10.5", scope="CTF autorizado")
