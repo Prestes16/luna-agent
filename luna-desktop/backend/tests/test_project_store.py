@@ -265,6 +265,8 @@ class ProjectApiTests(unittest.TestCase):
                 "images": [{
                     "data": base64.b64encode(raw).decode("ascii"),
                     "mime": "image/png",
+                    "name": "finding-proof.png",
+                    "sensitivity": "classified",
                 }],
             })
         finally:
@@ -276,6 +278,8 @@ class ProjectApiTests(unittest.TestCase):
         ).json()["evidence"]
         self.assertEqual(len(evidence), 1)
         self.assertEqual(evidence[0]["kind"], "chat-screenshot")
+        self.assertEqual(evidence[0]["original_name"], "finding-proof.png")
+        self.assertEqual(evidence[0]["sensitivity"], "classified")
         _metadata, restored = main.project_store.read_evidence_artifact(
             project_id,
             evidence[0]["id"],
