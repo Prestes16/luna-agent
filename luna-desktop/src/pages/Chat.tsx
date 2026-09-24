@@ -256,12 +256,20 @@ const ExecutionActionCard: React.FC<{ action: ExecutionAction }> = ({ action }) 
 
     const operatorRequest = 'Execute sob demanda este comando aprovado pelo operador: ' + action.command
     let rollbackReady = !action.rollback_required
+    let verificationReady = !action.verification_required
 
     if (action.rollback_required) {
       rollbackReady = window.confirm(
         'Esta ação altera estado. Confirma que o rollback/cleanup descrito pela Luna foi revisado e está pronto?'
       )
       if (!rollbackReady) return
+    }
+
+    if (action.verification_required) {
+      verificationReady = window.confirm(
+        'Confirma que o critério de verificação/evidência pós-execução está definido e será revisado?'
+      )
+      if (!verificationReady) return
     }
 
     if ((action.destructive || action.persistent_change) && !window.confirm(
@@ -292,7 +300,7 @@ const ExecutionActionCard: React.FC<{ action: ExecutionAction }> = ({ action }) 
             allow_destructive: Boolean(action.destructive),
             allow_persistent_change: Boolean(action.persistent_change),
             rollback_ready: rollbackReady,
-            verification_ready: true,
+            verification_ready: verificationReady,
           }),
         })
         const approvalBody = await approvalRes.json()
@@ -309,7 +317,7 @@ const ExecutionActionCard: React.FC<{ action: ExecutionAction }> = ({ action }) 
           operator_request_text: operatorRequest,
           approval_token: approvalToken,
           rollback_ready: rollbackReady,
-          verification_ready: true,
+          verification_ready: verificationReady,
         }),
       })
       const body = await runRes.json()
