@@ -2390,7 +2390,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         rollback_ready: bool = False,
         verification_ready: bool = True,
     ) -> Dict[str, Any]:
-        scenario = self.scenario_contexts.get(conversation_id)
+        scenario = self.scenario_contexts.setdefault(conversation_id, ScenarioContext())
         context = operator_request_text
         if scenario is not None:
             context = (
@@ -2484,7 +2484,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         This method is intentionally not exposed as an LLM tool. A desktop/API
         operator action must call it explicitly.
         """
-        scenario = self.scenario_contexts.get(conversation_id)
+        scenario = self.scenario_contexts.setdefault(conversation_id, ScenarioContext())
         context = operator_request_text
         if scenario is not None:
             context = f"{operator_request_text}\n{scenario.to_prompt_block(1400)}"
@@ -2509,6 +2509,16 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             approval=approval,
             approval_scope_key=conversation_id,
         )
+
+        if result.status == "executed":
+            scenario.record_supervised_execution(
+                command=command,
+                backend=result.backend,
+                command_sha256=result.command_sha256,
+                exit_code=result.exit_code,
+                stdout=result.stdout,
+                stderr=result.stderr,
+            )
 
         evidence_records: list[dict[str, Any]] = []
         evidence_storage_errors: list[str] = []
