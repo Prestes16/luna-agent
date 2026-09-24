@@ -28,6 +28,7 @@ from .construction_reasoning import construction_guidance
 from .decision_intelligence import decision_guidance
 from .evidence_bundle import evidence_bundle_guidance
 from .exploit_proof import exploit_proof_guidance
+from .execution_backends import SSHExecutionConfig, build_ssh_runner
 from .execution_intent import (
     APPROVAL_REQUIRED,
     build_execution_intent,
@@ -554,17 +555,7 @@ class LunaEngine:
             return
 
         try:
-            config = SSHExecutionConfig(
-                host=os.getenv("LUNA_KALI_SSH_HOST", ""),
-                user=os.getenv("LUNA_KALI_SSH_USER", ""),
-                port=_env_int("LUNA_KALI_SSH_PORT", 22, 1, 65535),
-                identity_file=os.getenv("LUNA_KALI_SSH_IDENTITY", ""),
-                known_hosts_file=os.getenv("LUNA_KALI_SSH_KNOWN_HOSTS", ""),
-                host_key_policy=os.getenv("LUNA_KALI_SSH_HOST_KEY_POLICY", "strict"),
-                connect_timeout_seconds=_env_int(
-                    "LUNA_KALI_SSH_CONNECT_TIMEOUT", 10, 1, 120
-                ),
-            ).validated()
+            config = SSHExecutionConfig.from_env()
             self.supervised_executor._runner = build_ssh_runner(config)
             self.supervised_executor.backend_name = "kali-ssh"
             self._execution_backend_error = None
