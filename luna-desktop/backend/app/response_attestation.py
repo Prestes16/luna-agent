@@ -285,6 +285,17 @@ def install_response_attestation(engine_cls: type) -> None:
                         }
                         for item in execution_intents
                     ],
+                    "execution_actions": [
+                        {
+                            "command": command,
+                            **{
+                                key: value
+                                for key, value in intent.items()
+                                if key != "command"
+                            },
+                        }
+                        for command, intent in zip(response_commands, execution_intents)
+                    ],
                     "strategy_attestations": strategy_attestations,
                     "host_safety_attestations": host_safety_attestations,
                     "privacy_attestation": privacy_attestation,
