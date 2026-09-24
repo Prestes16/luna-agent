@@ -209,6 +209,58 @@ def shannon_entropy_bits(probabilities: Iterable[float]) -> float:
     return round(entropy, 12)
 
 
+def wilson_score_interval(
+    successes: int,
+    trials: int,
+    *,
+    z: float = 1.959963984540054,
+) -> tuple[float, float]:
+    """Deterministic Wilson score interval for controlled Bernoulli repetitions.
+
+    The result is descriptive uncertainty for the observed experiment, not a
+    probability that an exploit will work on an untested host/environment.
+    """
+    if isinstance(successes, bool) or isinstance(trials, bool):
+        raise ValueError("successes/trials must be integers")
+    if not isinstance(successes, int) or not isinstance(trials, int):
+        raise ValueError("successes/trials must be integers")
+    if trials < 1 or successes < 0 or successes > trials:
+        raise ValueError("require 0 <= successes <= trials and trials >= 1")
+    if not math.isfinite(z) or z <= 0.0:
+        raise ValueError("z must be finite and positive")
+
+    p_hat = successes / trials
+    z2 = z * z
+    denominator = 1.0 + z2 / trials
+    center = (p_hat + z2 / (2.0 * trials)) / denominator
+    margin = (
+        z
+        * math.sqrt(
+            (p_hat * (1.0 - p_hat) + z2 / (4.0 * trials)) / trials
+        )
+        / denominator
+    )
+    return (
+        round(max(0.0, center - margin), 10),
+        round(min(1.0, center + margin), 10),
+    )
+
+
+def zero_failure_probability_upper_bound(
+    trials: int,
+    *,
+    alpha: float = 0.05,
+) -> float:
+    """Exact one-sided binomial upper bound after zero observed failures."""
+    if isinstance(trials, bool) or not isinstance(trials, int):
+        raise ValueError("trials must be an integer")
+    if trials < 1:
+        raise ValueError("trials must be >= 1")
+    if not math.isfinite(alpha) or not (0.0 < alpha < 1.0):
+        raise ValueError("alpha must satisfy 0 < alpha < 1")
+    return round(1.0 - math.pow(alpha, 1.0 / trials), 10)
+
+
 def birthday_collision_probability(samples: int, bits: int) -> float:
     if samples < 0 or bits <= 0:
         raise ValueError("samples must be non-negative and bits positive")
