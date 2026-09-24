@@ -167,6 +167,23 @@ Do not add these without a measured need:
 
 ## Operator-controlled tool execution plane
 
+### Implemented supervised-execution components
+
+The V1 control plane is now split into deterministic modules:
+
+- `execution_intent.py`: semantic L0-L3 classification, target binding, nonlinear risk/readiness math;
+- `supervised_executor.py`: independent process gate with one-shot SHA-256-bound approvals;
+- `execution_backends.py`: local and fail-closed Kali/OpenSSH runners;
+- `exploit_proof.py`: minimal reproducible PoC/exploit proof contract;
+- `evidence_bundle.py`: exact artifact hashing and reproducibility statistics;
+- `evidence_vault.py`: content-addressed immutable report evidence;
+- `visual_evidence.py`: image integrity manifests and vision-capability guard;
+- desktop chat execution cards: operator-visible exact command, authority, target and risk before execution.
+
+The LLM-facing tool loop remains hard-locked. The supervised executor is a separate
+operator action and is disabled by default.
+
+
 The model-facing tool loop remains hard-locked, while a separate supervised executor is
 implemented behind an explicit operator gate and is disabled by default. Luna is not an
 autonomous auditor: it may execute selected tools on demand inside operator-defined scope,
