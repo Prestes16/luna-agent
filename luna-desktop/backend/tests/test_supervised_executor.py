@@ -193,6 +193,57 @@ class SupervisedExecutorTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("operator_approval_mismatch_or_expired", result.denial_reasons)
         self.assertEqual(runner.calls, [])
 
+    async def test_l1_probe_requires_verification_plan(self) -> None:
+        runner = FakeRunner()
+        executor = SupervisedExecutor(
+            SupervisedExecutionPolicy(enabled=True),
+            runner=runner,
+        )
+        result = await executor.execute(
+            "nmap -sV 10.10.10.5",
+            context="CTF autorizado",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+            scope_target="10.10.10.5",
+            verification_ready=False,
+        )
+        self.assertEqual(result.status, "denied")
+        self.assertIn("verification_not_ready", result.denial_reasons)
+        self.assertEqual(runner.calls, [])
+
+    async def test_l2_mutation_requires_rollback_ready_even_with_approval(self) -> None:
+        command = "sudo systemctl restart tor"
+        runner = FakeRunner()
+        executor = SupervisedExecutor(
+            SupervisedExecutionPolicy(enabled=True, allow_l2=True),
+            runner=runner,
+        )
+        preview = executor.preview(
+            command,
+            context="Kali VM laboratório autorizado",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+            rollback_ready=False,
+        )
+        approval = ExecutionApproval.issue(
+            command=command,
+            target=preview.target,
+            authority_level=preview.authority_level,
+            now=1000.0,
+        )
+        result = await executor.execute(
+            command,
+            context="Kali VM laboratório autorizado",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+            rollback_ready=False,
+            approval=approval,
+            now=1001.0,
+        )
+        self.assertEqual(result.status, "denied")
+        self.assertIn("rollback_not_ready", result.denial_reasons)
+        self.assertEqual(runner.calls, [])
+
     async def test_l2_local_mutation_needs_level_enable_and_approval(self) -> None:
         command = "sudo systemctl restart tor"
         runner = FakeRunner()
