@@ -142,6 +142,10 @@ class ModelFirstPipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(metadata["loop_guard"], "retest_allowed")
 
     async def test_length_stop_forces_one_replan_even_when_partial_text_looks_valid(self) -> None:
+        scenario = ScenarioContext()
+        scenario.update(OLD_CONTEXT)
+        self.engine.scenario_contexts["truncated"] = scenario
+
         text, _, metadata = await self.collect(
             COMPLEX_FIXTURE,
             "truncated",
