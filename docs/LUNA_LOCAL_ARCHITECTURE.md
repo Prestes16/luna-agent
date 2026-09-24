@@ -48,6 +48,8 @@ CURRENT INPUT + EVIDENCE
 ```
 
 Critical arithmetic is computed by deterministic helpers before generation whenever possible.
+Repeatability statistics used by exploit proofs/evidence bundles (Wilson interval and zero-failure
+binomial upper bound) have one implementation authority in `quantitative_reasoning.py`.
 The LLM interprets the result; it is not the authority for exact integer bounds, overflow thresholds,
 rounding remainders, probability formulas or physical measurement claims when deterministic checks exist.
 
@@ -180,14 +182,10 @@ The V1 control plane is now split into deterministic modules:
 - `visual_evidence.py`: image integrity manifests and vision-capability guard;
 - desktop chat execution cards: operator-visible exact command, authority, target and risk before execution.
 
-The LLM-facing tool loop remains hard-locked. The supervised executor is a separate
-operator action and is disabled by default.
-
-
-The model-facing tool loop remains hard-locked, while a separate supervised executor is
-implemented behind an explicit operator gate and is disabled by default. Luna is not an
-autonomous auditor: it may execute selected tools on demand inside operator-defined scope,
-while the operator retains control over target, objective and escalation of authority.
+The model-facing tool loop remains hard-locked, while the supervised executor is a separate
+operator action behind an explicit gate and is disabled by default. Luna is a supervised
+copilot: it may execute selected tools on demand inside operator-defined scope, while the
+operator retains control over target, objective and escalation of authority.
 
 Execution freedom is granted per capability/policy rather than globally.
 
