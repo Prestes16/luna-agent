@@ -16,7 +16,7 @@ from typing import Iterable
 PROMPT_ROOT = Path(__file__).resolve().parents[3] / "prompts" / "cyber"
 
 _SKILL_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("WEB_API", ("http", "api", "rest", "graphql", "jwt", "idor", "bola", "ssrf", "cors", "xss", "sqli", "cookie", "session")),
+    ("WEB_API", ("http", "api", "rest", "graphql", "jwt", "idor", "bola", "ssrf", "cors", "xss", "sqli", "cookie", "session", "curl")),
     ("NETWORK_PROTOCOL", ("nmap", "tcp", "udp", "dns", "tls", "smb", "ldap", "ssh", "porta", "service", "serviço")),
     ("LINUX_PRIVESC", ("sudo", "suid", "systemd", "cron", "capabilities", "privesc", "privilege escalation")),
     ("WINDOWS_AD", ("active directory", "kerberos", "ntlm", "winrm", "powershell", "windows ad")),
