@@ -312,6 +312,8 @@ class SupervisedExecutor:
         approval: ExecutionApproval | None,
         now: float | None,
         approval_scope_key: str | None,
+        rollback_ready: bool,
+        verification_ready: bool,
     ) -> tuple[str, ...]:
         reasons: list[str] = []
         if not self.policy.enabled:
@@ -324,6 +326,11 @@ class SupervisedExecutor:
         lifecycle = assess_command_execution(command)
         if lifecycle.interactive:
             reasons.append("interactive_command_not_supported")
+
+        if intent.rollback_required and not rollback_ready:
+            reasons.append("rollback_not_ready")
+        if intent.verification_required and not verification_ready:
+            reasons.append("verification_not_ready")
 
         if intent.authority == APPROVAL_REQUIRED:
             if approval is None:
@@ -373,6 +380,8 @@ class SupervisedExecutor:
             approval=approval,
             now=now,
             approval_scope_key=approval_scope_key,
+            rollback_ready=rollback_ready,
+            verification_ready=verification_ready,
         )
         if denials:
             return SupervisedExecutionResult(
