@@ -130,6 +130,8 @@ class ExecutionIntentTests(unittest.TestCase):
     def test_operator_execution_request_detection_is_current_turn_explicit(self) -> None:
         self.assertTrue(operator_requested_execution("Luna, rode nmap -sV no alvo autorizado."))
         self.assertTrue(operator_requested_execution("vamos executar esse teste"))
+        self.assertTrue(operator_requested_execution("valide este achado no alvo autorizado"))
+        self.assertTrue(operator_requested_execution("comprovar a vulnerabilidade com PoC"))
         self.assertFalse(operator_requested_execution("Explique como o nmap funciona."))
 
     def test_operator_requested_probe_without_scope_is_blocked(self) -> None:
