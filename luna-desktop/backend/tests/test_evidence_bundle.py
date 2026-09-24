@@ -6,6 +6,7 @@ from app.evidence_bundle import (
     build_proof_evidence_bundle,
     evidence_bundle_guidance,
     wilson_interval,
+    zero_failure_probability_upper_bound,
 )
 
 
@@ -49,6 +50,22 @@ class EvidenceBundleTests(unittest.TestCase):
         self.assertEqual(metrics.wilson_low, 0.0)
         self.assertGreater(metrics.wilson_high, 0.0)
 
+    def test_zero_failure_upper_bound_is_exact_and_monotone(self) -> None:
+        one = zero_failure_probability_upper_bound(1, alpha=0.05)
+        ten = zero_failure_probability_upper_bound(10, alpha=0.05)
+        fifty_nine = zero_failure_probability_upper_bound(59, alpha=0.05)
+        self.assertAlmostEqual(one, 0.95, places=10)
+        self.assertGreater(one, ten)
+        self.assertGreater(ten, fifty_nine)
+        self.assertGreater(fifty_nine, 0.0)
+        self.assertLess(fifty_nine, 0.06)
+
+    def test_zero_failure_upper_bound_rejects_invalid_domain(self) -> None:
+        with self.assertRaises(ValueError):
+            zero_failure_probability_upper_bound(0)
+        with self.assertRaises(ValueError):
+            zero_failure_probability_upper_bound(5, alpha=1.0)
+
     def test_bundle_requires_complete_reproducibility_pair(self) -> None:
         item = build_evidence_artifact(kind="log", data=b"proof")
         with self.assertRaises(ValueError):
@@ -63,6 +80,7 @@ class EvidenceBundleTests(unittest.TestCase):
         guidance = evidence_bundle_guidance()
         self.assertIn("SHA-256", guidance)
         self.assertIn("Wilson interval", guidance)
+        self.assertIn("one-sided binomial upper bound", guidance)
         self.assertIn("tested environment", guidance)
 
 
