@@ -2352,6 +2352,10 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
     ) -> Dict[str, Any]:
         if not operator_confirmed:
             raise ValueError("operator confirmation is required")
+        if not operator_requested_execution(operator_request_text):
+            raise ValueError(
+                "current-turn operator execution request is required"
+            )
 
         preview = self.preview_supervised_command(
             command,
