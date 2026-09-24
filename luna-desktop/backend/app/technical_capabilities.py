@@ -66,7 +66,7 @@ CAPABILITIES: tuple[TechnicalCapability, ...] = (
         (
             "exploitability proof across Web/API, privilege boundaries, protocols, binaries and Web3",
             "memory safety, calling conventions, debugging and crash triage",
-            "precondition and success-predicate design",
+            "precondition and explicit success predicate design",
             "minimal reproducible proof construction",
             "evidence capture, cleanup and report-grade reproduction",
         ),
