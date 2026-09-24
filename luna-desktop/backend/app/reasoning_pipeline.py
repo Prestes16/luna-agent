@@ -390,6 +390,7 @@ def validate_model_response(
         asks_next_test
         and action_history
         and not getattr(scenario, "pending_question", None)
+        and evidence_delta_count == 0
         and (not response.strip() or proposed or commands)
     ):
         reasons.append("no_observed_pending_action")
