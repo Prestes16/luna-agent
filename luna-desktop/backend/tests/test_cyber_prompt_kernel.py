@@ -3,6 +3,8 @@ import unittest
 from unittest.mock import patch
 
 from app.cyber_prompt_kernel import (
+    _OMISSION_MARKER,
+    _clip_at_boundary,
     compile_cyber_kernel,
     select_output_contract,
     select_skill,
@@ -43,6 +45,27 @@ class CyberPromptKernelTests(unittest.TestCase):
         self.assertIn("supervised executor only", compiled.text)
         self.assertIn("ACTIVE CYBER SKILL: WEB_API", compiled.text)
         self.assertTrue(compiled.tool_epistemology_included)
+
+    def test_boundary_clipper_never_cuts_through_a_token(self) -> None:
+        clipped = _clip_at_boundary(
+            "Primeira frase completa. Segunda frase muito longa para este orçamento.",
+            48,
+        )
+        self.assertIn(_OMISSION_MARKER, clipped)
+        self.assertNotIn("Segunda fr", clipped)
+        self.assertLessEqual(len(clipped), 48)
+
+    def test_default_web_api_compilation_preserves_critical_contracts_without_truncation(self) -> None:
+        compiled = compile_cyber_kernel(
+            "Analise http://127.0.0.1:8080/api/me e forneça EXATAMENTE UM comando curl."
+        )
+        self.assertLessEqual(compiled.char_count, 5_200)
+        self.assertNotIn(_OMISSION_MARKER, compiled.text)
+        self.assertIn("## BUILD-TO-BREAK", compiled.text)
+        self.assertIn("## Capability truthfulness", compiled.text)
+        self.assertIn("ACTIVE CYBER SKILL: WEB_API", compiled.text)
+        self.assertIn("ACTIVE OUTPUT CONTRACT: WEB / API", compiled.text)
+        self.assertIn("Se pedirem exatamente um comando, entregue exatamente um", compiled.text)
 
     def test_compiler_does_not_import_foreign_product_contracts(self) -> None:
         compiled = compile_cyber_kernel("Analise uma API HTTP autorizada.")
