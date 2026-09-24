@@ -143,6 +143,7 @@ class SSHExecutionConfig:
         data = asdict(self.validated())
         data["identity_file"] = bool(data["identity_file"])
         data["known_hosts_file"] = bool(data["known_hosts_file"])
+        data["ssh_binary"] = Path(str(data["ssh_binary"] or "ssh")).name or "ssh"
         return data
 
 
@@ -156,6 +157,26 @@ def resolve_ssh_binary(config: SSHExecutionConfig) -> str | None:
     if candidate.is_file():
         return str(candidate.resolve())
     return None
+
+
+def ssh_local_file_issues(config: SSHExecutionConfig) -> tuple[str, ...]:
+    """Validate only explicitly configured local SSH files.
+
+    Identity is optional because BatchMode may use ssh-agent/default keys.
+    A configured identity must exist. A configured strict known_hosts file must
+    already exist because strict host-key verification cannot learn the key.
+    """
+    cfg = config.validated()
+    issues: list[str] = []
+    if cfg.identity_file and not Path(cfg.identity_file).expanduser().is_file():
+        issues.append("identity_file_not_found")
+    if cfg.known_hosts_file:
+        known_hosts = Path(cfg.known_hosts_file).expanduser()
+        if cfg.host_key_policy == "strict" and not known_hosts.is_file():
+            issues.append("known_hosts_file_not_found")
+        elif cfg.host_key_policy == "accept-new" and not known_hosts.parent.exists():
+            issues.append("known_hosts_parent_not_found")
+    return tuple(issues)
 
 
 def build_ssh_process_argv(
