@@ -197,5 +197,40 @@ class ExecutionIntentTests(unittest.TestCase):
         self.assertLess(probe.risk_index, mutate.risk_index)
 
 
+    def test_kali_registry_makes_common_tools_known_without_weakening_authority(self) -> None:
+        nuclei = build_execution_intent(
+            "nuclei -u https://10.10.10.5",
+            context="CTF autorizado",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+            scope_target="10.10.10.5",
+        )
+        self.assertEqual(nuclei.authority_level, L1_PROBE)
+        self.assertEqual(nuclei.authority, ON_DEMAND)
+        self.assertIn("kali_registry_baseline=L1_PROBE", nuclei.reasons)
+
+        hydra = build_execution_intent(
+            "hydra -l test -p test ssh://10.10.10.5",
+            context="CTF autorizado",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+            scope_target="10.10.10.5",
+        )
+        self.assertEqual(hydra.authority_level, L3_HIGH_IMPACT)
+        self.assertEqual(hydra.authority, APPROVAL_REQUIRED)
+
+    def test_kali_privacy_mutation_baseline_requires_approval(self) -> None:
+        intent = build_execution_intent(
+            "openvpn --config lab.ovpn",
+            context="ambiente autorizado; perfil VPN fornecido pelo operador",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+            rollback_ready=True,
+            verification_ready=True,
+        )
+        self.assertEqual(intent.authority_level, L2_MUTATE)
+        self.assertEqual(intent.authority, APPROVAL_REQUIRED)
+
+
 if __name__ == "__main__":
     unittest.main()
