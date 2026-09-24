@@ -23,7 +23,7 @@ import shlex
 import shutil
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from .supervised_executor import RunnerResult
 
@@ -143,7 +143,12 @@ class SSHExecutionConfig:
         data = asdict(self.validated())
         data["identity_file"] = bool(data["identity_file"])
         data["known_hosts_file"] = bool(data["known_hosts_file"])
-        data["ssh_binary"] = Path(str(data["ssh_binary"] or "ssh")).name or "ssh"
+        binary_text = str(data["ssh_binary"] or "ssh")
+        data["ssh_binary"] = (
+            PureWindowsPath(binary_text).name
+            if "\\" in binary_text
+            else Path(binary_text).name
+        ) or "ssh"
         return data
 
 
