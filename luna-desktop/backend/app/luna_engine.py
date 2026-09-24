@@ -514,7 +514,20 @@ class LunaEngine:
         )
 
     def _refresh_supervised_executor_policy(self) -> None:
-        self.supervised_executor.policy = self._build_supervised_execution_policy()
+        policy = self._build_supervised_execution_policy()
+        if getattr(self, "_execution_backend_error", None):
+            # A requested remote backend that failed validation must never fall back
+            # to local execution merely because the operator toggled policy settings.
+            policy = SupervisedExecutionPolicy(
+                enabled=False,
+                allow_l0=policy.allow_l0,
+                allow_l1=policy.allow_l1,
+                allow_l2=policy.allow_l2,
+                allow_l3=policy.allow_l3,
+                timeout_seconds=policy.timeout_seconds,
+                max_output_bytes=policy.max_output_bytes,
+            )
+        self.supervised_executor.policy = policy
 
     def _configure_supervised_execution_backend(self) -> None:
         """Configure where approved commands run; never silently fall back across backends."""
