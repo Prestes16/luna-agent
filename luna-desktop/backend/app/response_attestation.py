@@ -183,6 +183,33 @@ def build_response_execution_intents(
     ]
 
 
+def build_response_execution_actions(
+    engine: Any,
+    session_id: str,
+    message: str,
+    response: str,
+) -> list[dict]:
+    """Return exact operator-visible commands paired with recomputed intent metadata."""
+    commands = extract_commands(response)
+    intents = build_response_execution_intents(
+        engine,
+        session_id,
+        message,
+        response,
+    )
+    return [
+        {
+            "command": command,
+            **{
+                key: value
+                for key, value in intent.items()
+                if key != "command"
+            },
+        }
+        for command, intent in zip(commands, intents)
+    ]
+
+
 def install_response_attestation(engine_cls: type) -> None:
     """Wrap LunaEngine.stream_agent once without changing the core engine file."""
     if getattr(engine_cls, "_response_attestation_installed", False):
@@ -285,17 +312,12 @@ def install_response_attestation(engine_cls: type) -> None:
                         }
                         for item in execution_intents
                     ],
-                    "execution_actions": [
-                        {
-                            "command": command,
-                            **{
-                                key: value
-                                for key, value in intent.items()
-                                if key != "command"
-                            },
-                        }
-                        for command, intent in zip(response_commands, execution_intents)
-                    ],
+                    "execution_actions": build_response_execution_actions(
+                        self,
+                        sid,
+                        message,
+                        visible_text,
+                    ),
                     "strategy_attestations": strategy_attestations,
                     "host_safety_attestations": host_safety_attestations,
                     "privacy_attestation": privacy_attestation,
