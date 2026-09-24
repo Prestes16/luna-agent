@@ -73,7 +73,11 @@ class ExecutionApproval:
         now: float | None = None,
     ) -> "ExecutionApproval":
         current = float(time.time() if now is None else now)
-        ttl = max(1, min(int(ttl_seconds), 900))
+        if isinstance(ttl_seconds, bool) or not isinstance(ttl_seconds, int):
+            raise ValueError("ttl_seconds must be an integer")
+        ttl = int(ttl_seconds)
+        if not 1 <= ttl <= 900:
+            raise ValueError("ttl_seconds must be between 1 and 900")
         return cls(
             command_sha256=command_sha256(command),
             target=target,
@@ -331,6 +335,12 @@ class SupervisedExecutor:
             reasons.append("rollback_not_ready")
         if intent.verification_required and not verification_ready:
             reasons.append("verification_not_ready")
+
+        if (
+            intent.authority == APPROVAL_REQUIRED
+            and "operator_request_required" in intent.reasons
+        ):
+            reasons.append("operator_execution_not_requested")
 
         if intent.authority == APPROVAL_REQUIRED:
             if approval is None:
