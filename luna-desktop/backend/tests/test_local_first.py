@@ -43,6 +43,13 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(port, 11434)
         self.assertLessEqual(timeout, 0.05)
 
+    def test_default_ollama_sampling_baseline_is_deterministic(self) -> None:
+        with patch("app.luna_engine._ollama_is_available_sync", return_value=False):
+            engine = LunaEngine()
+        self.assertEqual(engine.config["temperature"], 0.0)
+        self.assertEqual(engine.config["top_p"], 0.7)
+        self.assertEqual(engine.config["seed"], 42)
+
     def test_defaults_normalize_cloud_selection_to_local(self) -> None:
         with patch.dict(
             os.environ,
