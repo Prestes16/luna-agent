@@ -945,6 +945,8 @@ async def get_config():
 _CONFIG_WHITELIST = {
     'default_model', 'temperature', 'max_tokens', 'zero_cloud_mode',
     'mentor_mode', 'reflection_enabled',
+    'supervised_executor_enabled', 'supervised_allow_l0', 'supervised_allow_l1',
+    'supervised_timeout_seconds', 'supervised_max_output_bytes',
 }
 
 @app.post("/api/config")
@@ -962,6 +964,83 @@ async def update_config(config: dict):
 
     await luna_engine.update_config(safe_config)
     return {"status": "updated", "applied": list(safe_config.keys())}
+
+# ============================================================================
+# Supervised Execution Control Plane
+# ============================================================================
+
+class ExecutionPreviewRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    command: str
+    session_id: str = "default"
+    operator_request_text: str
+    rollback_ready: bool = False
+    verification_ready: bool = True
+
+
+class ExecutionApprovalRequest(ExecutionPreviewRequest):
+    operator_confirmed: bool
+    ttl_seconds: int = 120
+    allow_destructive: bool = False
+    allow_persistent_change: bool = False
+
+
+class ExecutionRunRequest(ExecutionPreviewRequest):
+    approval_token: Optional[str] = None
+
+
+@app.post("/api/execution/preview")
+async def preview_supervised_execution(body: ExecutionPreviewRequest):
+    if not luna_engine:
+        raise HTTPException(status_code=503, detail="Luna engine not initialized")
+    try:
+        return luna_engine.preview_supervised_command(
+            body.command,
+            conversation_id=body.session_id,
+            operator_request_text=body.operator_request_text,
+            rollback_ready=body.rollback_ready,
+            verification_ready=body.verification_ready,
+        )
+    except (TypeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/execution/approve")
+async def approve_supervised_execution(body: ExecutionApprovalRequest):
+    if not luna_engine:
+        raise HTTPException(status_code=503, detail="Luna engine not initialized")
+    try:
+        return luna_engine.issue_supervised_execution_approval(
+            body.command,
+            conversation_id=body.session_id,
+            operator_request_text=body.operator_request_text,
+            operator_confirmed=body.operator_confirmed,
+            ttl_seconds=body.ttl_seconds,
+            allow_destructive=body.allow_destructive,
+            allow_persistent_change=body.allow_persistent_change,
+            rollback_ready=body.rollback_ready,
+            verification_ready=body.verification_ready,
+        )
+    except (TypeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@app.post("/api/execution/run")
+async def run_supervised_execution(body: ExecutionRunRequest):
+    if not luna_engine:
+        raise HTTPException(status_code=503, detail="Luna engine not initialized")
+    try:
+        return await luna_engine.execute_supervised_command(
+            body.command,
+            conversation_id=body.session_id,
+            operator_request_text=body.operator_request_text,
+            approval_token=body.approval_token,
+            rollback_ready=body.rollback_ready,
+            verification_ready=body.verification_ready,
+        )
+    except (TypeError, ValueError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
 
 # ============================================================================
 # Ollama Status Endpoint
