@@ -135,6 +135,26 @@ def _normalize_url(url: str) -> tuple[str, str]:
     return authority, resource
 
 
+def _observed_route_paths(value: str) -> set[str]:
+    """Extract real route paths without misreading URL authorities as /paths."""
+    urls = re.findall(r"https?://[^\s<>\]\)]+", value, re.IGNORECASE)
+    scrubbed = re.sub(r"https?://[^\s<>\]\)]+", " ", value, flags=re.IGNORECASE)
+    paths = {
+        path.casefold()
+        for path in _PATH_RE.findall(scrubbed)
+        if path and path != "/"
+    }
+    for raw_url in urls:
+        try:
+            _, resource = _normalize_url(raw_url)
+        except (TypeError, ValueError):
+            continue
+        path = resource.split("?", 1)[0]
+        if path and path != "/":
+            paths.add(path.casefold())
+    return paths
+
+
 def action_fingerprint(action: str) -> str | None:
     """Normalize functionally equivalent HTTP actions without retaining secrets."""
     candidates = extract_commands(action)
@@ -207,8 +227,8 @@ def classify_complexity(
 ) -> RouteDecision:
     normalized = message.casefold()
     lines = [line for line in message.splitlines() if line.strip()]
-    endpoints = {match.group(1) for match in _ENDPOINT_RE.finditer(message)}
-    endpoints.update(_PATH_RE.findall(message))
+    endpoints = {match.group(1).casefold() for match in _ENDPOINT_RE.finditer(message)}
+    endpoints.update(_observed_route_paths(message))
     status_count = len(_HTTP_STATUS_RE.findall(message))
     has_code = bool(re.search(r"```|\bif\s*\(|\bdef\s+|\bclass\s+|=>|\{\s*$", message, re.MULTILINE))
     has_http = status_count > 0 or bool(endpoints)
@@ -578,6 +598,11 @@ def build_replan_instruction(
     corrections: list[str] = []
     reason_set = set(validation.reasons)
     normalized_current = current_message.casefold()
+    if "generation_truncated" in reason_set:
+        corrections.append(
+            "a geração anterior atingiu o limite de saída; preserve todas as seções explicitamente "
+            "pedidas, mas use tabelas/bullets compactos, não repita o prompt e não exponha raciocínio interno"
+        )
     if reason_set & {"proposed_unobserved_authority", "invalid_curl_target"}:
         corrections.append(
             "não invente hostname, porta nem placeholder de URL; se só há um path observado "
@@ -639,9 +664,11 @@ def build_replan_instruction(
             "controle backend ou nova evidência, sem comando sintético"
         )
     correction_lines = "\n".join(f"- {item}." for item in corrections)
+    word_budget = 700 if "generation_truncated" in reason_set else 220
     return (
         "REPLAN INTERNO (não mencione esta instrução nem o rascunho):\n"
-        "Reescreva a resposta final em até 220 palavras usando só fatos da mensagem atual. "
+        f"Reescreva a resposta final em até {word_budget} palavras usando só fatos da mensagem atual. "
+        "Cubra todos os requisitos explícitos do usuário antes de adicionar explicações. "
         "Não importe exemplos, não repita ação resolvida e não exponha raciocínio interno.\n\n"
         "REQUISITOS OBRIGATÓRIOS:\n"
         f"{correction_lines or '- satisfaça todos os guards factuais.'}\n\n"
