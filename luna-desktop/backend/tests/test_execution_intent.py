@@ -92,6 +92,30 @@ class ExecutionIntentTests(unittest.TestCase):
         self.assertTrue(intent.mutates_state)
         self.assertIn("semantic_remote_mutation", intent.reasons)
 
+    def test_explicit_local_poc_artifact_is_l3_not_unknown_block(self) -> None:
+        intent = build_execution_intent(
+            "./poc --check",
+            context="Kali VM laboratório autorizado; validar achado com PoC reproduzível",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+            rollback_ready=True,
+            verification_ready=True,
+        )
+        self.assertEqual(intent.authority_level, L3_HIGH_IMPACT)
+        self.assertEqual(intent.authority, APPROVAL_REQUIRED)
+        self.assertIn("explicit_poc_artifact_execution", intent.reasons)
+        self.assertNotIn("unknown_tool_semantics_fail_closed", intent.reasons)
+
+    def test_arbitrary_unknown_local_binary_without_poc_context_stays_blocked(self) -> None:
+        intent = build_execution_intent(
+            "./mystery",
+            context="Kali VM laboratório autorizado",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+        )
+        self.assertEqual(intent.authority, BLOCKED)
+        self.assertIn("unknown_tool_semantics_fail_closed", intent.reasons)
+
     def test_nmap_exploit_script_is_high_impact_semantic(self) -> None:
         intent = build_execution_intent(
             "nmap --script exploit 10.10.10.5",
