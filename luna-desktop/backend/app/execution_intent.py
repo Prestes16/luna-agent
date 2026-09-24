@@ -23,6 +23,7 @@ from urllib.parse import urlsplit
 
 from .command_execution import assess_command_execution
 from .host_safety import assess_host_safety
+from .kali_tool_dictionary import execution_baseline_for_tool
 
 
 L0_OBSERVE = "L0_OBSERVE"
@@ -34,6 +35,13 @@ AUTO = "AUTO"
 ON_DEMAND = "ON_DEMAND"
 APPROVAL_REQUIRED = "APPROVAL_REQUIRED"
 BLOCKED = "BLOCKED"
+
+_LEVEL_RANK = {
+    L0_OBSERVE: 0,
+    L1_PROBE: 1,
+    L2_MUTATE: 2,
+    L3_HIGH_IMPACT: 3,
+}
 
 _LOCAL_OBSERVE_TOOLS = frozenset(
     {
@@ -298,8 +306,10 @@ def build_execution_intent(
     artifact_execution = _explicit_artifact_execution(tool, context)
     high_impact_semantic = _is_high_impact_command(command, tool) or artifact_execution
     known_observe = tool in _LOCAL_OBSERVE_TOOLS
+    registry_level = execution_baseline_for_tool(tool)
     known_semantics = bool(
-        known_observe
+        registry_level
+        or known_observe
         or active_probe
         or high_impact_semantic
         or lifecycle.mutates_state
@@ -328,6 +338,9 @@ def build_execution_intent(
         level = L1_PROBE
     else:
         level = L0_OBSERVE
+
+    if registry_level and _LEVEL_RANK[registry_level] > _LEVEL_RANK[level]:
+        level = registry_level
 
     if not known_semantics:
         authority = BLOCKED
@@ -393,6 +406,8 @@ def build_execution_intent(
     )
     if not known_semantics:
         reasons.append("unknown_tool_semantics_fail_closed")
+    if registry_level:
+        reasons.append(f"kali_registry_baseline={registry_level}")
     if active_probe:
         reasons.append("active_probe")
     if semantic_mutation:
