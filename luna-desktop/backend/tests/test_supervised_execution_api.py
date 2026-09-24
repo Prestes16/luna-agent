@@ -82,6 +82,10 @@ class SupervisedExecutionApiTests(unittest.TestCase):
         self.assertEqual(allowed.json()["status"], "executed")
         self.assertEqual(allowed.json()["stdout"], "probe-ok\n")
         self.assertEqual(len(self.calls), 1)
+        scenario = self.engine.scenario_contexts["api-exec"]
+        observed = "\n".join(scenario.observed_facts)
+        self.assertIn("Supervised execution observed", observed)
+        self.assertIn("probe-ok", observed)
 
     def test_privileged_probe_requires_one_shot_operator_approval(self) -> None:
         self.client.post(
