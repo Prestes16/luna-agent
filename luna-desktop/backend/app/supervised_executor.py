@@ -180,6 +180,7 @@ class SupervisedExecutionResult:
     truncated: bool
     denial_reasons: tuple[str, ...]
     evidence: tuple[EvidenceArtifact, ...]
+    raw_evidence: tuple[tuple[str, bytes], ...] = ()
 
     def to_dict(self) -> dict:
         return {
@@ -463,6 +464,12 @@ class SupervisedExecutor:
                 )
             )
 
+        raw_evidence: list[tuple[str, bytes]] = []
+        if stdout_raw:
+            raw_evidence.append(("stdout", stdout_raw))
+        if stderr_raw:
+            raw_evidence.append(("stderr", stderr_raw))
+
         return SupervisedExecutionResult(
             status="executed",
             backend=self.backend_name,
@@ -477,4 +484,5 @@ class SupervisedExecutor:
             truncated=truncated,
             denial_reasons=(),
             evidence=tuple(evidence),
+            raw_evidence=tuple(raw_evidence),
         )
