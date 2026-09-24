@@ -124,6 +124,43 @@ class SupervisedExecutionApiTests(unittest.TestCase):
         )
         self.assertEqual(len(self.calls), 1)
 
+    def test_approval_token_is_bound_to_session_scope(self) -> None:
+        self.client.post(
+            "/api/config",
+            json={"supervised_executor_enabled": True},
+        )
+        other = ScenarioContext()
+        other.update("CTF autorizado em http://10.10.10.5")
+        self.engine.scenario_contexts["api-other"] = other
+
+        command = "sudo nmap -sS 10.10.10.5"
+        approved = self.client.post(
+            "/api/execution/approve",
+            json={
+                **self._body(command),
+                "operator_confirmed": True,
+                "ttl_seconds": 120,
+            },
+        )
+        self.assertEqual(approved.status_code, 200)
+        token = approved.json()["approval_token"]
+
+        cross_scope = self.client.post(
+            "/api/execution/run",
+            json={
+                **self._body(command),
+                "session_id": "api-other",
+                "approval_token": token,
+            },
+        )
+        self.assertEqual(cross_scope.status_code, 200)
+        self.assertEqual(cross_scope.json()["status"], "denied")
+        self.assertIn(
+            "operator_approval_mismatch_or_expired",
+            cross_scope.json()["denial_reasons"],
+        )
+        self.assertEqual(self.calls, [])
+
     def test_approval_requires_explicit_operator_confirmation(self) -> None:
         command = "sudo nmap -sS 10.10.10.5"
         response = self.client.post(
