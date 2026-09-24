@@ -3,6 +3,7 @@ import unittest
 from app.execution_backends import (
     SSHExecutionConfig,
     build_ssh_process_argv,
+    resolve_ssh_binary,
 )
 
 
@@ -121,6 +122,18 @@ class ExecutionBackendTests(unittest.TestCase):
         self.assertTrue(public["known_hosts_file"])
         self.assertNotIn(r"D:\secret\id_ed25519", str(public))
 
+
+    def test_explicit_ssh_binary_is_preserved(self) -> None:
+        config = SSHExecutionConfig(
+            host="10.0.0.2",
+            user="kali",
+            ssh_binary=r"C:\\Windows\\System32\\OpenSSH\\ssh.exe",
+        )
+        argv = build_ssh_process_argv(config, ("id",))
+        self.assertEqual(
+            argv[0],
+            r"C:\\Windows\\System32\\OpenSSH\\ssh.exe",
+        )
 
 if __name__ == "__main__":
     unittest.main()
