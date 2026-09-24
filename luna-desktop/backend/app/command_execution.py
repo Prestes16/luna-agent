@@ -212,7 +212,7 @@ def assess_command_execution(
     if not operator_requested_execution:
         reasons.append("operator_execution_not_requested")
     if not tool_execution_enabled:
-        reasons.append("tool_execution_disabled")
+        reasons.append("model_tool_loop_disabled")
     if mutates_state and not reversible:
         reasons.append("rollback_not_guaranteed")
 
