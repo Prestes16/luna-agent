@@ -145,6 +145,52 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(engine._tool_execution_allowed())
         self.assertEqual(len(calls), 1)
 
+    async def test_engine_one_shot_approval_executes_privileged_probe_once(self) -> None:
+        engine = LunaEngine()
+        scenario = ScenarioContext()
+        scenario.update("CTF autorizado em http://10.10.10.5")
+        engine.scenario_contexts["approval"] = scenario
+        await engine.update_config({"supervised_executor_enabled": True})
+
+        calls = []
+
+        async def fake_runner(argv, timeout_seconds, max_output_bytes):
+            calls.append(argv)
+            return RunnerResult(exit_code=0, stdout=b"syn-ok\n", stderr=b"")
+
+        engine.supervised_executor._runner = fake_runner
+        command = "sudo nmap -sS 10.10.10.5"
+        grant = engine.issue_supervised_execution_approval(
+            command,
+            conversation_id="approval",
+            operator_request_text="Luna, rode o SYN scan no alvo autorizado.",
+            operator_confirmed=True,
+        )
+        self.assertEqual(engine.execution_approval_store.count(), 1)
+
+        first = await engine.execute_supervised_command(
+            command,
+            conversation_id="approval",
+            operator_request_text="Luna, rode o SYN scan no alvo autorizado.",
+            approval_token=grant["approval_token"],
+        )
+        self.assertEqual(first["status"], "executed")
+        self.assertEqual(engine.execution_approval_store.count(), 0)
+        self.assertEqual(len(calls), 1)
+
+        second = await engine.execute_supervised_command(
+            command,
+            conversation_id="approval",
+            operator_request_text="Luna, rode o SYN scan no alvo autorizado.",
+            approval_token=grant["approval_token"],
+        )
+        self.assertEqual(second["status"], "denied")
+        self.assertIn(
+            "approval_token_invalid_or_expired",
+            second["denial_reasons"],
+        )
+        self.assertEqual(len(calls), 1)
+
     def test_instruction_only_build_cannot_be_enabled_by_runtime_config(self) -> None:
         engine = LunaEngine()
         self.assertTrue(engine.config["instruction_only_mode"])
