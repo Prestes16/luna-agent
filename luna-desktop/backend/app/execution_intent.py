@@ -85,8 +85,8 @@ _HTTP_MUTATION_PATTERNS = (
 )
 
 _OPERATOR_EXECUTION_PATTERNS = (
-    re.compile(r"(?i)\b(?:execute|executa|execute-a|rode|roda|rodar|use|usar|teste|testa|explore|explorar)\b"),
-    re.compile(r"(?i)\b(?:vamos|pode|quero)\s+(?:executar|rodar|usar|testar|explorar)\b"),
+    re.compile(r"(?i)\b(?:execute|executa|execute-a|rode|roda|rodar|use|usar|teste|testa|explore|explorar|valide|validar|comprove|comprovar|reproduza|reproduzir)\b"),
+    re.compile(r"(?i)\b(?:vamos|pode|quero)\s+(?:executar|rodar|usar|testar|explorar|validar|comprovar|reproduzir)\b"),
 )
 
 _TOOL_HIGH_IMPACT_PATTERNS = (
