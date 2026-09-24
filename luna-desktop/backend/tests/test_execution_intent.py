@@ -33,6 +33,8 @@ class ExecutionIntentTests(unittest.TestCase):
         self.assertEqual(intent.authority, ON_DEMAND)
         self.assertEqual(intent.target, "10.10.10.5")
         self.assertTrue(intent.verification_required)
+        self.assertIn("model_tool_loop_disabled", intent.reasons)
+        self.assertNotIn("tool_execution_disabled", intent.reasons)
 
     def test_privileged_probe_stays_l1_but_requires_approval(self) -> None:
         intent = build_execution_intent(
