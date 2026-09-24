@@ -72,6 +72,43 @@ class ExecutionBackendTests(unittest.TestCase):
                 host_key_policy="off",
             ).validated()
 
+    def test_from_env_parses_complete_kali_contract(self) -> None:
+        config = SSHExecutionConfig.from_env({
+            "LUNA_KALI_SSH_HOST": "192.168.56.10",
+            "LUNA_KALI_SSH_USER": "kali",
+            "LUNA_KALI_SSH_PORT": "2222",
+            "LUNA_KALI_SSH_IDENTITY": r"D:\\LunaCyber\\keys\\kali_ed25519",
+            "LUNA_KALI_SSH_KNOWN_HOSTS": r"D:\\LunaCyber\\config\\known_hosts",
+            "LUNA_KALI_SSH_HOST_KEY_POLICY": "strict",
+            "LUNA_KALI_SSH_CONNECT_TIMEOUT": "15",
+        })
+        self.assertEqual(config.host, "192.168.56.10")
+        self.assertEqual(config.user, "kali")
+        self.assertEqual(config.port, 2222)
+        self.assertEqual(config.connect_timeout_seconds, 15)
+        self.assertEqual(config.host_key_policy, "strict")
+
+    def test_from_env_rejects_invalid_numeric_configuration_instead_of_clamping(self) -> None:
+        base = {
+            "LUNA_KALI_SSH_HOST": "192.168.56.10",
+            "LUNA_KALI_SSH_USER": "kali",
+        }
+        with self.assertRaises(ValueError):
+            SSHExecutionConfig.from_env({
+                **base,
+                "LUNA_KALI_SSH_PORT": "not-a-port",
+            })
+        with self.assertRaises(ValueError):
+            SSHExecutionConfig.from_env({
+                **base,
+                "LUNA_KALI_SSH_PORT": "70000",
+            })
+        with self.assertRaises(ValueError):
+            SSHExecutionConfig.from_env({
+                **base,
+                "LUNA_KALI_SSH_CONNECT_TIMEOUT": "0",
+            })
+
     def test_public_config_hides_local_file_paths(self) -> None:
         config = SSHExecutionConfig(
             host="10.0.0.2",
