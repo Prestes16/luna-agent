@@ -310,7 +310,14 @@ when the model cannot actually consume visual content.
 
 ## Kali knowledge plane
 
-Kali knowledge will later be ingested from the operator's installed environment:
+The current structured Kali registry is now also the conservative baseline authority for
+execution class. Guidance and execution therefore do not maintain independent notions of
+what a known tool is. Command-specific semantics can only escalate that baseline; they
+cannot downgrade a tool below its registry class. Examples: network/web/DNS tools default
+to L1, authentication testing defaults to L3, VPN/proxy mutation defaults to L2, and
+offline/static-analysis tools default to L0.
+
+The next knowledge expansion will ingest the operator's installed environment:
 
 ```text
 man / --help / tool version
