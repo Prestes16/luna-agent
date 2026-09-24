@@ -13,6 +13,7 @@ import socket
 import time
 from typing import Optional, List, Dict, Any, AsyncIterator
 from datetime import datetime
+from urllib.parse import urlsplit
 
 from openai import AsyncOpenAI
 
@@ -127,14 +128,31 @@ MODEL_MAP: Dict[str, tuple] = {
 
 # ── Ollama availability helpers ───────────────────────────────────────────────
 
+def _ollama_probe_endpoint() -> tuple[str, int, float]:
+    """Resolve the configured Ollama endpoint for a bounded TCP readiness probe."""
+    parsed = urlsplit(OLLAMA_BASE_URL)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    is_loopback = host.casefold() in {"localhost", "127.0.0.1", "::1"}
+    # Avoid dual-stack localhost stalls on Windows while keeping custom endpoints supported.
+    connect_host = "127.0.0.1" if host.casefold() == "localhost" else host
+    timeout = 0.25 if is_loopback else 0.75
+    return connect_host, port, timeout
+
+
 def _ollama_is_available_sync() -> bool:
-    """Verifica (síncronamente) se o Ollama está rodando em localhost:11434."""
+    """Bounded TCP readiness probe for Ollama; safe for synchronous diagnostics."""
+    host, port, timeout = _ollama_probe_endpoint()
     try:
-        s = socket.create_connection(("localhost", 11434), timeout=1.0)
-        s.close()
-        return True
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
     except (ConnectionRefusedError, OSError, TimeoutError):
         return False
+
+
+async def _ollama_is_available_async() -> bool:
+    """Run the TCP probe off the event loop."""
+    return await asyncio.to_thread(_ollama_is_available_sync)
 
 
 async def _ollama_list_models_async(*, force: bool = False) -> List[str]:
@@ -690,7 +708,7 @@ class LunaEngine:
         Versão async do resolve que consulta Ollama para descobrir o melhor
         modelo disponível quando a rota vai para 'ollama'.
         """
-        self._ollama_available = _ollama_is_available_sync()
+        self._ollama_available = await _ollama_is_available_async()
         client_type, model_name = self._resolve_model(message, model_str)
         if client_type == 'ollama':
             model_name = await _ollama_best_model_async(model_name or _OLLAMA_DEFAULT_MODEL)
@@ -1542,7 +1560,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
 
         if not client or not model_name:
             # Último recurso: tenta Ollama mesmo sem detecção prévia
-            if _ollama_is_available_sync():
+            if await _ollama_is_available_async():
                 self._ollama_available = True
                 client_type = 'ollama'
                 model_name = await _ollama_best_model_async()
@@ -2075,7 +2093,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             logger.error(f"Stream error [{client_type}/{model_name}]: {e}")
 
             if client_type == 'ollama':
-                self._ollama_available = _ollama_is_available_sync()
+                self._ollama_available = await _ollama_is_available_async()
                 if not self._ollama_available:
                     friendly = "Ollama não está acessível em localhost:11434."
                 else:
