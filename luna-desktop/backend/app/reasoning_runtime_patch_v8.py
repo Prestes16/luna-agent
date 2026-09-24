@@ -9,6 +9,7 @@ persistence. The exact approved command is also SHA-256 attestable.
 from __future__ import annotations
 
 import re
+import shlex
 from typing import Any
 
 from . import reasoning_pipeline as _rp
