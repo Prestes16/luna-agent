@@ -1,9 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { useLocation } from 'react-router-dom'
-import { useStore, Message, ActiveFile } from '@store/appStore'
+import { useStore, Message, ActiveFile, ExecutionAction } from '@store/appStore'
 import { useI18n } from '@i18n/hooks'
 import TopBar from '@components/TopBar'
-import { Send, FolderOpen, Zap, Volume2, VolumeX, Mic, MicOff, ImagePlus, X as XIcon, FolderSymlink, Copy, Check, RotateCcw, Plus, History, Trash2, ChevronDown } from 'lucide-react'
+import { Send, FolderOpen, Zap, Volume2, VolumeX, Mic, MicOff, ImagePlus, X as XIcon, FolderSymlink, Copy, Check, RotateCcw, Plus, History, Trash2, ChevronDown, Play, ShieldCheck } from 'lucide-react'
 import { ChatSession } from '@store/appStore'
 import { parseNumberedListItem } from '@/utils/markdown'
 
@@ -245,6 +245,141 @@ function inlineMarkdown(text: string): React.ReactNode {
   })
 }
 
+// ── Supervised execution action ───────────────────────────────────────────
+const ExecutionActionCard: React.FC<{ action: ExecutionAction }> = ({ action }) => {
+  const { backendUrl, lunaApiToken, sessionId, addLogLine } = useStore()
+  const [state, setState] = useState<'idle' | 'working' | 'done' | 'error'>('idle')
+  const [detail, setDetail] = useState('')
+
+  const run = async () => {
+    if (state === 'working' || action.authority === 'BLOCKED') return
+
+    const operatorRequest = 'Execute sob demanda este comando aprovado pelo operador: ' + action.command
+    let rollbackReady = !action.rollback_required
+
+    if (action.rollback_required) {
+      rollbackReady = window.confirm(
+        'Esta ação altera estado. Confirma que o rollback/cleanup descrito pela Luna foi revisado e está pronto?'
+      )
+      if (!rollbackReady) return
+    }
+
+    if ((action.destructive || action.persistent_change) && !window.confirm(
+      'Ação de alto impacto detectada. Confirma explicitamente a execução exata deste comando?'
+    )) return
+
+    setState('working')
+    setDetail('')
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(lunaApiToken ? { 'X-Luna-Token': lunaApiToken } : {}),
+    }
+
+    try {
+      let approvalToken: string | undefined
+
+      if (action.authority === 'APPROVAL_REQUIRED') {
+        const approvalRes = await fetch(backendUrl + '/api/execution/approve', {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            command: action.command,
+            session_id: sessionId,
+            operator_request_text: operatorRequest,
+            operator_confirmed: true,
+            ttl_seconds: 120,
+            allow_destructive: Boolean(action.destructive),
+            allow_persistent_change: Boolean(action.persistent_change),
+            rollback_ready: rollbackReady,
+            verification_ready: true,
+          }),
+        })
+        const approvalBody = await approvalRes.json()
+        if (!approvalRes.ok) throw new Error(approvalBody?.detail ?? ('approval HTTP ' + approvalRes.status))
+        approvalToken = approvalBody.approval_token
+      }
+
+      const runRes = await fetch(backendUrl + '/api/execution/run', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          command: action.command,
+          session_id: sessionId,
+          operator_request_text: operatorRequest,
+          approval_token: approvalToken,
+          rollback_ready: rollbackReady,
+          verification_ready: true,
+        }),
+      })
+      const body = await runRes.json()
+      if (!runRes.ok) throw new Error(body?.detail ?? ('execution HTTP ' + runRes.status))
+
+      const executed = body.status === 'executed'
+      setState(executed ? 'done' : 'error')
+      const summary = executed
+        ? 'exit=' + (body.exit_code ?? '?') + ' · backend=' + (body.backend ?? 'unknown')
+        : (body.status ?? 'denied') + ' · ' + (body.denial_reasons ?? []).join(', ')
+      setDetail(summary)
+      addLogLine({
+        category: 'SYSTEM',
+        level: executed ? 'success' : 'warning',
+        text: 'Supervised execution: ' + summary,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setState('error')
+      setDetail(message)
+      addLogLine({ category: 'SYSTEM', level: 'error', text: 'Execution error: ' + message })
+    }
+  }
+
+  const blocked = action.authority === 'BLOCKED'
+  const badgeColor = blocked
+    ? '#ef4444'
+    : action.authority === 'APPROVAL_REQUIRED'
+      ? '#f59e0b'
+      : '#22c55e'
+
+  return (
+    <div
+      className="mt-2 rounded-md px-2.5 py-2 font-mono text-[10px]"
+      style={{ border: '1px solid rgba(0,212,255,0.15)', background: 'rgba(2,8,20,0.65)' }}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <ShieldCheck size={11} style={{ color: badgeColor }} />
+        <span style={{ color: badgeColor }}>{action.authority_level}</span>
+        <span className="text-cyber-dim">·</span>
+        <span style={{ color: badgeColor }}>{action.authority}</span>
+        {typeof action.risk_index === 'number' && (
+          <span className="ml-auto text-cyber-dim">risk {action.risk_index.toFixed(3)}</span>
+        )}
+      </div>
+      <code className="block whitespace-pre-wrap break-all text-cyber-text mb-2">{action.command}</code>
+      {action.target && <div className="text-cyber-dim mb-1">target: {action.target}</div>}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={run}
+          disabled={blocked || state === 'working'}
+          className="inline-flex items-center gap-1 rounded px-2 py-1 disabled:opacity-40"
+          style={{
+            color: blocked ? '#ef4444' : '#00d4ff',
+            border: '1px solid rgba(0,212,255,0.22)',
+            background: 'rgba(0,212,255,0.06)',
+          }}
+          title={blocked ? 'Intent bloqueado pela política determinística' : 'Executar sob supervisão'}
+        >
+          <Play size={10} />
+          {state === 'working' ? 'Executando...' : blocked ? 'Bloqueado' : 'Executar'}
+        </button>
+        {detail && (
+          <span style={{ color: state === 'done' ? '#4ade80' : '#f59e0b' }}>{detail}</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Message component ────────────────────────────────────────────────────
 interface MessageBubbleProps {
   msg: Message
@@ -401,6 +536,14 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ msg, onSpeak, speakingMsg
 
           {msg.isStreaming && (
             <span className="inline-block w-1.5 h-4 ml-0.5 bg-cyber-cyan animate-blink" />
+          )}
+
+          {isLuna && !msg.isStreaming && msg.executionActions && msg.executionActions.length > 0 && (
+            <div className="mt-2">
+              {msg.executionActions.map((action, index) => (
+                <ExecutionActionCard key={msg.id + '-exec-' + index} action={action} />
+              ))}
+            </div>
           )}
         </div>
         )}
@@ -824,6 +967,12 @@ const Chat: React.FC = () => {
               streamWriter.push(fullText)
             }
 
+            else if (event.type === 'response_meta') {
+              if (Array.isArray(event.execution_actions)) {
+                updateMessage(lunaId, { executionActions: event.execution_actions as ExecutionAction[] })
+              }
+            }
+
             else if (event.type === 'done') {
               streamWriter.finish(fullText || event.final_text || '')
               commitLiveToolsToMessage(lunaId)
@@ -1045,6 +1194,11 @@ const Chat: React.FC = () => {
             else if (event.type === 'text_chunk') {
               fullText += event.text
               streamWriter.push(fullText)
+            }
+            else if (event.type === 'response_meta') {
+              if (Array.isArray(event.execution_actions)) {
+                updateMessage(lunaId, { executionActions: event.execution_actions as ExecutionAction[] })
+              }
             }
             else if (event.type === 'done') {
               streamWriter.finish(fullText || event.final_text || '')
