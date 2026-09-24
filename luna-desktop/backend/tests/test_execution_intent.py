@@ -235,5 +235,16 @@ class ExecutionIntentTests(unittest.TestCase):
         self.assertGreater(intent.risk_index, 0.3)
 
 
+    def test_registered_l1_list_probe_without_bound_target_is_blocked(self) -> None:
+        intent = build_execution_intent(
+            "nuclei -l targets.txt",
+            context="CTF autorizado",
+            operator_requested_execution=True,
+            scope_confirmed=True,
+        )
+        self.assertEqual(intent.authority_level, L1_PROBE)
+        self.assertEqual(intent.authority, BLOCKED)
+        self.assertIn("target_not_bound", intent.reasons)
+
 if __name__ == "__main__":
     unittest.main()
