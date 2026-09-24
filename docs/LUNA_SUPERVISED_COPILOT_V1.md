@@ -67,6 +67,7 @@ LUNA_KALI_SSH_IDENTITY=<local private-key path>
 LUNA_KALI_SSH_KNOWN_HOSTS=<local known_hosts path>
 LUNA_KALI_SSH_HOST_KEY_POLICY=strict
 LUNA_KALI_SSH_CONNECT_TIMEOUT=10
+LUNA_KALI_SSH_BINARY=ssh
 ```
 
 If `kali-ssh` is requested but its host/user/port/timeout/policy configuration is invalid,
@@ -74,8 +75,10 @@ Luna fails closed and does **not** fall back to executing the command on Windows
 SSH settings are parsed strictly: malformed ports/timeouts are rejected rather than silently
 clamped or replaced with defaults. `BatchMode=yes` keeps the execution path non-interactive;
 authentication must therefore be available through the configured identity or the local
-OpenSSH agent/default key mechanism. Public diagnostics expose only whether identity/known-host
-files are configured, never their local paths.
+OpenSSH agent/default key mechanism. If an identity file is explicitly configured it must
+exist; under `strict`, an explicitly configured `known_hosts` file must already exist.
+The configured OpenSSH client is resolved before the backend is marked ready. Public
+diagnostics expose only booleans/basenames for local SSH artifacts, never their full paths.
 
 The desktop chat receives the exact validated execution actions from response metadata.
 The operator sees the exact command, L0-L3 class, authority, target and risk index. A button
