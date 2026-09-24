@@ -28,6 +28,7 @@ class ExecutionBackendWiringTests(unittest.TestCase):
         }
         with (
             patch("app.luna_engine._ollama_is_available_sync", return_value=False),
+            patch("app.luna_engine.resolve_ssh_binary", return_value=r"C:\\Windows\\System32\\OpenSSH\\ssh.exe"),
             patch.dict(os.environ, env, clear=False),
         ):
             engine = LunaEngine()
@@ -56,6 +57,24 @@ class ExecutionBackendWiringTests(unittest.TestCase):
         self.assertEqual(engine.supervised_executor.backend_name, "kali-ssh-unavailable")
         self.assertFalse(engine.get_local_diagnostics()["execution_backend"]["ready"])
 
+
+    def test_missing_ssh_client_fails_closed(self) -> None:
+        env = {
+            "LUNA_EXEC_BACKEND": "kali-ssh",
+            "LUNA_KALI_SSH_HOST": "192.168.56.10",
+            "LUNA_KALI_SSH_USER": "kali",
+            "LUNA_SUPERVISED_EXECUTOR": "true",
+        }
+        with (
+            patch("app.luna_engine._ollama_is_available_sync", return_value=False),
+            patch("app.luna_engine.resolve_ssh_binary", return_value=None),
+            patch.dict(os.environ, env, clear=False),
+        ):
+            engine = LunaEngine()
+        backend = engine.get_local_diagnostics()["execution_backend"]
+        self.assertFalse(backend["ready"])
+        self.assertFalse(engine.supervised_executor.policy.enabled)
+        self.assertIn("OpenSSH client", backend["error"])
 
 if __name__ == "__main__":
     unittest.main()
