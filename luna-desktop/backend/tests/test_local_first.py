@@ -35,6 +35,14 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
             prompt.index("CONTEXTO DINÂMICO DE RUNTIME"),
         )
 
+    def test_local_ollama_probe_timeout_stays_below_slow_callback_threshold(self) -> None:
+        from app.luna_engine import _ollama_probe_endpoint
+
+        host, port, timeout = _ollama_probe_endpoint()
+        self.assertEqual(host, "127.0.0.1")
+        self.assertEqual(port, 11434)
+        self.assertLessEqual(timeout, 0.05)
+
     def test_defaults_normalize_cloud_selection_to_local(self) -> None:
         with patch.dict(
             os.environ,
