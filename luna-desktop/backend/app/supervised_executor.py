@@ -464,7 +464,9 @@ class SupervisedExecutor:
                 )
             )
 
-        raw_evidence: list[tuple[str, bytes]] = []
+        raw_evidence: list[tuple[str, bytes]] = [
+            ("command", command.encode("utf-8")),
+        ]
         if stdout_raw:
             raw_evidence.append(("stdout", stdout_raw))
         if stderr_raw:
