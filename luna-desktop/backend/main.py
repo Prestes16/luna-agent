@@ -949,6 +949,16 @@ _CONFIG_WHITELIST = {
     'supervised_timeout_seconds', 'supervised_max_output_bytes',
 }
 
+_SUPERVISED_BOOL_CONFIG = {
+    'supervised_executor_enabled',
+    'supervised_allow_l0',
+    'supervised_allow_l1',
+}
+_SUPERVISED_INT_CONFIG = {
+    'supervised_timeout_seconds': (1, 900),
+    'supervised_max_output_bytes': (1024, 16 * 1024 * 1024),
+}
+
 @app.post("/api/config")
 async def update_config(config: dict):
     """
@@ -957,10 +967,26 @@ async def update_config(config: dict):
     if not luna_engine:
         raise HTTPException(status_code=503, detail="Luna engine not initialized")
 
-    # Strip any keys not in the whitelist to prevent injection of arbitrary config
+    # Strip any keys not in the whitelist to prevent injection of arbitrary config.
     safe_config = {k: v for k, v in config.items() if k in _CONFIG_WHITELIST}
     if not safe_config:
         raise HTTPException(status_code=400, detail=f"Nenhum campo válido. Permitidos: {_CONFIG_WHITELIST}")
+
+    for key in _SUPERVISED_BOOL_CONFIG:
+        if key in safe_config and not isinstance(safe_config[key], bool):
+            raise HTTPException(status_code=422, detail=f"{key} deve ser boolean")
+
+    for key, (minimum, maximum) in _SUPERVISED_INT_CONFIG.items():
+        if key not in safe_config:
+            continue
+        value = safe_config[key]
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise HTTPException(status_code=422, detail=f"{key} deve ser inteiro")
+        if not minimum <= value <= maximum:
+            raise HTTPException(
+                status_code=422,
+                detail=f"{key} deve estar entre {minimum} e {maximum}",
+            )
 
     await luna_engine.update_config(safe_config)
     return {"status": "updated", "applied": list(safe_config.keys())}
