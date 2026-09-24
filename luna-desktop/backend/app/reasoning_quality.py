@@ -137,7 +137,10 @@ def build_operator_contract(message: str) -> OperatorContract:
     wants_bash = "bash" in normalized or "kali" in normalized
     one_command = any(
         marker in normalized
-        for marker in ("apenas um comando", "somente um comando", "um comando bash", "o comando bash")
+        for marker in (
+            "apenas um comando", "somente um comando", "exatamente um comando",
+            "um único comando", "um unico comando", "um comando bash", "o comando bash",
+        )
     )
     operator_executes = any(
         marker in normalized

@@ -58,6 +58,16 @@ _RETEST_MARKERS = (
     "instável", "instavel", "variável", "variavel", "timing", "race", "cache",
     "before/after", "antes e depois", "flaky", "intermitente", "mudou o estado",
 )
+
+_ONE_COMMAND_MARKERS = (
+    "apenas um comando", "somente um comando", "exatamente um comando",
+    "um único comando", "um unico comando",
+)
+
+
+def _asks_exactly_one_command(value: str) -> bool:
+    normalized = value.casefold()
+    return any(marker in normalized for marker in _ONE_COMMAND_MARKERS)
 _MENTOR_MARKERS = (
     "kali", "linux", "devtools", "network", "initiator", "header", "payload",
     "response", "curl", "nmap", "hydra", "ffuf", "gobuster", "sqlmap", "nuclei",
@@ -135,24 +145,57 @@ def _normalize_url(url: str) -> tuple[str, str]:
     return authority, resource
 
 
+def _canonical_observed_path(path: str) -> str:
+    """Strip prose punctuation while preserving meaningful route/query syntax."""
+    value = path.strip().rstrip(".,;:")
+    if "?" in value:
+        route, query = value.split("?", 1)
+        return f"{route.rstrip('.,;:')}?{query.rstrip('.,;:')}"
+    return value
+
+
 def _observed_route_paths(value: str) -> set[str]:
-    """Extract real route paths without misreading URL authorities as /paths."""
+    """Extract canonical route paths without misreading URL authorities as /paths."""
     urls = re.findall(r"https?://[^\s<>\]\)]+", value, re.IGNORECASE)
     scrubbed = re.sub(r"https?://[^\s<>\]\)]+", " ", value, flags=re.IGNORECASE)
     paths = {
-        path.casefold()
+        canonical.casefold()
         for path in _PATH_RE.findall(scrubbed)
-        if path and path != "/"
+        if (canonical := _canonical_observed_path(path)) not in {"", "/"}
     }
     for raw_url in urls:
         try:
-            _, resource = _normalize_url(raw_url)
+            _, resource = _normalize_url(raw_url.rstrip(".,;:"))
         except (TypeError, ValueError):
             continue
-        path = resource.split("?", 1)[0]
-        if path and path != "/":
+        path = _canonical_observed_path(resource.split("?", 1)[0])
+        if path not in {"", "/"}:
             paths.add(path.casefold())
     return paths
+
+
+_ROLE_MUTATION_RE = re.compile(
+    r"(?is)\b(?:mutar|alterar|forçar|forcar|injetar|mudar)\b.{0,100}\brole\b"
+)
+
+
+def _proposes_role_mutation(value: str) -> bool:
+    """Detect role-mutation proposals while ignoring explicit negations/prohibitions."""
+    for match in _ROLE_MUTATION_RE.finditer(value):
+        start = max(
+            value.rfind("\n", 0, match.start()),
+            value.rfind(".", 0, match.start()),
+            value.rfind(";", 0, match.start()),
+            value.rfind(":", 0, match.start()),
+        )
+        prefix = value[start + 1:match.start()].casefold()
+        if re.search(
+            r"\b(?:não|nao|nunca|jamais|sem|evite|evitar|proibido|proibida)\b",
+            prefix,
+        ):
+            continue
+        return True
+    return False
 
 
 def action_fingerprint(action: str) -> str | None:
@@ -326,10 +369,8 @@ def validate_model_response(
     normalized_response = response.casefold()
     asks_next_test = "próximo teste" in normalized_message or "proximo teste" in normalized_message
 
-    observed_paths_in_context = {
-        path.casefold() for path in _PATH_RE.findall(factual_context)
-    }
-    response_paths = {path.casefold() for path in _PATH_RE.findall(response)}
+    observed_paths_in_context = _observed_route_paths(factual_context)
+    response_paths = _observed_route_paths(response)
     if any(path not in observed_paths_in_context for path in response_paths):
         reasons.append("unobserved_endpoint_mentioned")
 
@@ -362,10 +403,7 @@ def validate_model_response(
 
     if proposed and action_history and ":/" in proposed:
         proposed_path = proposed[proposed.index(":/") + 1:].split("?", 1)[0].casefold()
-        observed_paths = {
-            path.casefold()
-            for path in _PATH_RE.findall(factual_context)
-        }
+        observed_paths = _observed_route_paths(factual_context)
         if proposed_path != "/" and proposed_path not in observed_paths:
             reasons.append("proposed_unobserved_endpoint")
 
@@ -424,18 +462,11 @@ def validate_model_response(
     )
     if proposes_unobserved_cookie:
         reasons.append("invented_input_not_observed")
-    if (
-        re.search(r"(?is)(?:mutar|alterar|forçar|forcar|injetar).{0,100}\brole\b", response)
-        and not re.search(
-            r"(?is)(?:mutar|alterar|forçar|forcar|injetar).{0,100}\brole\b",
-            message,
-        )
-    ):
+    if _proposes_role_mutation(response) and not _proposes_role_mutation(message):
         reasons.append("invented_role_mutation")
 
-    if "apenas um comando" in normalized_message or "somente um comando" in normalized_message:
-        if len(commands) != 1:
-            reasons.append(f"expected_one_command_got_{len(commands)}")
+    if _asks_exactly_one_command(message) and len(commands) != 1:
+        reasons.append(f"expected_one_command_got_{len(commands)}")
 
     if commands and commands[0].casefold().startswith("curl "):
         try:
@@ -462,8 +493,12 @@ def validate_model_response(
 
     observed_untested_paths = [
         path
-        for path in _PATH_RE.findall(message)
-        if re.search(rf"{re.escape(path)}.{{0,80}}(?:não|nao).{{0,20}}test", message, re.IGNORECASE | re.DOTALL)
+        for path in sorted(_observed_route_paths(message))
+        if re.search(
+            rf"{re.escape(path)}[\s.,;:)]*.{{0,80}}(?:não|nao).{{0,20}}test",
+            message,
+            re.IGNORECASE | re.DOTALL,
+        )
     ]
     if asks_next_test and observed_untested_paths and proposed:
         proposed_match = re.match(r"^http:([^:]+):.*:(/.*)$", proposed)
@@ -559,7 +594,7 @@ def validate_model_response(
             reasons.append("multi_evidence_fact_coverage_missing")
 
     if evidence_delta_count >= 4:
-        current_paths = {path.casefold() for path in _PATH_RE.findall(message)}
+        current_paths = _observed_route_paths(message)
         response_path_hits = sum(path in normalized_response for path in current_paths)
         evidence_concept_hits = sum(
             marker in normalized_response
@@ -610,9 +645,9 @@ def build_replan_instruction(
         )
     pending_paths = [
         path
-        for path in dict.fromkeys(_PATH_RE.findall(current_message))
+        for path in sorted(_observed_route_paths(current_message))
         if re.search(
-            rf"{re.escape(path)}.{{0,80}}(?:não|nao).{{0,20}}test",
+            rf"{re.escape(path)}[\s.,;:)]*.{{0,80}}(?:não|nao).{{0,20}}test",
             current_message,
             re.IGNORECASE | re.DOTALL,
         )
@@ -630,7 +665,7 @@ def build_replan_instruction(
         corrections.append(
             "explique que o client-side prova comportamento visual, mas não prova autorização backend"
         )
-    if "apenas um comando" in normalized_current or "somente um comando" in normalized_current:
+    if _asks_exactly_one_command(current_message):
         corrections.append("forneça exatamente um comando curl, somente com -i e -H")
     observed_statuses = list(dict.fromkeys(re.findall(r"\b(?:401|403|200)\b", current_message)))
     observed_paths = sorted(_observed_route_paths(current_message))

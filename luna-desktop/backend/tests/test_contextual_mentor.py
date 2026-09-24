@@ -185,6 +185,15 @@ class ScenarioAndRouterTests(unittest.TestCase):
         self.assertIn("multiple_endpoints=2", route.reasons)
         self.assertNotIn("multiple_endpoints=3", route.reasons)
 
+    def test_router_canonicalizes_trailing_prose_punctuation(self) -> None:
+        route = classify_complexity(
+            "Target http://127.0.0.1:8080. GET /api/me com token. "
+            "GET /api/admin/users com token. Bundle referencia /api/admin/users.",
+            evidence_delta_count=0,
+        )
+        self.assertIn("multiple_endpoints=2", route.reasons)
+        self.assertNotIn("multiple_endpoints=3", route.reasons)
+
     def test_router_covers_none_low_medium(self) -> None:
         fast = classify_complexity("olá", evidence_delta_count=0)
         analyze = classify_complexity(COMPLEX_FIXTURE, evidence_delta_count=12)
@@ -279,6 +288,42 @@ class ScenarioAndRouterTests(unittest.TestCase):
         )
 
         self.assertTrue(validation.valid, validation.reasons)
+
+    def test_negated_role_mutation_language_is_not_treated_as_proposal(self) -> None:
+        context = ScenarioContext()
+        context.update(OLD_CONTEXT)
+        delta = context.update(COMPLEX_FIXTURE)
+        response = GOOD_COMPLEX_RESPONSE.replace(
+            "HIPÓTESE: /api/admin/users pode exigir role admin no servidor.",
+            "HIPÓTESE: /api/admin/users pode exigir role admin no servidor. "
+            "O teste deve permanecer sem alterar a role nem o token.",
+        )
+
+        validation = validate_model_response(
+            message=COMPLEX_FIXTURE,
+            response=response,
+            scenario=context,
+            evidence_delta_count=delta.count,
+        )
+
+        self.assertTrue(validation.valid, validation.reasons)
+        self.assertNotIn("invented_role_mutation", validation.reasons)
+
+    def test_positive_unobserved_role_mutation_remains_rejected(self) -> None:
+        context = ScenarioContext()
+        context.update(OLD_CONTEXT)
+        delta = context.update(COMPLEX_FIXTURE)
+        response = GOOD_COMPLEX_RESPONSE + "\nTente alterar a role para admin antes do teste."
+
+        validation = validate_model_response(
+            message=COMPLEX_FIXTURE,
+            response=response,
+            scenario=context,
+            evidence_delta_count=delta.count,
+        )
+
+        self.assertFalse(validation.valid)
+        self.assertIn("invented_role_mutation", validation.reasons)
 
     def test_semantic_login_reference_counts_as_current_evidence(self) -> None:
         context = ScenarioContext()

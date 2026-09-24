@@ -28,6 +28,14 @@ class ReasoningQualityTests(unittest.TestCase):
         self.assertTrue(contract.wants_bash)
         self.assertTrue(contract.operator_executes)
 
+    def test_contract_recognizes_exactly_one_command_wording(self) -> None:
+        contract = build_operator_contract(
+            "Target http://127.0.0.1:8080. Forneça EXATAMENTE UM comando, sem executá-lo."
+        )
+        self.assertTrue(contract.wants_command)
+        self.assertTrue(contract.one_command)
+        self.assertEqual(contract.target_hosts, ("127.0.0.1",))
+
     def test_correct_nmap_command_scores_high(self) -> None:
         response = "```bash\nnmap -sV -sC wifhoodie.com -oN wifhoodie_initial.txt\n```"
         score = score_response_quality(PROMPT, response)

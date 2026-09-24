@@ -1101,8 +1101,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             request_kwargs: Dict[str, Any] = {
                 "model": model_name,
                 "messages": msgs,
-                # Ollama counts hidden reasoning and visible answer in this budget.
-                # Keep FAST lean while reserving enough room for a final answer.
+                # Keep FAST lean while reserving enough room for the visible final answer.
+                # Native reasoning is disabled on the current 4B local fallback unless explicitly enabled.
                 "max_tokens": max_tokens,
                 "stream": True,
                 **self._openai_request_overrides(client, reasoning_effort),
@@ -1562,7 +1562,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         ):
             effective_reasoning_effort = "none"
             turn_telemetry["effort_fallback_reason"] = (
-                "qwen4b_hidden_reasoning_exhausts_visible_output_budget"
+                "qwen4b_native_reasoning_disabled_for_visible_output_budget"
             )
         turn_telemetry["effective_reasoning_effort"] = effective_reasoning_effort
 
@@ -1983,9 +1983,12 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     message,
                 )
                 normalized_message = message.casefold()
-                if (
-                    "apenas um comando" in normalized_message
-                    or "somente um comando" in normalized_message
+                if any(
+                    marker in normalized_message
+                    for marker in (
+                        "apenas um comando", "somente um comando", "exatamente um comando",
+                        "um único comando", "um unico comando",
+                    )
                 ):
                     observed_bearer = re.search(
                         r"(?i)Authorization\s*:\s*Bearer\s+([^\s\r\n]+)",
