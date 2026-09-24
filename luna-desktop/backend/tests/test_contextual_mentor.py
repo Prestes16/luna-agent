@@ -42,7 +42,11 @@ def scripted_model(engine: LunaEngine, *responses: str):
         reasoning_effort=None,
         turn_telemetry=None,
     ):
-        response = remaining.pop(0)
+        scripted = remaining.pop(0)
+        if isinstance(scripted, tuple):
+            response, forced_finish_reason = scripted
+        else:
+            response, forced_finish_reason = scripted, None
         if turn_telemetry is not None:
             turn_telemetry["llm_called"] = True
             turn_telemetry["request_count"] += 1
@@ -51,7 +55,7 @@ def scripted_model(engine: LunaEngine, *responses: str):
                 "chunks": turn_telemetry.get("chunks", 0) + max(1, len(response) // 32),
                 "elapsed_ms": 1.0,
                 "first_token_ms": 0.5 if response else None,
-                "finish_reason": "stop" if response else "length",
+                "finish_reason": forced_finish_reason or ("stop" if response else "length"),
             })
         history_out[:] = [*messages, {"role": "assistant", "content": response}]
         for start in range(0, len(response), 32):
@@ -137,6 +141,18 @@ class ModelFirstPipelineTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(metadata["request_count"], 1)
         self.assertEqual(metadata["loop_guard"], "retest_allowed")
 
+    async def test_length_stop_forces_one_replan_even_when_partial_text_looks_valid(self) -> None:
+        text, _, metadata = await self.collect(
+            COMPLEX_FIXTURE,
+            "truncated",
+            (GOOD_COMPLEX_RESPONSE, "length"),
+            GOOD_COMPLEX_RESPONSE,
+        )
+        self.assertEqual(text, GOOD_COMPLEX_RESPONSE)
+        self.assertEqual(metadata["request_count"], 2)
+        self.assertTrue(metadata["replan_used"])
+        self.assertEqual(metadata["loop_guard"], "replan_passed")
+
     async def test_fast_greeting_still_uses_model(self) -> None:
         text, _, metadata = await self.collect("olá", "fast", "Olá! Como posso ajudar?")
         self.assertEqual(text, "Olá! Como posso ajudar?")
@@ -156,6 +172,14 @@ class ScenarioAndRouterTests(unittest.TestCase):
         self.assertIn("/api/admin/users", prompt)
         self.assertIn("Authorization Bearer observado: TEST_TOKEN_123", "\n".join(context.observed_facts))
         self.assertIn("TEST_TOKEN_123", "\n".join(context.observed_facts))
+
+    def test_router_does_not_count_url_authority_as_endpoint(self) -> None:
+        route = classify_complexity(
+            "Target http://127.0.0.1:8080. GET /api/me. GET /api/admin/users.",
+            evidence_delta_count=0,
+        )
+        self.assertIn("multiple_endpoints=2", route.reasons)
+        self.assertNotIn("multiple_endpoints=3", route.reasons)
 
     def test_router_covers_none_low_medium(self) -> None:
         fast = classify_complexity("olá", evidence_delta_count=0)
