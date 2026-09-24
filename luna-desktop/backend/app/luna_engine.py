@@ -1932,7 +1932,6 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 scenario=scenario,
                 evidence_delta_count=evidence_delta.count,
             )
-                validation = apply_generation_completion_guard(validation)
             validation = apply_generation_completion_guard(validation)
             self.harness.checkpoint(
                 harness_trace,
@@ -2043,6 +2042,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     scenario=scenario,
                     evidence_delta_count=evidence_delta.count,
                 )
+                validation = apply_generation_completion_guard(validation)
                 self.harness.checkpoint(
                     harness_trace,
                     stage="replan_validation",
