@@ -483,6 +483,12 @@ class LunaEngine:
         self.supervised_executor = SupervisedExecutor(
             self._build_supervised_execution_policy()
         )
+        self._execution_backend_error: str | None = None
+        self._execution_backend_public: dict[str, Any] = {
+            "kind": "local-subprocess",
+            "ready": True,
+        }
+        self._configure_supervised_execution_backend()
         self.execution_approval_store = ExecutionApprovalStore()
         # Optional synchronous callback installed by the local API layer to persist
         # exact stdout/stderr bytes into a project evidence vault.
@@ -509,6 +515,61 @@ class LunaEngine:
 
     def _refresh_supervised_executor_policy(self) -> None:
         self.supervised_executor.policy = self._build_supervised_execution_policy()
+
+    def _configure_supervised_execution_backend(self) -> None:
+        """Configure where approved commands run; never silently fall back across backends."""
+        requested = str(os.getenv("LUNA_EXEC_BACKEND", "local-subprocess") or "").strip().casefold()
+        if requested in {"", "local", "local-subprocess"}:
+            # Keep the executor's built-in subprocess runner.
+            self.supervised_executor.backend_name = "local-subprocess"
+            self._execution_backend_error = None
+            self._execution_backend_public = {
+                "kind": "local-subprocess",
+                "ready": True,
+            }
+            return
+
+        if requested not in {"kali-ssh", "ssh", "kali"}:
+            self._execution_backend_error = f"unsupported execution backend: {requested}"
+            self.supervised_executor.policy = SupervisedExecutionPolicy(enabled=False)
+            self.supervised_executor.backend_name = "invalid-backend"
+            self._execution_backend_public = {
+                "kind": requested or "unknown",
+                "ready": False,
+                "error": self._execution_backend_error,
+            }
+            return
+
+        try:
+            config = SSHExecutionConfig(
+                host=os.getenv("LUNA_KALI_SSH_HOST", ""),
+                user=os.getenv("LUNA_KALI_SSH_USER", ""),
+                port=_env_int("LUNA_KALI_SSH_PORT", 22, 1, 65535),
+                identity_file=os.getenv("LUNA_KALI_SSH_IDENTITY", ""),
+                known_hosts_file=os.getenv("LUNA_KALI_SSH_KNOWN_HOSTS", ""),
+                host_key_policy=os.getenv("LUNA_KALI_SSH_HOST_KEY_POLICY", "strict"),
+                connect_timeout_seconds=_env_int(
+                    "LUNA_KALI_SSH_CONNECT_TIMEOUT", 10, 1, 120
+                ),
+            ).validated()
+            self.supervised_executor._runner = build_ssh_runner(config)
+            self.supervised_executor.backend_name = "kali-ssh"
+            self._execution_backend_error = None
+            self._execution_backend_public = {
+                "kind": "kali-ssh",
+                "ready": True,
+                "ssh": config.public_dict(),
+            }
+        except (TypeError, ValueError) as error:
+            # Fail closed. If Kali SSH was requested, never fall back to the Windows host.
+            self._execution_backend_error = str(error)
+            self.supervised_executor.policy = SupervisedExecutionPolicy(enabled=False)
+            self.supervised_executor.backend_name = "kali-ssh-unavailable"
+            self._execution_backend_public = {
+                "kind": "kali-ssh",
+                "ready": False,
+                "error": self._execution_backend_error,
+            }
 
     def _tool_execution_allowed(self) -> bool:
         """Hard invariant for the current build: model tools never execute on the host."""
@@ -2480,6 +2541,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             "supervised_mode": not self._tool_execution_allowed(),
             "tool_execution_allowed": self._tool_execution_allowed(),
             "supervised_executor": self.supervised_executor.public_policy(),
+            "execution_backend": dict(self._execution_backend_public),
             "supervised_approvals_pending": self.execution_approval_store.count(),
             "harness": self.harness.public_policy(),
             "harness_retrieval_cache_entries": self.harness.retrieval_cache.size(),
