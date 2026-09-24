@@ -2377,6 +2377,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             target=preview.get("target"),
             authority_level=str(preview.get("authority_level")),
             ttl_seconds=ttl_seconds,
+            scope_key=conversation_id,
             allow_destructive=allow_destructive,
             allow_persistent_change=allow_persistent_change,
         )
@@ -2386,6 +2387,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             "command_sha256": approval.command_sha256,
             "target": approval.target,
             "authority_level": approval.authority_level,
+            "scope_key": approval.scope_key,
             "issued_at": approval.issued_at,
             "expires_at": approval.expires_at,
             "allow_destructive": approval.allow_destructive,
@@ -2431,6 +2433,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 if scenario is not None else None
             ),
             approval=approval,
+            approval_scope_key=conversation_id,
         )
 
         evidence_records: list[dict[str, Any]] = []
