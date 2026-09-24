@@ -79,6 +79,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from app.harness_checkpoints import CheckpointStore
 from app.luna_engine import LunaEngine
+from app.memory_plane import classify_sensitive_artifact
 from app.models import ChatRequest, ChatResponse
 from app.project_store import ProjectNotFoundError, ProjectStore, ProjectValidationError
 from app.security import LunaSecurityMiddleware, audit, sanitizer
@@ -100,6 +101,33 @@ security_scanner: Optional[SecurityScanner] = None
 blockchain_service: Optional[BlockchainService] = None
 project_store = ProjectStore()
 
+
+def _persist_execution_evidence(
+    conversation_id: str,
+    command_sha256: str,
+    kind: str,
+    raw: bytes,
+    observed_at: str | None,
+):
+    project_match = re.fullmatch(r"project-(\d{1,10})", str(conversation_id or ""))
+    if not project_match:
+        return None
+    project_id = int(project_match.group(1))
+    sensitivity = classify_sensitive_artifact(
+        raw.decode("utf-8", errors="replace")
+    )
+    return project_store.add_evidence_artifact(
+        project_id,
+        data=raw,
+        kind=f"execution-{kind}",
+        media_type="text/plain",
+        source=f"supervised-execution:{command_sha256}",
+        description="exact supervised execution output",
+        sensitivity=sensitivity,
+        observed_at=observed_at,
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup and shutdown events"""
@@ -109,6 +137,7 @@ async def lifespan(app: FastAPI):
     
     # Initialize services
     luna_engine = LunaEngine()
+    luna_engine.execution_evidence_sink = _persist_execution_evidence
     try:
         ttl_days = max(1, int(os.getenv("LUNA_CHECKPOINT_TTL_DAYS", "30")))
     except ValueError:
