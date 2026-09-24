@@ -1,6 +1,6 @@
 """Deterministic prompt compiler for the optional Luna Cyber Kernel v1.
 
-The compiler is intentionally read-only and side-effect free. It selects a compact
+The compiler is read-only and side-effect free. It selects a compact semantic
 subset of repository-owned instruction modules for the current turn. Execution,
 authorization, validation, and evidence remain harness responsibilities.
 """
@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable
+from typing import Iterable, Sequence
 
 
 PROMPT_ROOT = Path(__file__).resolve().parents[3] / "prompts" / "cyber"
@@ -30,7 +30,7 @@ _SKILL_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
 _OUTPUT_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("EXPLOIT PROOF", ("poc", "proof of concept", "exploit", "reproducer", "comprovar", "validar achado")),
     ("BINARY / MEMORY", ("binary", "crash", "gdb", "pwndbg", "heap", "stack", "rop", "reverse engineering")),
-    ("WEB / API", ("http", "api", "jwt", "idor", "bola", "graphql", "cors", "ssrf")),
+    ("WEB / API", ("http", "api", "jwt", "idor", "bola", "graphql", "cors", "ssrf", "curl")),
     ("WEB3", ("solana", "anchor", "ethereum", "solidity", "pda", "smart contract")),
     ("REPORT-GRADE FINDING", ("report", "relatório", "finding", "hackerone", "immunefi")),
 )
@@ -39,6 +39,22 @@ _TOOL_MARKERS = (
     "comando", "command", "curl", "nmap", "ffuf", "burp", "gdb", "ghidra",
     "solana", "anchor", "foundry", "cast", "tool", "ferramenta",
 )
+
+_CORE_RUNTIME_SECTIONS = (
+    "MISSION",
+    "AUTHORITY MODEL",
+    "BUILD-TO-BREAK",
+    "QUANTITATIVE INTEGRITY",
+    "RESPONSE DISCIPLINE",
+)
+
+_EPISTEMIC_RUNTIME_SECTIONS = (
+    "Transições válidas",
+    "Fonte e precedência",
+    "Capability truthfulness",
+)
+
+_OMISSION_MARKER = "[OMITTED BY PROMPT BUDGET]"
 
 
 @dataclass(frozen=True)
@@ -53,7 +69,38 @@ class CyberPromptCompilation:
         return len(self.text)
 
 
-def _read_prompt(name: str, max_chars: int) -> str:
+def _clip_at_boundary(text: str, max_chars: int) -> str:
+    """Bound text without cutting through a word or semantic line."""
+    value = text.strip()
+    if max_chars <= 0:
+        return ""
+    if len(value) <= max_chars:
+        return value
+
+    marker = f"\n{_OMISSION_MARKER}"
+    payload_budget = max_chars - len(marker)
+    if payload_budget <= 0:
+        return _OMISSION_MARKER[:max_chars]
+
+    candidate = value[:payload_budget]
+    boundaries = (
+        candidate.rfind("\n\n"),
+        candidate.rfind("\n"),
+        candidate.rfind(". "),
+        candidate.rfind("; "),
+        candidate.rfind(": "),
+    )
+    cut = max(boundaries)
+    if cut < max(80, payload_budget // 2):
+        cut = candidate.rfind(" ")
+    if cut <= 0:
+        return _OMISSION_MARKER[:max_chars]
+
+    clipped = candidate[:cut].rstrip(" \t,;:")
+    return f"{clipped}{marker}"
+
+
+def _read_prompt(name: str) -> str:
     root = PROMPT_ROOT.resolve()
     path = (root / name).resolve()
     try:
@@ -61,13 +108,12 @@ def _read_prompt(name: str, max_chars: int) -> str:
     except ValueError:
         return ""
     try:
-        text = path.read_text(encoding="utf-8").strip()
+        return path.read_text(encoding="utf-8").strip()
     except (OSError, UnicodeError):
         return ""
-    return text[:max_chars].rstrip()
 
 
-def _section(text: str, heading: str, max_chars: int) -> str:
+def _section(text: str, heading: str) -> str:
     match = re.search(
         rf"(?ms)^##\s+{re.escape(heading)}\s*$\n(.*?)(?=^##\s|\Z)",
         text,
@@ -75,8 +121,21 @@ def _section(text: str, heading: str, max_chars: int) -> str:
     )
     if not match:
         return ""
-    body = match.group(1).strip()
-    return f"## {heading}\n{body}"[:max_chars].rstrip()
+    return f"## {heading}\n{match.group(1).strip()}"
+
+
+def _compose_sections(text: str, headings: Sequence[str]) -> str:
+    return "\n\n".join(
+        section
+        for heading in headings
+        if (section := _section(text, heading))
+    )
+
+
+def _tool_epistemology_core(text: str) -> str:
+    """Keep the universal tool contract; domain specifics live in the active skill."""
+    prefix, _, _ = text.partition("## Exemplos de classes")
+    return prefix.strip()
 
 
 def _matches(message: str, markers: Iterable[str]) -> bool:
@@ -104,16 +163,19 @@ def compile_cyber_kernel(
     supervised_mode: bool = True,
     max_chars: int = 5_200,
 ) -> CyberPromptCompilation:
-    """Compile a bounded prompt for one turn without executing anything."""
-    core = _read_prompt("core.md", 3_250)
-    epistemic = _read_prompt("epistemic.md", 1_450)
-    skills = _read_prompt("skills.md", 10_000)
-    outputs = _read_prompt("output-contracts.md", 8_000)
-    tools = _read_prompt("tool-contracts.md", 950)
+    """Compile a bounded semantic prompt for one turn without executing anything."""
+    core = _read_prompt("core.md")
+    epistemic = _read_prompt("epistemic.md")
+    skills = _read_prompt("skills.md")
+    outputs = _read_prompt("output-contracts.md")
+    tools = _read_prompt("tool-contracts.md")
 
     selected_skill = select_skill(message)
     selected_output = select_output_contract(message)
     include_tools = _matches(message, _TOOL_MARKERS)
+
+    core_runtime = _compose_sections(core, _CORE_RUNTIME_SECTIONS)
+    epistemic_runtime = _compose_sections(epistemic, _EPISTEMIC_RUNTIME_SECTIONS)
 
     parts = [
         "LUNA CYBER KERNEL V1 — COMPILED",
@@ -122,25 +184,30 @@ def compile_cyber_kernel(
             if supervised_mode
             else "EXECUTION PLANE: restricted runtime tools enabled by harness."
         ),
-        core,
-        epistemic,
+        (
+            "IDENTITY: Luna Cyber; copilota técnica privada de segurança ofensiva e "
+            "engenharia. Evidência atual prevalece sobre memória e prior do modelo."
+        ),
+        core_runtime,
+        epistemic_runtime,
     ]
 
     if selected_skill:
-        skill_section = _section(skills, selected_skill, 800)
+        skill_section = _section(skills, selected_skill)
         if skill_section:
             parts.extend(("", f"ACTIVE CYBER SKILL: {selected_skill}", skill_section))
 
-    output_section = _section(outputs, selected_output, 550)
+    output_section = _section(outputs, selected_output)
     if output_section:
         parts.extend(("", f"ACTIVE OUTPUT CONTRACT: {selected_output}", output_section))
 
     if include_tools:
-        parts.extend(("", "TOOL EPISTEMOLOGY", tools))
+        tool_core = _tool_epistemology_core(tools)
+        if tool_core:
+            parts.extend(("", "TOOL EPISTEMOLOGY", tool_core))
 
     compiled = "\n".join(part for part in parts if part is not None).strip()
-    if len(compiled) > max_chars:
-        compiled = compiled[:max_chars].rstrip()
+    compiled = _clip_at_boundary(compiled, max_chars)
 
     return CyberPromptCompilation(
         text=compiled,
