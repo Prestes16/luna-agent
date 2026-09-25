@@ -139,15 +139,15 @@ def build_operator_contract(message: str) -> OperatorContract:
     )
     negated_command_request = bool(
         re.search(
-            r"(?is)\\b(?:não|nao|sem|do not|don't|without)\\b.{0,48}"
-            r"\\b(?:execut(?:e|ar)|rod(?:e|ar)|forne[cç](?:a|er)|ger(?:e|ar)|produza|"
-            r"run|execute|provide|generate|give)\\b.{0,48}"
-            r"\\b(?:comando|comandos|command|commands)\\b",
+            r"(?is)\b(?:não|nao|sem|do not|don't|without)\b.{0,48}"
+            r"\b(?:execut(?:e|ar)|rod(?:e|ar)|forne[cç](?:a|er)|ger(?:e|ar)|produza|"
+            r"run|execute|provide|generate|give)\b.{0,48}"
+            r"\b(?:comando|comandos|command|commands)\b",
             normalized,
         )
         or re.search(
-            r"(?is)\\b(?:não|nao)\\s+(?:quero|preciso)\\b.{0,32}"
-            r"\\b(?:comando|comandos|command|commands)\\b",
+            r"(?is)\b(?:não|nao)\s+(?:quero|preciso)\b.{0,32}"
+            r"\b(?:comando|comandos|command|commands)\b",
             normalized,
         )
     )
