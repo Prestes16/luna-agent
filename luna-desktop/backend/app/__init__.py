@@ -14,7 +14,9 @@
 # enforces correct local privacy prerequisite discovery before remote validation;
 # stage 16 calibrates strong cyber conclusions against explicit construction/mechanism evidence;
 # stage 17 calibrates quantitative and physical conclusions against math/measurement evidence;
-# stage 18 enforces exact integer-arithmetic semantics and bounded rounding claims;\n# stage 19 aligns model-visible action labels with deterministic execution semantics\n# and prevents untested endpoints from becoming synthetic negative evidence.
+# stage 18 enforces exact integer-arithmetic semantics and bounded rounding claims;
+# stage 19 aligns model-visible action labels with deterministic execution semantics
+# and prevents untested endpoints from becoming synthetic negative evidence.
 from . import reasoning_pipeline as _reasoning_pipeline
 from . import reasoning_quality as _reasoning_quality
 from . import reasoning_runtime_patch as _stage1
@@ -32,7 +34,8 @@ from . import reasoning_runtime_patch_v14 as _stage14
 from . import reasoning_runtime_patch_v15 as _stage15
 from . import reasoning_runtime_patch_v16 as _stage16
 from . import reasoning_runtime_patch_v17 as _stage17
-from . import reasoning_runtime_patch_v18 as _stage18\nfrom . import reasoning_runtime_patch_v19 as _stage19
+from . import reasoning_runtime_patch_v18 as _stage18
+from . import reasoning_runtime_patch_v19 as _stage19
 from .command_policy import effective_tool as _effective_tool
 from .command_policy import parse_effective_command as _parse_effective_command
 from .reasoning_runtime_patch_v6 import action_fingerprint as _patched_action_fingerprint
