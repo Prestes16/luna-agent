@@ -6,6 +6,7 @@ from app.scenario_context import ScenarioContext
 
 BASE_MESSAGE = """CTF local autorizado.
 Target observado: http://127.0.0.1:8080
+Authorization: Bearer TEST_TOKEN_123
 GET /api/audit/export ainda NÃO foi testado.
 Forneça EXATAMENTE UM comando curl para GET /api/audit/export.
 Classifique a ação como L0, L1, L2 ou L3.
@@ -26,7 +27,7 @@ HYPOTHESIS
 O resultado do request permanece desconhecido até o teste.
 
 NEXT TEST
-curl -i http://127.0.0.1:8080/api/audit/export
+curl -i -H "Authorization: Bearer TEST_TOKEN_123" http://127.0.0.1:8080/api/audit/export
 CLASSIFICAÇÃO: L1
 TIPO: PROPOSED_ACTION
 EXECUTED_ACTION: NÃO
@@ -58,6 +59,7 @@ class Stage19ExecutionSemanticsTests(unittest.TestCase):
         self.assertNotIn("execution_state_not_explicit", result.reasons)
         self.assertNotIn("untested_endpoint_negative_evidence_claim", result.reasons)
         self.assertNotIn("hypothesis_leaked_into_facts", result.reasons)
+        self.assertTrue(result.valid, result.reasons)
 
     def test_untested_endpoint_cannot_have_synthetic_absence_of_200(self) -> None:
         scenario, count = _scenario()
@@ -88,6 +90,21 @@ class Stage19ExecutionSemanticsTests(unittest.TestCase):
         )
         self.assertFalse(result.valid)
         self.assertIn("hypothesis_leaked_into_facts", result.reasons)
+
+    def test_english_next_test_requires_observed_bearer_in_command(self) -> None:
+        scenario, count = _scenario()
+        response = GOOD_RESPONSE.replace(
+            '-H "Authorization: Bearer TEST_TOKEN_123" ',
+            "",
+        )
+        result = validate_model_response(
+            message=BASE_MESSAGE + "\nNEXT TEST\n",
+            response=response,
+            scenario=scenario,
+            evidence_delta_count=count,
+        )
+        self.assertFalse(result.valid)
+        self.assertIn("observed_user_credential_missing_from_test", result.reasons)
 
     def test_execution_state_must_be_explicit_when_operator_requires_it(self) -> None:
         scenario, count = _scenario()
