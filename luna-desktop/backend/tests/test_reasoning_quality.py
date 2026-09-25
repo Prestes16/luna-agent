@@ -36,6 +36,20 @@ class ReasoningQualityTests(unittest.TestCase):
         self.assertTrue(contract.one_command)
         self.assertEqual(contract.target_hosts, ("127.0.0.1",))
 
+    def test_contract_binds_bearer_and_execution_state_for_next_test(self) -> None:
+        contract = build_operator_contract(
+            "NEXT TEST: Authorization: Bearer TEST_TOKEN_123. "
+            "Forneça EXATAMENTE UM comando curl. "
+            "Identifique como PROPOSED_ACTION e deixe explícito que NÃO é EXECUTED_ACTION."
+        )
+        self.assertEqual(contract.required_bearer, "TEST_TOKEN_123.")
+        self.assertTrue(contract.requires_proposed_action)
+        self.assertTrue(contract.requires_not_executed)
+        prompt = contract.to_prompt()
+        self.assertIn("header_obrigatorio=Authorization: Bearer TEST_TOKEN_123.", prompt)
+        self.assertIn("estado=PROPOSED_ACTION", prompt)
+        self.assertIn("EXECUTED_ACTION=NÃO", prompt)
+
     def test_correct_nmap_command_scores_high(self) -> None:
         response = "```bash\nnmap -sV -sC wifhoodie.com -oN wifhoodie_initial.txt\n```"
         score = score_response_quality(PROMPT, response)
