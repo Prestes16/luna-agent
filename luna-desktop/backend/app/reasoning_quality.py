@@ -127,12 +127,36 @@ def _target_hosts(message: str) -> tuple[str, ...]:
 
 def build_operator_contract(message: str) -> OperatorContract:
     normalized = message.casefold()
-    wants_command = any(
+    strong_command_request = any(
         marker in normalized
         for marker in (
-            "comando", "command", "me dê o comando", "me de o comando",
-            "pra eu executar", "para eu executar", "rode", "rodar", "execute",
+            "me dê o comando", "me de o comando", "forneça o comando", "forneca o comando",
+            "forneça exatamente um comando", "forneca exatamente um comando",
+            "apenas um comando", "somente um comando", "exatamente um comando",
+            "um único comando", "um unico comando", "um comando bash", "o comando bash",
+            "pra eu executar", "para eu executar",
         )
+    )
+    negated_command_request = bool(
+        re.search(
+            r"(?is)\\b(?:não|nao|sem|do not|don't|without)\\b.{0,48}"
+            r"\\b(?:execut(?:e|ar)|rod(?:e|ar)|forne[cç](?:a|er)|ger(?:e|ar)|produza|"
+            r"run|execute|provide|generate|give)\\b.{0,48}"
+            r"\\b(?:comando|comandos|command|commands)\\b",
+            normalized,
+        )
+        or re.search(
+            r"(?is)\\b(?:não|nao)\\s+(?:quero|preciso)\\b.{0,32}"
+            r"\\b(?:comando|comandos|command|commands)\\b",
+            normalized,
+        )
+    )
+    generic_command_signal = any(
+        marker in normalized
+        for marker in ("comando", "command", "rode", "rodar", "execute")
+    )
+    wants_command = strong_command_request or (
+        generic_command_signal and not negated_command_request
     )
     wants_bash = "bash" in normalized or "kali" in normalized
     one_command = any(
