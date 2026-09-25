@@ -94,7 +94,6 @@ class SkillRouter:
             explicit_forms = (
                 f"/skill {name.casefold()}",
                 f"skill:{name.casefold()}",
-                name.casefold(),
             )
             explicit = any(form in current for form in explicit_forms)
             auto_enabled = self._truthy(metadata.get("luna-auto-activate"))

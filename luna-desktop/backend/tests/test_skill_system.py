@@ -230,6 +230,15 @@ metadata:
             )
         self.assertEqual(decision.selected_skills, ("manual-only",))
 
+    def test_bare_skill_name_is_not_a_manual_override(self) -> None:
+        decision = self.select("Explique o nome supply-chain-risk-auditor sem executar uma auditoria.")
+        candidates = {
+            candidate.name: candidate
+            for candidate in decision.candidates
+        }
+        if "supply-chain-risk-auditor" in candidates:
+            self.assertFalse(candidates["supply-chain-risk-auditor"].explicit)
+
     def test_scenario_context_alone_cannot_auto_activate_a_skill(self) -> None:
         decision = self.select(
             "e agora?",
