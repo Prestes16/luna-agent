@@ -18,6 +18,10 @@ metadata:
   luna-network: "deny"
   luna-execution: "instruction-only"
   luna-evidence: "required"
+  luna-admission: "on-demand"
+  luna-context-cost: "medium"
+  luna-auto-min-score: "10"
+  luna-exclusive-group: "change-review"
 allowed-tools: Read Grep Glob Bash
 ---
 

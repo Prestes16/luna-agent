@@ -19,6 +19,10 @@ metadata:
   luna-network: "conditional"
   luna-execution: "instruction-only"
   luna-evidence: "required"
+  luna-admission: "on-demand"
+  luna-context-cost: "high"
+  luna-auto-min-score: "10"
+  luna-exclusive-group: "static-analysis"
 allowed-tools: Read Grep Glob Bash
 ---
 

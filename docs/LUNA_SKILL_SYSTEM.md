@@ -2,172 +2,250 @@
 
 ## Purpose
 
-Agent Skills are Luna's procedural knowledge layer. They tell the model **how to perform a class of work** without changing who is allowed to execute host actions.
+Agent Skills are Luna's procedural knowledge layer. They explain **how to perform a class of work** without changing who is allowed to execute host actions.
+
+The runtime now separates three decisions:
 
 ```text
-User
-  -> Luna/Qwen
-  -> Reasoning Pipeline
-  -> SkillRouter (deterministic, max 2)
-  -> SkillLoader (read-only SKILL.md)
-  -> bounded procedural prompt context
-  -> AgentHarness / validators
+Current user request
+  -> SkillRouter
+       discovers/ranks up to 6 relevant candidates
+  -> SkillAdmissionPolicy
+       decides which candidates are actually worth prompt context
+       hard limits: max 2 active skills / context budget 5
+  -> SkillLoader
+       injects only bounded excerpts from admitted SKILL.md files
+  -> AgentHarness / output validators
   -> response
 
-Any real command execution remains a separate path:
+Real execution remains a separate path:
 operator request -> ExecutionIntent -> host safety -> supervised executor
 ```
 
-## Invariants
+## Non-negotiable invariants
 
 1. `INSTRUCTION_ONLY_BUILD = True` remains unchanged.
 2. `HarnessPolicy.max_tool_calls = 0` remains unchanged.
-3. `allowed-tools` in a skill is descriptive metadata, never authority.
+3. `allowed-tools` is descriptive skill metadata, never execution authority.
 4. Skill loading never executes scripts.
 5. Skills cannot alter scope, approval, `ExecutionIntent`, host safety or executor policy.
-6. Only enabled skills enter routing.
-7. Current-turn intent dominates routing; stale ScenarioContext cannot activate a skill by itself.
-8. Manual `/skill <name>` activation is allowed for an installed/enabled skill.
-9. At most two skills enter one turn by default.
-10. External/adapted skills carry provenance and license metadata.
+6. Current-turn intent is required for automatic activation. Stale ScenarioContext alone cannot activate a skill.
+7. Manual `/skill <name>` and `skill:<name>` selection has routing precedence.
+8. Automatic admission is bounded by relevance, exclusive groups and context cost.
+9. At most two skills enter one model turn by default.
+10. Every rejected candidate is observable through admission telemetry.
 
-## Configuration
+## Why routing and admission are separate
 
-`LUNA_SKILLS_ENABLED=true|false` controls the complete subsystem.
+A large installed catalog is useful only if the model does not receive every procedure on every turn.
 
-If `LUNA_ENABLED_SKILLS` is **unset**, Luna discovers every valid installed skill under
-`luna-desktop/backend/skills/<name>/SKILL.md`.
+`SkillRouter` answers:
 
-If `LUNA_ENABLED_SKILLS` is set, it becomes an explicit comma-separated allowlist.
+> Which skills look relevant to the current request?
 
-Example:
+`SkillAdmissionPolicy` answers:
 
-```text
-LUNA_SKILLS_ENABLED=true
-LUNA_ENABLED_SKILLS=audit-context-building,solana-vulnerability-scanner
-```
+> Which of those candidates are sufficiently relevant, compatible and worth spending context on now?
 
-This lets us isolate one skill during regression tests without editing code.
+A candidate may therefore be correctly detected and still be rejected from prompt context.
 
-## Routing model
+Examples:
 
-Priority order:
+- a high-context skill with weak intent -> rejected as `insufficient_relevance`;
+- a second skill from the same exclusive capability group -> rejected;
+- a third otherwise-useful skill -> rejected by `max_active_skills_reached`;
+- a skill that would exceed the context budget -> rejected;
+- an explicit operator selection -> may override the soft context budget, but never the hard two-skill limit.
 
-1. explicit `/skill name` or `skill:name`;
-2. current-message triggers;
-3. Luna skill priority for resolving generic vs specialist overlap;
-4. scenario context only for prerequisite continuity such as “a confirmed finding already exists”.
+## Admission metadata
 
-A skill may declare:
+Luna-specific metadata fields include:
+
+- `luna-auto-activate`
+- `luna-priority`
 - `luna-triggers`
 - `luna-exclude-triggers`
 - `luna-requires-current-any`
 - `luna-requires-any`
 - `luna-context-triggers`
-- `luna-priority`
-- `luna-auto-activate`
+- `luna-admission`: `on-demand | evidence | explicit-only`
+- `luna-context-cost`: `low | medium | high`
+- `luna-auto-min-score`
+- `luna-min-evidence-delta`
+- `luna-exclusive-group`
+- `luna-domain`
+- `luna-purpose`
+- `luna-execution`
 
-These are routing hints, not security permissions.
+These are routing/admission controls. They are **not** security permissions.
 
-## Installed catalog
+## Context budget
 
-### Foundation
+Default admission policy:
 
-- `audit-context-building` — reconstruct architecture, trust boundaries, invariants and unenforced assumptions before hunting.
-- `entry-point-analyzer` — map externally reachable state-changing blockchain entry points and authority.
-- `security-data-analysis` — analyze security logs/findings/telemetry with provenance, grain, time and data-quality gates.
+```text
+low    = 1 context unit
+medium = 2 context units
+high   = 3 context units
 
-### Code/diff hunting
+max active skills = 2
+max context units = 5
+```
 
-- `differential-review` — security review of PRs/commits/diffs with history, tests and blast radius.
-- `variant-analysis` — search for other manifestations of a confirmed root cause.
-- `static-analysis` — choose/orchestrate Semgrep, CodeQL or SARIF processing.
-- `semgrep-rule-creator` — create and validate custom Semgrep detections.
-- `insecure-defaults` — trace fail-open defaults, fallback secrets, default credentials and permissive settings.
+This deliberately allows a focused specialist + one supporting procedure, for example:
 
-### Verification/testing
+```text
+solana-vulnerability-scanner (high = 3)
++ audit-context-building       (medium = 2)
+= 5
+```
 
-- `property-based-testing` — properties, generators, invariants, oracles and shrink interpretation.
-- `constant-time-analysis` — static/compiled timing side-channel review for secret-dependent operations.
-- `post-patch-validation` — baseline-versus-patch validation of security fixes; replaces the older “fix-review” concept.
-- `harness-writing` — build deterministic, meaningful fuzz harnesses.
-- `coverage-analysis` — measure what fuzzing actually reaches and identify blockers.
+but prevents two unrelated high-context procedures from auto-stacking.
+
+## Installed portfolio
+
+### Foundation / context
+
+- `audit-context-building`
+- `entry-point-analyzer`
+- `security-data-analysis`
+
+### Differential / finding validation
+
+- `differential-review`
+- `variant-analysis`
+- `fp-check`
+- `post-patch-validation`
+
+### Static analysis / configuration / design
+
+- `static-analysis`
+- `semgrep-rule-creator`
+- `insecure-defaults`
+- `sharp-edges`
+- `spec-to-code-compliance`
+- `supply-chain-risk-auditor`
+
+### Native / crypto
+
+- `rust-review`
+- `c-review`
+- `constant-time-analysis`
+- `constant-time-testing`
+- `zeroize-audit`
+
+### Fuzzing / test strength
+
+- `property-based-testing`
+- `harness-writing`
+- `coverage-analysis`
+- `fuzzing-obstacles`
+- `mutation-testing`
 
 ### Blockchain
 
-- `solana-vulnerability-scanner` — six-class Solana/Anchor review: CPI, PDA, ownership, signer, sysvar and instruction introspection.
-- `token-integration-analyzer` — non-standard token behavior and integration assumptions.
-
-## Bundle mapping
-
-The upstream Trail of Bits repositories contain plugin bundles. Luna deliberately does not load a bundle as one giant prompt.
-
-`building-secure-contracts` currently contributes:
 - `solana-vulnerability-scanner`
 - `token-integration-analyzer`
 
-`testing-handbook-skills` currently contributes:
-- `harness-writing`
-- `coverage-analysis`
+### Malware / detection engineering
 
-`static-analysis` is represented in Luna by an orchestration skill that chooses Semgrep/CodeQL/SARIF based on mechanism. Custom Semgrep rule authoring remains a separate skill.
+- `yara-rule-authoring`
 
-This decomposition keeps progressive context small and makes activation observable.
+Total installed procedural skills after this wave: **26**.
 
-## Typical compositions
+## Important specialization rules
 
-### Start Solana audit
+### Rust vs Solana
+
+`rust-review` explicitly excludes Solana/Anchor prompts. Solana programs route to `solana-vulnerability-scanner`, which understands account constraints, PDA, signer, ownership, CPI and instruction introspection.
+
+### C/C++ vs Rust
+
+`c-review` and `rust-review` share the `language-security-review` exclusive group. They do not auto-stack on an ambiguous mixed-language request; the higher-ranked current target wins unless the operator explicitly selects otherwise.
+
+### Static timing vs runtime timing
+
+- `constant-time-analysis`: source/compiler/assembly mechanism review.
+- `constant-time-testing`: runtime/statistical measurement such as dudect/Timecop.
+
+They are complementary but independently triggered.
+
+### Variant hunting
+
+`variant-analysis` requires a known finding/root cause in the current/scenario context. It cannot activate merely because prior conversation text contains the word "vulnerability".
+
+### Audit context
+
+Generic words like `audit` or `auditoria` are intentionally **not** sufficient anymore. `audit-context-building` activates for explicit context-building intent such as unfamiliar codebase, threat model, architecture review or surface mapping.
+
+This prevents it from becoming an unnecessary companion on every specialist review.
+
+## Configuration
+
+`LUNA_SKILLS_ENABLED=true|false` controls the subsystem.
+
+If `LUNA_ENABLED_SKILLS` is unset, Luna discovers every valid installed skill under:
+
 ```text
-solana-vulnerability-scanner
-+ audit-context-building
+luna-desktop/backend/skills/<name>/SKILL.md
 ```
 
-### Map contract surface
+If set, it becomes an explicit allowlist:
+
 ```text
-entry-point-analyzer
-(+ audit-context-building when the broader architecture is also requested)
+LUNA_ENABLED_SKILLS=audit-context-building,solana-vulnerability-scanner
 ```
 
-### Review a security patch
-```text
-post-patch-validation
-+ variant-analysis   (only when a known root cause/variant hunt is explicitly requested)
-```
+This is useful for isolated regression testing.
 
-### Create a detector for a confirmed bug family
-```text
-semgrep-rule-creator
-+ variant-analysis
-```
+## Telemetry
 
-### Fuzzing campaign plateau
+Each turn exposes:
+
+- `skill_candidates`
+- `selected_skills`
+- `skill_route_reasons`
+- `skill_admission_rejections`
+
+The distinction is intentional:
+
 ```text
-coverage-analysis
-+ harness-writing   (when the current request explicitly involves harness redesign)
+candidate != admitted
+admitted != authority
+authority remains in AgentHarness / ExecutionIntent / supervised executor
 ```
 
 ## Evidence contract
 
 Skills must not turn:
+
 - scanner candidate -> finding without mechanism validation;
 - missing check -> vulnerability without tracing;
 - correlation -> causality;
 - zero findings -> safety;
 - failed exploit -> fixed patch;
 - modifier/function name -> enforcement;
-- approximate arithmetic -> exact quantitative claim.
+- approximate arithmetic -> exact quantitative claim;
+- coverage percentage -> proof of security;
+- upstream/canonical patch -> proof of correctness.
 
-Existing Luna output validators, including quantitative V17/V18, remain authoritative.
+Existing Luna validators, including V17/V18, remain authoritative.
 
 ## Third-party provenance
 
-Trail of Bits-derived/adapted skills remain marked `CC-BY-SA-4.0` and point to their upstream source URL in metadata. See `luna-desktop/backend/skills/THIRD_PARTY_NOTICES.md`.
+Trail of Bits-derived/adapted skills are marked `CC-BY-SA-4.0` and retain upstream source metadata.
 
-`security-data-analysis` is original Luna Cyber/Shield-Corp work.
+See:
+
+```text
+luna-desktop/backend/skills/THIRD_PARTY_NOTICES.md
+```
+
+`security-data-analysis` is original Shield-Corp/Luna Cyber work.
 
 ## Regression gate
 
-Before expanding the catalog further:
+After pulling this wave:
 
 ```powershell
 cd luna-desktop\backend
@@ -175,4 +253,4 @@ python -m unittest tests.test_skill_system -v
 python -m unittest discover -s tests -p "test_*.py"
 ```
 
-Then validate live routing in the Luna app using positive and negative prompts and inspect `selected_skills` in turn telemetry/diagnostics.
+Then use live Luna prompts to verify positive routing, negative routing, skill composition and telemetry before changing any execution policy.

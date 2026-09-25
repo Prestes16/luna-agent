@@ -1,4 +1,4 @@
-"""Deterministic router for Luna procedural Agent Skills."""
+"""Deterministic relevance router for Luna procedural Agent Skills."""
 
 from __future__ import annotations
 
@@ -10,21 +10,46 @@ from .skill_loader import SkillDefinition
 
 
 @dataclass(frozen=True)
-class SkillRouteDecision:
-    selected_skills: tuple[str, ...]
+class SkillCandidate:
+    name: str
+    score: int
+    priority: int
+    explicit: bool
     reasons: tuple[str, ...]
 
 
-class SkillRouter:
-    """Select a bounded set of enabled procedural skills.
+@dataclass(frozen=True)
+class SkillRouteDecision:
+    candidates: tuple[SkillCandidate, ...]
 
-    Current-turn intent dominates routing. Scenario context can satisfy a
-    prerequisite (for example an already-confirmed finding) but cannot
-    auto-activate an otherwise unrelated skill by itself.
+    @property
+    def selected_skills(self) -> tuple[str, ...]:
+        """Backward-compatible candidate names before admission."""
+        return tuple(candidate.name for candidate in self.candidates)
+
+    @property
+    def reasons(self) -> tuple[str, ...]:
+        return tuple(
+            f"{candidate.name}:{reason}"
+            for candidate in self.candidates
+            for reason in candidate.reasons
+        )
+
+
+class SkillRouter:
+    """Discover a bounded candidate set from current-turn intent.
+
+    This class ranks relevance only. A separate SkillAdmissionPolicy decides
+    whether a candidate is worth injecting into the model context.
     """
 
-    def __init__(self, *, max_skills: int = 2, activation_threshold: int = 10) -> None:
-        self.max_skills = max(1, int(max_skills))
+    def __init__(
+        self,
+        *,
+        max_candidates: int = 6,
+        activation_threshold: int = 10,
+    ) -> None:
+        self.max_candidates = max(1, int(max_candidates))
         self.activation_threshold = max(1, int(activation_threshold))
 
     @staticmethod
@@ -63,7 +88,7 @@ class SkillRouter:
         scenario = str(scenario_context or "").casefold()
         combined = f"{current}\n{scenario}"
 
-        ranked: list[tuple[int, int, int, str, tuple[str, ...]]] = []
+        ranked: list[SkillCandidate] = []
         for name, skill in skills.items():
             metadata = dict(skill.metadata or {})
             explicit_forms = (
@@ -109,37 +134,36 @@ class SkillRouter:
                     score += 10
                     reasons.append(f"current_trigger={term}")
 
-                # Weak continuity signal only. It may rank a skill that already
-                # matched the current message, never activate one on its own.
+                # Scenario context is continuity only. It may strengthen a
+                # current match but can never activate a skill by itself.
                 context_hits = self._hits(
                     scenario,
                     self._split_terms(metadata.get("luna-context-triggers")),
                 )
                 if current_hits and context_hits:
-                    score += min(6, 2 * len(context_hits))
+                    bonus = min(6, 2 * len(context_hits))
+                    score += bonus
                     reasons.extend(
                         f"context_trigger={term}" for term in context_hits[:3]
                     )
 
             if score >= self.activation_threshold:
-                ranked.append((
-                    1 if explicit else 0,
-                    self._priority(skill),
-                    score,
-                    name,
-                    tuple(reasons),
+                ranked.append(SkillCandidate(
+                    name=name,
+                    score=score,
+                    priority=self._priority(skill),
+                    explicit=explicit,
+                    reasons=tuple(reasons),
                 ))
 
-        # Manual selection always wins. Otherwise a narrow specialist with a
-        # higher Luna priority stays ahead of a generic skill that matched more
-        # words in the same request.
-        ranked.sort(key=lambda item: (-item[0], -item[1], -item[2], item[3]))
-        selected = ranked[: self.max_skills]
+        ranked.sort(
+            key=lambda item: (
+                -int(item.explicit),
+                -item.priority,
+                -item.score,
+                item.name,
+            )
+        )
         return SkillRouteDecision(
-            selected_skills=tuple(item[3] for item in selected),
-            reasons=tuple(
-                f"{item[3]}:{reason}"
-                for item in selected
-                for reason in item[4]
-            ),
+            candidates=tuple(ranked[: self.max_candidates]),
         )

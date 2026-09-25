@@ -13,11 +13,15 @@ metadata:
   luna-risk: "read-only"
   luna-auto-activate: "true"
   luna-priority: "100"
-  luna-triggers: "audit, auditoria, threat model, modelo de ameaça, architecture review, revisão de arquitetura, codebase, código desconhecido, entender o código, mapear arquitetura, superfície de ataque"
+  luna-triggers: "iniciar auditoria desta codebase, começar auditoria desta codebase, comecar auditoria desta codebase, threat model, modelo de ameaça, architecture review, revisão de arquitetura, revisao de arquitetura, codebase desconhecida, código desconhecido, codigo desconhecido, entender o código, entender o codigo, mapear arquitetura, superfície de ataque, superficie de ataque"
   luna-host-write: "deny"
   luna-network: "deny"
   luna-execution: "instruction-only"
   luna-evidence: "required"
+  luna-admission: "on-demand"
+  luna-context-cost: "medium"
+  luna-auto-min-score: "10"
+  luna-exclusive-group: "context-foundation"
 allowed-tools: Read Grep Glob
 ---
 

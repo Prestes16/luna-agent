@@ -8,6 +8,7 @@ from app.agent_harness import AgentHarness
 from app.luna_engine import LunaEngine, _build_system_prompt
 from app.skill_loader import SkillLoader
 from app.skill_router import SkillRouter
+from app.skill_policy import SkillAdmissionPolicy
 
 
 EXPECTED_SKILLS = {
@@ -26,6 +27,17 @@ EXPECTED_SKILLS = {
     "harness-writing",
     "coverage-analysis",
     "security-data-analysis",
+    "rust-review",
+    "c-review",
+    "fp-check",
+    "supply-chain-risk-auditor",
+    "spec-to-code-compliance",
+    "mutation-testing",
+    "zeroize-audit",
+    "yara-rule-authoring",
+    "constant-time-testing",
+    "fuzzing-obstacles",
+    "sharp-edges",
 }
 
 
@@ -226,6 +238,127 @@ metadata:
         self.assertEqual(decision.selected_skills, ())
 
 
+
+class SkillAdmissionPolicyTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.loader = SkillLoader()
+        self.skills = self.loader.load_all()
+        self.router = SkillRouter()
+        self.policy = SkillAdmissionPolicy()
+
+    def admit(self, message: str, scenario: str = "", evidence_delta_count: int = 0):
+        route = self.router.select(
+            message,
+            self.skills,
+            scenario_context=scenario,
+        )
+        return route, self.policy.admit(
+            route,
+            self.skills,
+            evidence_delta_count=evidence_delta_count,
+        )
+
+    def test_router_may_find_candidates_but_gate_admits_at_most_two(self) -> None:
+        route, admission = self.admit(
+            "Audit Solana: mapear superfície de ataque, entry points e revisar token integration."
+        )
+        self.assertGreaterEqual(len(route.selected_skills), 2)
+        self.assertLessEqual(len(admission.admitted_skills), 2)
+        self.assertLessEqual(
+            len(admission.admitted_skills),
+            self.policy.public_policy()["max_active_skills"],
+        )
+
+    def test_high_context_skill_with_weak_relevance_can_be_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            skill_dir = root / "high-cost"
+            skill_dir.mkdir()
+            (skill_dir / "SKILL.md").write_text(
+                """---
+name: high-cost
+description: High-context test skill.
+metadata:
+  luna-auto-activate: "true"
+  luna-priority: "1"
+  luna-triggers: "audit"
+  luna-execution: "instruction-only"
+  luna-context-cost: "high"
+  luna-auto-min-score: "20"
+---
+# High cost
+""",
+                encoding="utf-8",
+            )
+            skill = SkillLoader(root).load_skill("high-cost")
+            route = SkillRouter().select("audit this", {"high-cost": skill})
+            admission = SkillAdmissionPolicy().admit(
+                route,
+                {"high-cost": skill},
+            )
+        self.assertEqual(route.selected_skills, ("high-cost",))
+        self.assertEqual(admission.admitted_skills, ())
+        self.assertIn("insufficient_relevance", admission.rejection_reasons()[0])
+
+    def test_explicit_operator_selection_overrides_soft_context_threshold(self) -> None:
+        route, admission = self.admit("/skill supply-chain-risk-auditor revisar dependências")
+        self.assertEqual(route.selected_skills[0], "supply-chain-risk-auditor")
+        self.assertEqual(admission.admitted_skills[0], "supply-chain-risk-auditor")
+
+    def test_same_exclusive_group_does_not_auto_stack(self) -> None:
+        route, admission = self.admit(
+            "Faça C++ security review e também Rust security review desta biblioteca mista."
+        )
+        self.assertIn("c-review", route.selected_skills)
+        self.assertIn("rust-review", route.selected_skills)
+        self.assertEqual(
+            len([
+                name for name in admission.admitted_skills
+                if name in {"c-review", "rust-review"}
+            ]),
+            1,
+        )
+        self.assertTrue(
+            any(
+                "exclusive_group_already_active:language-security-review" in reason
+                for reason in admission.rejection_reasons()
+            )
+        )
+
+    def test_irrelevant_scenario_still_admits_nothing(self) -> None:
+        route, admission = self.admit(
+            "e agora?",
+            scenario=(
+                "audit rust yara supply chain mutation testing Solana "
+                "finding vulnerability fuzz coverage"
+            ),
+        )
+        self.assertEqual(route.selected_skills, ())
+        self.assertEqual(admission.admitted_skills, ())
+
+    def test_remaining_portfolio_routes_only_on_specific_intent(self) -> None:
+        cases = {
+            "rust-review": "Faça um Rust security review do unsafe e FFI desta crate.",
+            "c-review": "Faça um C++ security review buscando use-after-free.",
+            "fp-check": "Este finding de vulnerabilidade é false positive ou bug real?",
+            "supply-chain-risk-auditor": "Faça um audit dependencies de supply chain deste lockfile.",
+            "spec-to-code-compliance": "Compare whitepaper vs code com spec-to-code compliance.",
+            "mutation-testing": "Analise os surviving mutants desta campanha de mutation testing.",
+            "zeroize-audit": "Faça zeroize audit da key memory desta biblioteca.",
+            "yara-rule-authoring": "Crie uma YARA-X rule para esta assinatura de malware.",
+            "constant-time-testing": "Use dudect para planejar o teste de timing variance.",
+            "fuzzing-obstacles": "O checksum bloqueia o fuzzer: analise o fuzzing obstacle.",
+            "sharp-edges": "Revise esta API por sharp edges e footguns secure-by-default.",
+        }
+        for expected, prompt in cases.items():
+            with self.subTest(expected=expected):
+                route, admission = self.admit(prompt)
+                self.assertIn(expected, route.selected_skills)
+                self.assertIn(expected, admission.admitted_skills)
+
+
+
+
 class SkillRuntimeIntegrationTests(unittest.TestCase):
     def test_prompt_marks_skill_as_procedural_not_execution_authority(self) -> None:
         prompt = _build_system_prompt(
@@ -251,6 +384,8 @@ class SkillRuntimeIntegrationTests(unittest.TestCase):
         self.assertFalse(engine._tool_execution_allowed())
         self.assertEqual(diagnostics["harness"]["max_tool_calls"], 0)
         self.assertEqual(set(diagnostics["skills"]["loaded"]), EXPECTED_SKILLS)
+        self.assertEqual(diagnostics["skills"]["admission_policy"]["max_active_skills"], 2)
+        self.assertFalse(diagnostics["skills"]["admission_policy"]["changes_execution_authority"])
         for metadata in diagnostics["skills"]["catalog"].values():
             self.assertFalse(metadata["allowed_tools_authoritative"])
 

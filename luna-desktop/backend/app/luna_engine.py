@@ -27,6 +27,7 @@ from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
 from .skill_loader import SkillLoader
 from .skill_router import SkillRouter
+from .skill_policy import SkillAdmissionPolicy
 from .construction_reasoning import construction_guidance
 from .decision_intelligence import decision_guidance
 from .evidence_bundle import evidence_bundle_guidance
@@ -519,6 +520,7 @@ class LunaEngine:
             ["mentor_kali_devtools"] if self.config["mentor_mode"] else []
         )
         self.skill_router = SkillRouter()
+        self.skill_policy = SkillAdmissionPolicy()
         self.active_skills = self.skill_loader.load_enabled(
             self.config["enabled_skills"]
             if self.config["skills_enabled"]
@@ -1541,6 +1543,11 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             self.active_skills,
             scenario_context=scenario.to_prompt_block(600),
         )
+        skill_admission = self.skill_policy.admit(
+            skill_route,
+            self.active_skills,
+            evidence_delta_count=evidence_delta.count,
+        )
         harness_trace = self.harness.begin_turn(session_id=session_id, route=route.route)
         turn_telemetry: Dict[str, Any] = {
             "session_id": session_id,
@@ -1551,8 +1558,10 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             "llm_called": False,
             "evidence_delta_count": evidence_delta.count,
             "selected_modules": list(route.selected_modules),
-            "selected_skills": list(skill_route.selected_skills),
+            "skill_candidates": list(skill_route.selected_skills),
+            "selected_skills": list(skill_admission.admitted_skills),
             "skill_route_reasons": list(skill_route.reasons),
+            "skill_admission_rejections": list(skill_admission.rejection_reasons()),
             "visual_evidence_count": len(visual_manifest),
             "visual_evidence": [item.to_dict() for item in visual_manifest],
             "loop_guard": "pending",
@@ -1719,7 +1728,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     harness_trace.cache_hits += 1
                 runtime_modules[module_id] = cached_excerpt
         runtime_skills: Dict[str, str] = {}
-        for skill_id in skill_route.selected_skills:
+        for skill_id in skill_admission.admitted_skills:
             skill = self.active_skills.get(skill_id)
             if skill is None:
                 continue
@@ -1761,7 +1770,9 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 "reasoning_effort": route.reasoning_effort,
                 "evidence_delta_count": evidence_delta.count,
                 "selected_modules": sorted(runtime_modules),
+                "skill_candidates": list(skill_route.selected_skills),
                 "selected_skills": sorted(runtime_skills),
+                "skill_admission_rejections": list(skill_admission.rejection_reasons()),
                 "memory_provenance": list(
                     harness_trace.memory.provenance
                     if harness_trace.memory is not None
@@ -2418,8 +2429,9 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     key: turn_telemetry.get(key)
                     for key in (
                         "session_id", "route", "reasoning_effort", "route_reasons",
-                        "evidence_delta_count", "selected_modules", "selected_skills",
-                        "skill_route_reasons", "loop_guard",
+                        "evidence_delta_count", "selected_modules", "skill_candidates",
+                        "selected_skills", "skill_route_reasons",
+                        "skill_admission_rejections", "loop_guard",
                         "response_source", "llm_called", "request_count", "chunks",
                         "first_token_ms", "elapsed_ms", "total_elapsed_ms",
                         "finish_reason", "validator_passed", "replan_used",
@@ -2692,6 +2704,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             },
             "skills": {
                 "enabled": bool(self.config.get("skills_enabled", True)),
+                "admission_policy": self.skill_policy.public_policy(),
                 "directory": str(self.skill_loader.skills_dir),
                 "configured": list(self.config.get("enabled_skills", [])),
                 "loaded": sorted(self.active_skills),

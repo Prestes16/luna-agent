@@ -21,9 +21,20 @@ Adapted skill directories:
 - `token-integration-analyzer`
 - `harness-writing`
 - `coverage-analysis`
+- `rust-review`
+- `c-review`
+- `fp-check`
+- `supply-chain-risk-auditor`
+- `spec-to-code-compliance`
+- `mutation-testing`
+- `zeroize-audit`
+- `yara-rule-authoring`
+- `constant-time-testing`
+- `fuzzing-obstacles`
+- `sharp-edges`
 
-Luna-specific changes include deterministic local routing metadata, bounded prompt
-injection, evidence contracts, integration with Luna BUILD-TO-BREAK/V17/V18 concepts,
+Luna-specific changes include deterministic local routing metadata, a separate skill-admission gate,
+bounded prompt injection, evidence contracts, integration with Luna BUILD-TO-BREAK/V17/V18 concepts,
 removal of upstream subagent/workflow assumptions, and explicit separation between skill
 instructions and host/tool execution authority.
 
