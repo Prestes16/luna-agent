@@ -534,7 +534,11 @@ def validate_model_response(
             r"(?i)Authorization\s*:\s*Bearer\s+([^\s\r\n]+)",
             message,
         )
-        observed_token = observed_token_match.group(1) if observed_token_match else None
+        observed_token = (
+            observed_token_match.group(1).rstrip("`'\".,;:)")
+            if observed_token_match
+            else None
+        )
         if (
             observed_token
             and not any(
