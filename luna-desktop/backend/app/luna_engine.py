@@ -340,16 +340,13 @@ def _build_system_prompt(
             "explícita por ação e objetivo de prova delimitado, podendo ser BLOCKED."
         ),
         (
-            "Semântica L0/L1: leitura local/passiva sem interação com o alvo é L0; "
-            "request ativa via curl/HTTP/Nmap contra o alvo é L1 quando não muta estado."
+            "Semântica: local/passivo=L0; request ativa via curl/HTTP/Nmap contra o alvo é L1 se não muta."
         ),
         (
-            "Endpoint explicitamente não testado permanece UNKNOWN: não trate ausência de 200/403/401 "
-            "como evidência antes de executar o teste."
+            "Endpoint explicitamente não testado permanece UNKNOWN; não invente status."
         ),
         (
-            "Se o operador pedir PROPOSED_ACTION versus EXECUTED_ACTION, declare explicitamente "
-            "que a proposta NÃO foi executada."
+            "Se pedido: PROPOSED_ACTION; diga que NÃO foi executada."
         ),
         (
             "Exploit/PoC: em escopo autorizado e com fatos suficientes, produza artefato mínimo completo "
