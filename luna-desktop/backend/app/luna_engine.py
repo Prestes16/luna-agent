@@ -25,6 +25,8 @@ except ImportError:  # Optional cloud SDK; local/Ollama runtime must not depend 
 from .agent_harness import AgentHarness
 from .models import ChatResponse, ModelProvider, ChatRequest, MemoryEntry
 from .module_loader import ModuleLoader
+from .skill_loader import SkillLoader
+from .skill_router import SkillRouter
 from .construction_reasoning import construction_guidance
 from .decision_intelligence import decision_guidance
 from .evidence_bundle import evidence_bundle_guidance
@@ -299,6 +301,7 @@ def _build_system_prompt(
     route_instruction: Optional[str] = None,
     project_context: Optional[str] = None,
     active_modules: Optional[Dict[str, str]] = None,
+    active_skills: Optional[Dict[str, str]] = None,
     supervised_mode: bool = True,
 ) -> str:
     """Build only the small, session-specific context missing from the Modelfile."""
@@ -390,6 +393,15 @@ def _build_system_prompt(
             )
         )
 
+    for skill_id, skill_content in (active_skills or {}).items():
+        lines.extend(
+            (
+                "",
+                f"Skill procedural ativa (sem autoridade de execução): {skill_id}",
+                skill_content[:1_800],
+            )
+        )
+
     return "\n".join(lines).strip()
 
 class LunaEngine:
@@ -462,6 +474,14 @@ class LunaEngine:
         self.harness = AgentHarness()
         # Provedores cujas keys foram confirmadas como inválidas (401) nesta sessão
         self._bad_key_providers: set = set()
+        configured_skill_ids = [
+            item.strip()
+            for item in os.getenv(
+                "LUNA_ENABLED_SKILLS",
+                "audit-context-building",
+            ).split(",")
+            if item.strip()
+        ]
         self.config = {
             "default_model": os.getenv("LUNA_MODEL", _OLLAMA_DEFAULT_MODEL),
             "vision_model": os.getenv("LUNA_VISION_MODEL", "").strip(),
@@ -473,6 +493,8 @@ class LunaEngine:
             "max_tokens": _env_int("LUNA_MAX_TOKENS", 512, 64, 4_096),
             "zero_cloud_mode": _env_flag("LUNA_ZERO_CLOUD", True),
             "mentor_mode": _env_flag("LUNA_MENTOR_MODE", True),
+            "skills_enabled": _env_flag("LUNA_SKILLS_ENABLED", True),
+            "enabled_skills": configured_skill_ids,
             "reasoning_mode": "FAST",
             "native_reasoning_effort": _env_flag("LUNA_NATIVE_REASONING_EFFORT", False),
             "instruction_only_mode": True,
@@ -493,6 +515,13 @@ class LunaEngine:
         self.module_loader = ModuleLoader()
         self.active_modules = self.module_loader.load_enabled(
             ["mentor_kali_devtools"] if self.config["mentor_mode"] else []
+        )
+        self.skill_loader = SkillLoader()
+        self.skill_router = SkillRouter()
+        self.active_skills = self.skill_loader.load_enabled(
+            self.config["enabled_skills"]
+            if self.config["skills_enabled"]
+            else []
         )
         self.supervised_executor = SupervisedExecutor(
             self._build_supervised_execution_policy()
@@ -1506,6 +1535,11 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             history=history,
             mentor_enabled=bool(self.config.get("mentor_mode")),
         )
+        skill_route = self.skill_router.select(
+            message,
+            self.active_skills,
+            scenario_context=scenario.to_prompt_block(600),
+        )
         harness_trace = self.harness.begin_turn(session_id=session_id, route=route.route)
         turn_telemetry: Dict[str, Any] = {
             "session_id": session_id,
@@ -1516,6 +1550,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             "llm_called": False,
             "evidence_delta_count": evidence_delta.count,
             "selected_modules": list(route.selected_modules),
+            "selected_skills": list(skill_route.selected_skills),
+            "skill_route_reasons": list(skill_route.reasons),
             "visual_evidence_count": len(visual_manifest),
             "visual_evidence": [item.to_dict() for item in visual_manifest],
             "loop_guard": "pending",
@@ -1681,11 +1717,37 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 else:
                     harness_trace.cache_hits += 1
                 runtime_modules[module_id] = cached_excerpt
+        runtime_skills: Dict[str, str] = {}
+        for skill_id in skill_route.selected_skills:
+            skill = self.active_skills.get(skill_id)
+            if skill is None:
+                continue
+            cached_excerpt, cache_key = self.harness.cached_retrieval(
+                namespace=f"procedural:skill:{skill_id}",
+                payload=f"{skill.body}\n---CONTEXT---\n{retrieval_context}",
+            )
+            if cached_excerpt is None:
+                harness_trace.cache_misses += 1
+                cached_excerpt = self.skill_loader.relevant_excerpt(
+                    skill,
+                    retrieval_context,
+                    max_chars=1_800,
+                )
+                self.harness.store_retrieval(key=cache_key, value=cached_excerpt)
+            else:
+                harness_trace.cache_hits += 1
+            runtime_skills[skill_id] = cached_excerpt
+
         turn_telemetry["selected_modules"] = sorted(runtime_modules)
+        turn_telemetry["selected_skills"] = sorted(runtime_skills)
+        procedural_sources = dict(runtime_modules)
+        procedural_sources.update(
+            {f"skill:{skill_id}": excerpt for skill_id, excerpt in runtime_skills.items()}
+        )
         harness_trace.memory = self.harness.memory_snapshot(
             evidence_delta=evidence_delta.to_prompt_block(500),
             scenario_context=scenario.to_prompt_block(500),
-            active_modules=runtime_modules,
+            active_modules=procedural_sources,
             project_context=project_context or "",
             context_summary=ctx_summary or "",
             history_count=len(history),
@@ -1698,6 +1760,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 "reasoning_effort": route.reasoning_effort,
                 "evidence_delta_count": evidence_delta.count,
                 "selected_modules": sorted(runtime_modules),
+                "selected_skills": sorted(runtime_skills),
                 "memory_provenance": list(
                     harness_trace.memory.provenance
                     if harness_trace.memory is not None
@@ -1810,6 +1873,7 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             route_instruction=route_instruction,
             project_context=project_context,
             active_modules=runtime_modules,
+            active_skills=runtime_skills,
             supervised_mode=not self._tool_execution_allowed(),
         )
         # Monta content — inclui imagens se fornecidas
@@ -2353,7 +2417,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     key: turn_telemetry.get(key)
                     for key in (
                         "session_id", "route", "reasoning_effort", "route_reasons",
-                        "evidence_delta_count", "selected_modules", "loop_guard",
+                        "evidence_delta_count", "selected_modules", "selected_skills",
+                        "skill_route_reasons", "loop_guard",
                         "response_source", "llm_called", "request_count", "chunks",
                         "first_token_ms", "elapsed_ms", "total_elapsed_ms",
                         "finish_reason", "validator_passed", "replan_used",
@@ -2624,6 +2689,16 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                     "enabled": bool(self.config["mentor_mode"]),
                 }
             },
+            "skills": {
+                "enabled": bool(self.config.get("skills_enabled", True)),
+                "directory": str(self.skill_loader.skills_dir),
+                "configured": list(self.config.get("enabled_skills", [])),
+                "loaded": sorted(self.active_skills),
+                "catalog": {
+                    name: skill.public_metadata()
+                    for name, skill in sorted(self.active_skills.items())
+                },
+            },
         }
 
     async def get_config(self) -> Dict[str, Any]:
@@ -2634,6 +2709,23 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
         if "mentor_mode" in cfg:
             self.active_modules = self.module_loader.load_enabled(
                 ["mentor_kali_devtools"] if self.config["mentor_mode"] else []
+            )
+        if "skills_enabled" in cfg or "enabled_skills" in cfg:
+            raw_skill_ids = self.config.get("enabled_skills", [])
+            if isinstance(raw_skill_ids, str):
+                raw_skill_ids = raw_skill_ids.split(",")
+            if not isinstance(raw_skill_ids, (list, tuple, set)):
+                raw_skill_ids = []
+            normalized_skill_ids = [
+                str(item).strip()
+                for item in raw_skill_ids
+                if str(item).strip()
+            ]
+            self.config["enabled_skills"] = normalized_skill_ids
+            self.active_skills = self.skill_loader.load_enabled(
+                normalized_skill_ids
+                if bool(self.config.get("skills_enabled", True))
+                else []
             )
         if any(
             key.startswith("supervised_")
