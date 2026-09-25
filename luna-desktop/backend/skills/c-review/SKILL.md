@@ -14,7 +14,7 @@ metadata:
   luna-auto-activate: "true"
   luna-priority: "145"
   luna-triggers: "c security review, c++ security review, audit c++, auditoria c++, memory corruption, use-after-free, use after free, integer overflow c, race condition c++, double free, buffer overflow c++"
-  luna-exclude-triggers: "rust, solana, solidity"
+  luna-exclude-triggers: "solana, solidity"
   luna-host-write: "deny"
   luna-network: "deny"
   luna-execution: "instruction-only"

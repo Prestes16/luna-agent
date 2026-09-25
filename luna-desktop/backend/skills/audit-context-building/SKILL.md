@@ -22,6 +22,7 @@ metadata:
   luna-context-cost: "medium"
   luna-auto-min-score: "10"
   luna-exclusive-group: "context-foundation"
+  luna-complements: "solana-vulnerability-scanner, entry-point-analyzer"
 allowed-tools: Read Grep Glob
 ---
 

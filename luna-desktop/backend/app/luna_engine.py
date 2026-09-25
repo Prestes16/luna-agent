@@ -1562,6 +1562,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
             "selected_skills": list(skill_admission.admitted_skills),
             "skill_route_reasons": list(skill_route.reasons),
             "skill_admission_rejections": list(skill_admission.rejection_reasons()),
+            "skill_admission_objective": skill_admission.objective_value,
+            "skill_admission_context_units": skill_admission.context_units,
             "visual_evidence_count": len(visual_manifest),
             "visual_evidence": [item.to_dict() for item in visual_manifest],
             "loop_guard": "pending",
@@ -1773,6 +1775,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                 "skill_candidates": list(skill_route.selected_skills),
                 "selected_skills": sorted(runtime_skills),
                 "skill_admission_rejections": list(skill_admission.rejection_reasons()),
+                "skill_admission_objective": skill_admission.objective_value,
+                "skill_admission_context_units": skill_admission.context_units,
                 "memory_provenance": list(
                     harness_trace.memory.provenance
                     if harness_trace.memory is not None
@@ -2431,7 +2435,8 @@ Se houver código para corrigir, forneça apenas o trecho corrigido."""
                         "session_id", "route", "reasoning_effort", "route_reasons",
                         "evidence_delta_count", "selected_modules", "skill_candidates",
                         "selected_skills", "skill_route_reasons",
-                        "skill_admission_rejections", "loop_guard",
+                        "skill_admission_rejections", "skill_admission_objective",
+                        "skill_admission_context_units", "loop_guard",
                         "response_source", "llm_called", "request_count", "chunks",
                         "first_token_ms", "elapsed_ms", "total_elapsed_ms",
                         "finish_reason", "validator_passed", "replan_used",

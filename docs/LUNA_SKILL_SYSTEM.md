@@ -79,6 +79,61 @@ Luna-specific metadata fields include:
 
 These are routing/admission controls. They are **not** security permissions.
 
+## Mathematical selection model
+
+The admission layer uses exact constrained optimization rather than a greedy "top score wins" rule.
+
+The router exposes at most 6 candidates and Luna admits at most 2. Therefore the largest search is:
+
+```text
+C(6,0) + C(6,1) + C(6,2)
+= 1 + 6 + 15
+= 22 subsets
+```
+
+This is small enough to evaluate exhaustively on every turn.
+
+For each eligible skill `i`:
+
+```text
+U_i =
+    100 * relevance_score_i
+  + priority_i
+  - 20 * context_units_i
+  + explicit_bonus_i
+```
+
+where `explicit_bonus = 100000` only for explicit operator selection.
+
+For a candidate subset `S`:
+
+```text
+U(S) =
+    sum(U_i for i in S)
+  + 200 * complementary_pairs(S)
+```
+
+The optimizer chooses:
+
+```text
+argmax U(S)
+```
+
+subject to:
+
+```text
+|S| <= 2
+context_units(S) <= 5      # automatic mode
+no duplicate exclusive group
+all prerequisites/evidence gates satisfied
+```
+
+Exact ties prefer lower context cost and then fewer skills, so prompt expansion is not rewarded when it adds no utility.
+
+Explicit `/skill` selection suppresses automatic companions, which preserves operator control. Explicit skills may exceed the soft context budget but never the hard maximum of two active skills.
+
+This optimizer is deterministic, integer-based and auditable. It does not ask the LLM to estimate probabilities or invent confidence values.
+
 ## Context budget
 
 Default admission policy:
@@ -206,6 +261,8 @@ Each turn exposes:
 - `selected_skills`
 - `skill_route_reasons`
 - `skill_admission_rejections`
+- `skill_admission_objective`
+- `skill_admission_context_units`
 
 The distinction is intentional:
 

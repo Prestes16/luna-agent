@@ -6,8 +6,8 @@ from unittest.mock import patch
 
 from app.agent_harness import AgentHarness
 from app.luna_engine import LunaEngine, _build_system_prompt
-from app.skill_loader import SkillLoader
-from app.skill_router import SkillRouter
+from app.skill_loader import SkillDefinition, SkillLoader
+from app.skill_router import SkillCandidate, SkillRouteDecision, SkillRouter
 from app.skill_policy import SkillAdmissionPolicy
 
 
@@ -329,10 +329,70 @@ metadata:
         )
         self.assertTrue(
             any(
-                "exclusive_group_already_active:language-security-review" in reason
+                "exclusive_group_conflict:language-security-review" in reason
                 for reason in admission.rejection_reasons()
             )
         )
+
+    def test_exact_optimizer_beats_greedy_choice_under_context_budget(self) -> None:
+        def skill(name: str, cost: str) -> SkillDefinition:
+            return SkillDefinition(
+                name=name,
+                description=f"{name} synthetic optimizer skill",
+                body="# synthetic",
+                path=Path(f"{name}/SKILL.md"),
+                metadata={
+                    "luna-context-cost": cost,
+                    "luna-auto-min-score": "0",
+                    "luna-execution": "instruction-only",
+                },
+            )
+
+        skills = {
+            "heavy": skill("heavy", "high"),
+            "left": skill("left", "medium"),
+            "right": skill("right", "medium"),
+        }
+        route = SkillRouteDecision(
+            candidates=(
+                SkillCandidate(
+                    name="heavy",
+                    score=15,
+                    priority=100,
+                    explicit=False,
+                    reasons=("synthetic",),
+                ),
+                SkillCandidate(
+                    name="left",
+                    score=10,
+                    priority=100,
+                    explicit=False,
+                    reasons=("synthetic",),
+                ),
+                SkillCandidate(
+                    name="right",
+                    score=10,
+                    priority=100,
+                    explicit=False,
+                    reasons=("synthetic",),
+                ),
+            )
+        )
+
+        admission = SkillAdmissionPolicy(
+            max_active_skills=2,
+            max_context_units=4,
+        ).admit(route, skills)
+
+        # A greedy strategy would take "heavy" first (higher individual score)
+        # and exhaust the 4-unit budget. Exact subset search evaluates all
+        # feasible combinations and correctly prefers left+right:
+        # heavy utility = 15*100 + 100 - 3*20 = 1540
+        # left/right    = 10*100 + 100 - 2*20 = 1060 each
+        # pair utility  = 2120 > 1540
+        self.assertEqual(set(admission.admitted_skills), {"left", "right"})
+        self.assertEqual(admission.context_units, 4)
+        self.assertEqual(admission.objective_value, 2120)
 
     def test_irrelevant_scenario_still_admits_nothing(self) -> None:
         route, admission = self.admit(
@@ -394,6 +454,10 @@ class SkillRuntimeIntegrationTests(unittest.TestCase):
         self.assertEqual(diagnostics["harness"]["max_tool_calls"], 0)
         self.assertEqual(set(diagnostics["skills"]["loaded"]), EXPECTED_SKILLS)
         self.assertEqual(diagnostics["skills"]["admission_policy"]["max_active_skills"], 2)
+        self.assertEqual(
+            diagnostics["skills"]["admission_policy"]["optimizer"],
+            "exact_subset_enumeration",
+        )
         self.assertFalse(diagnostics["skills"]["admission_policy"]["changes_execution_authority"])
         for metadata in diagnostics["skills"]["catalog"].values():
             self.assertFalse(metadata["allowed_tools_authoritative"])
