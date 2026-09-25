@@ -36,6 +36,28 @@ class ReasoningQualityTests(unittest.TestCase):
         self.assertTrue(contract.one_command)
         self.assertEqual(contract.target_hosts, ("127.0.0.1",))
 
+    def test_negated_command_request_does_not_create_command_contract(self) -> None:
+        prompt = (
+            "Luna, faça uma revisão de segurança deste trecho Anchor/Solana. "
+            "Não execute ferramentas nem comandos."
+        )
+        contract = build_operator_contract(prompt)
+        self.assertFalse(contract.wants_command)
+
+        scenario = ScenarioContext()
+        delta = scenario.update(prompt)
+        validation = validate_model_response(
+            message=prompt,
+            response=(
+                "FATOS: authority é um Signer e config é mutável. "
+                "INFERÊNCIAS: a autorização deve ser verificada contra o admin esperado. "
+                "HIPÓTESES: o trecho isolado não mostra seeds, PDA ou CPI."
+            ),
+            scenario=scenario,
+            evidence_delta_count=delta.count,
+        )
+        self.assertNotIn("quality_gate_below_threshold", validation.reasons)
+
     def test_correct_nmap_command_scores_high(self) -> None:
         response = "```bash\nnmap -sV -sC wifhoodie.com -oN wifhoodie_initial.txt\n```"
         score = score_response_quality(PROMPT, response)
