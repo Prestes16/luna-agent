@@ -35,6 +35,21 @@ class LocalFirstTests(unittest.IsolatedAsyncioTestCase):
             prompt.index("CONTEXTO DINÂMICO DE RUNTIME"),
         )
 
+    def test_runtime_prompt_carries_first_pass_operator_contract_and_action_semantics(self) -> None:
+        prompt = _build_system_prompt(
+            None,
+            current_message=(
+                "CTF autorizado em http://127.0.0.1:8080. "
+                "Forneça EXATAMENTE UM comando curl como PROPOSED_ACTION e não EXECUTED_ACTION."
+            ),
+        )
+        self.assertIn("CONTRATO DETERMINÍSTICO DO TURNO", prompt)
+        self.assertIn("ferramenta=curl", prompt)
+        self.assertIn("quantidade_comandos=1", prompt)
+        self.assertIn("request ativa via curl/HTTP/Nmap contra o alvo é L1", prompt)
+        self.assertIn("Endpoint explicitamente não testado permanece UNKNOWN", prompt)
+        self.assertIn("NÃO foi executada", prompt)
+
     def test_local_ollama_probe_timeout_stays_below_slow_callback_threshold(self) -> None:
         from app.luna_engine import _ollama_probe_endpoint
 
