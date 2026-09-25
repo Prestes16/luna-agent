@@ -42,11 +42,11 @@ class ReasoningQualityTests(unittest.TestCase):
             "Forneça EXATAMENTE UM comando curl. "
             "Identifique como PROPOSED_ACTION e deixe explícito que NÃO é EXECUTED_ACTION."
         )
-        self.assertEqual(contract.required_bearer, "TEST_TOKEN_123.")
+        self.assertEqual(contract.required_bearer, "TEST_TOKEN_123")
         self.assertTrue(contract.requires_proposed_action)
         self.assertTrue(contract.requires_not_executed)
         prompt = contract.to_prompt()
-        self.assertIn("header_obrigatorio=Authorization: Bearer TEST_TOKEN_123.", prompt)
+        self.assertIn("header_obrigatorio=Authorization: Bearer TEST_TOKEN_123", prompt)
         self.assertIn("estado=PROPOSED_ACTION", prompt)
         self.assertIn("EXECUTED_ACTION=NÃO", prompt)
 
