@@ -86,7 +86,8 @@
         "portable"
       ],
       "certificateFile": null,
-      "certificatePassword": null
+      "certificatePassword": null,
+      "icon": "assets/icon-1024.png"
     },
     "nsis": {
       "oneClick": false,
