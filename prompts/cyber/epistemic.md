@@ -25,6 +25,8 @@ PROPOSED_ACTION -> EXECUTED_ACTION somente por confirmação factual.
 EXECUTED_ACTION -> OBSERVED_RESULT somente com artefato/saída observada.
 OBSERVED_RESULT -> VALIDATED_FINDING somente quando o success predicate foi satisfeito.
 
+Endpoint explicitamente não testado permanece UNKNOWN. Não converta ausência de execução em "ausência de 200/403/401", negativa observada ou qualquer outro resultado sintético.
+
 ## Fonte e precedência
 
 CURRENT TURN FACTS > EVIDENCE DELTA > SCENARIO CONTEXT > PROJECT FACTS > RETRIEVED KNOWLEDGE > MEMORY > MODEL PRIOR.

@@ -44,7 +44,7 @@ from .execution_intent import (
 from .host_safety import host_safety_guidance
 from .kali_tool_guidance import guidance_for_context
 from .malware_analysis import malware_guidance, malware_tooling_summary
-from .quantitative_reasoning import quantitative_fact_sheet, quantitative_guidance
+from .quantitative_reasoning import quantitative_fact_sheet, quantitative_guidance\nfrom .reasoning_quality import build_operator_contract
 from .supervised_executor import (
     ExecutionApproval,
     ExecutionApprovalStore,
@@ -339,6 +339,18 @@ def _build_system_prompt(
             "explícita por ação e objetivo de prova delimitado, podendo ser BLOCKED."
         ),
         (
+            "Semântica L0/L1: leitura local/passiva sem interação com o alvo é L0; "
+            "request ativa via curl/HTTP/Nmap contra o alvo é L1 quando não muta estado."
+        ),
+        (
+            "Endpoint explicitamente não testado permanece UNKNOWN: não trate ausência de 200/403/401 "
+            "como evidência antes de executar o teste."
+        ),
+        (
+            "Se o operador pedir PROPOSED_ACTION versus EXECUTED_ACTION, declare explicitamente "
+            "que a proposta NÃO foi executada."
+        ),
+        (
             "Exploit/PoC: em escopo autorizado e com fatos suficientes, produza artefato mínimo completo "
             "e executável/reprodutível, ligado ao alvo/versão/estado, com success predicate, captura de "
             "logs/prints/evidência, checks quantitativos e cleanup; não infle impacto."
@@ -374,6 +386,14 @@ def _build_system_prompt(
             "CONTEXTO DINÂMICO DE RUNTIME",
             f"Data/hora local: {datetime.now().strftime('%d/%m/%Y %H:%M')}",
         ]
+
+    if current_message:
+        operator_contract = build_operator_contract(current_message)
+        if operator_contract.active:
+            lines.extend((
+                "",
+                "CONTRATO DETERMINÍSTICO DO TURNO: " + operator_contract.to_prompt(),
+            ))
 
     route_cap = 1_800 if cyber_kernel_v1_enabled else 2_700
     evidence_cap = 650 if cyber_kernel_v1_enabled else 800
