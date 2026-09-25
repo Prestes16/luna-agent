@@ -368,7 +368,10 @@ def validate_model_response(
     factual_context = f"{message}\n{scenario_facts}".casefold()
     normalized_message = message.casefold()
     normalized_response = response.casefold()
-    asks_next_test = "próximo teste" in normalized_message or "proximo teste" in normalized_message
+    asks_next_test = any(
+        marker in normalized_message
+        for marker in ("próximo teste", "proximo teste", "next test")
+    )
 
     observed_paths_in_context = _observed_route_paths(factual_context)
     response_paths = _observed_route_paths(response)
