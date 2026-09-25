@@ -48,10 +48,20 @@ class OperatorContract:
     wants_bash: bool
     one_command: bool
     operator_executes: bool
+    required_bearer: str | None = None
+    requires_proposed_action: bool = False
+    requires_not_executed: bool = False
 
     @property
     def active(self) -> bool:
-        return bool(self.requested_tool or self.wants_command or self.target_hosts)
+        return bool(
+            self.requested_tool
+            or self.wants_command
+            or self.target_hosts
+            or self.required_bearer
+            or self.requires_proposed_action
+            or self.requires_not_executed
+        )
 
     def to_prompt(self) -> str:
         parts: list[str] = []
@@ -67,6 +77,12 @@ class OperatorContract:
             parts.append("quantidade_comandos=1")
         if self.operator_executes:
             parts.append("execucao=operador")
+        if self.required_bearer:
+            parts.append("header_obrigatorio=Authorization: Bearer " + self.required_bearer)
+        if self.requires_proposed_action:
+            parts.append("estado=PROPOSED_ACTION")
+        if self.requires_not_executed:
+            parts.append("EXECUTED_ACTION=NÃO")
         return "; ".join(parts)
 
 
@@ -127,6 +143,15 @@ def _target_hosts(message: str) -> tuple[str, ...]:
 
 def build_operator_contract(message: str) -> OperatorContract:
     normalized = message.casefold()
+    observed_bearer_match = re.search(
+        r"(?i)Authorization\s*:\s*Bearer\s+([^\s\r\n]+)",
+        message,
+    )
+    observed_bearer = observed_bearer_match.group(1) if observed_bearer_match else None
+    asks_next_test = any(
+        marker in normalized
+        for marker in ("próximo teste", "proximo teste", "next test")
+    )
     wants_command = any(
         marker in normalized
         for marker in (
@@ -146,6 +171,15 @@ def build_operator_contract(message: str) -> OperatorContract:
         marker in normalized
         for marker in ("pra eu executar", "para eu executar", "eu executo", "no meu kali")
     )
+    requires_proposed_action = "proposed_action" in normalized
+    requires_not_executed = bool(
+        re.search(
+            r"(?is)(?:não|nao|not)\s+(?:é|e|is)?\s*executed_action"
+            r"|executed_action.{0,24}(?:não|nao|not)",
+            normalized,
+        )
+    )
+    required_bearer = observed_bearer if wants_command and asks_next_test else None
     return OperatorContract(
         requested_tool=_requested_tool(message),
         target_hosts=_target_hosts(message),
@@ -153,6 +187,9 @@ def build_operator_contract(message: str) -> OperatorContract:
         wants_bash=wants_bash,
         one_command=one_command,
         operator_executes=operator_executes,
+        required_bearer=required_bearer,
+        requires_proposed_action=requires_proposed_action,
+        requires_not_executed=requires_not_executed,
     )
 
 
