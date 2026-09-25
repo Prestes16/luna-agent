@@ -137,6 +137,13 @@ class SkillRouterTests(unittest.TestCase):
         )
         self.assertLessEqual(len(decision.selected_skills), 2)
 
+    def test_solana_anchor_security_review_routes_specialized_skill(self) -> None:
+        decision = self.select(
+            "Faça uma revisão de segurança deste trecho Anchor/Solana. "
+            "Não execute ferramentas nem comandos."
+        )
+        self.assertIn("solana-vulnerability-scanner", decision.selected_skills)
+
     def test_entry_point_analyzer_routes_explicit_surface_mapping(self) -> None:
         decision = self.select(
             "Mapeie os entry points e operações privilegiadas deste contrato Anchor."
