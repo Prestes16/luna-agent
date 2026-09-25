@@ -44,7 +44,8 @@ from .execution_intent import (
 from .host_safety import host_safety_guidance
 from .kali_tool_guidance import guidance_for_context
 from .malware_analysis import malware_guidance, malware_tooling_summary
-from .quantitative_reasoning import quantitative_fact_sheet, quantitative_guidance\nfrom .reasoning_quality import build_operator_contract
+from .quantitative_reasoning import quantitative_fact_sheet, quantitative_guidance
+from .reasoning_quality import build_operator_contract
 from .supervised_executor import (
     ExecutionApproval,
     ExecutionApprovalStore,
