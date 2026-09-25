@@ -147,7 +147,11 @@ def build_operator_contract(message: str) -> OperatorContract:
         r"(?i)Authorization\s*:\s*Bearer\s+([^\s\r\n]+)",
         message,
     )
-    observed_bearer = observed_bearer_match.group(1) if observed_bearer_match else None
+    observed_bearer = (
+        observed_bearer_match.group(1).rstrip("`'\".,;:)")
+        if observed_bearer_match
+        else None
+    )
     asks_next_test = any(
         marker in normalized
         for marker in ("próximo teste", "proximo teste", "next test")
