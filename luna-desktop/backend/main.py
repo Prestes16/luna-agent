@@ -196,6 +196,7 @@ async def health_check():
         "supervised_mode": True,
         "config_dir": os.getenv("LUNA_CONFIG_DIR", r"D:\LunaCyber\config"),
         "modules": {"mentor_kali_devtools": {"found": False, "loaded": False, "enabled": True}},
+        "skills": {"enabled": True, "configured": [], "loaded": [], "catalog": {}},
     }
     available_models: list[str] = []
     if diagnostics.get("ollama"):

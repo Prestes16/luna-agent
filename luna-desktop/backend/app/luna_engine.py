@@ -474,14 +474,16 @@ class LunaEngine:
         self.harness = AgentHarness()
         # Provedores cujas keys foram confirmadas como inválidas (401) nesta sessão
         self._bad_key_providers: set = set()
-        configured_skill_ids = [
-            item.strip()
-            for item in os.getenv(
-                "LUNA_ENABLED_SKILLS",
-                "audit-context-building",
-            ).split(",")
-            if item.strip()
-        ]
+        self.skill_loader = SkillLoader()
+        configured_skills_env = os.getenv("LUNA_ENABLED_SKILLS")
+        if configured_skills_env is None:
+            configured_skill_ids = self.skill_loader.list_skill_names()
+        else:
+            configured_skill_ids = [
+                item.strip()
+                for item in configured_skills_env.split(",")
+                if item.strip()
+            ]
         self.config = {
             "default_model": os.getenv("LUNA_MODEL", _OLLAMA_DEFAULT_MODEL),
             "vision_model": os.getenv("LUNA_VISION_MODEL", "").strip(),
@@ -516,7 +518,6 @@ class LunaEngine:
         self.active_modules = self.module_loader.load_enabled(
             ["mentor_kali_devtools"] if self.config["mentor_mode"] else []
         )
-        self.skill_loader = SkillLoader()
         self.skill_router = SkillRouter()
         self.active_skills = self.skill_loader.load_enabled(
             self.config["enabled_skills"]
