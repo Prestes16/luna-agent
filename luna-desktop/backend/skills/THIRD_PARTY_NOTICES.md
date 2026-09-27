@@ -45,3 +45,14 @@ No upstream executable workflow, shell script, subagent, or scanner is imported 
 installing these skill definitions. Tool names in `allowed-tools` are descriptive metadata
 only. Luna's `AgentHarness`, `ExecutionIntent`, host-safety checks, and supervised executor
 remain authoritative.
+
+## Reference-only review: rtadewald/skills img-to-html
+
+On 2026-09-27, the public repository https://github.com/rtadewald/skills was reviewed
+for the functional behavior of its img-to-html workflow. No repository license file was
+present in the inspected main tree and GitHub reported no detected repository license.
+
+For that reason, Luna Cyber does not import or redistribute the upstream SKILL.md text or
+Python source. The local img-to-html, to-wireframe and openrouter-img files are an original
+Shield-Corp/Luna implementation of the desired workflow behavior, with explicit privacy,
+credential and Codex integration controls.
